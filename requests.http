@@ -1,0 +1,230 @@
+### ============================================================
+### Sentinel API — Test Request Examples
+### Use with VS Code REST Client extension or similar tools
+### Base URL: http://localhost:8000
+### ============================================================
+
+@base = http://localhost:8000
+
+
+### --- SRE: PagerDuty Webhook (incident triggered) ---
+
+POST {{base}}/api/sre/webhooks/pagerduty
+Content-Type: application/json
+
+{
+  "event": {
+    "event_type": "incident.triggered",
+    "data": {
+      "id": "P123ABC",
+      "title": "High CPU usage on web-server-01",
+      "urgency": "high",
+      "service": { "summary": "Production API" },
+      "body": { "details": "CPU usage exceeded 90% for 10 minutes on web-server-01" },
+      "created_at": "2026-03-28T12:00:00Z"
+    }
+  }
+}
+
+### --- SRE: PagerDuty Webhook (incident escalated) ---
+
+POST {{base}}/api/sre/webhooks/pagerduty
+Content-Type: application/json
+
+{
+  "event": {
+    "event_type": "incident.escalated",
+    "data": {
+      "id": "P456DEF",
+      "title": "Database connection pool exhausted",
+      "urgency": "high",
+      "service": { "summary": "Order Service" },
+      "body": { "details": "PostgreSQL connection pool at 100% capacity, queries timing out" },
+      "created_at": "2026-03-28T12:30:00Z"
+    }
+  }
+}
+
+### --- SRE: PagerDuty Webhook (resolved — should be ignored) ---
+
+POST {{base}}/api/sre/webhooks/pagerduty
+Content-Type: application/json
+
+{
+  "event": {
+    "event_type": "incident.resolved",
+    "data": {
+      "id": "P123ABC",
+      "title": "High CPU usage on web-server-01",
+      "urgency": "high",
+      "service": { "summary": "Production API" },
+      "body": { "details": "CPU usage returned to normal" },
+      "created_at": "2026-03-28T13:00:00Z"
+    }
+  }
+}
+
+### --- SRE: Datadog Webhook (triggered, P1) ---
+
+POST {{base}}/api/sre/webhooks/datadog
+Content-Type: application/json
+
+{
+  "id": "12345",
+  "title": "[Triggered] High error rate on payments endpoint",
+  "body": "Error rate exceeded 5% threshold for /api/payments over the last 10 minutes",
+  "priority": "P1",
+  "tags": "service:payments,env:prod,team:platform",
+  "date": 1743163200,
+  "alert_transition": "Triggered"
+}
+
+### --- SRE: Datadog Webhook (triggered, P3) ---
+
+POST {{base}}/api/sre/webhooks/datadog
+Content-Type: application/json
+
+{
+  "id": "67890",
+  "title": "[Triggered] Elevated latency on search service",
+  "body": "p99 latency for /api/search exceeded 2s for 5 minutes",
+  "priority": "P3",
+  "tags": "service:search,env:prod",
+  "date": 1743163200,
+  "alert_transition": "Triggered"
+}
+
+### --- SRE: Datadog Webhook (recovered — should be ignored) ---
+
+POST {{base}}/api/sre/webhooks/datadog
+Content-Type: application/json
+
+{
+  "id": "12345",
+  "title": "[Recovered] High error rate on payments endpoint",
+  "body": "Error rate returned below threshold",
+  "priority": "P1",
+  "tags": "service:payments,env:prod",
+  "date": 1743166800,
+  "alert_transition": "Recovered"
+}
+
+### --- SRE: Manual Investigation ---
+
+POST {{base}}/api/sre/investigate
+Content-Type: application/json
+
+{
+  "id": "manual-001",
+  "title": "Intermittent 502 errors on checkout flow",
+  "description": "Users reporting sporadic 502 errors when completing checkout. Seems to correlate with high traffic periods. Load balancer health checks are passing.",
+  "severity": "high",
+  "service": "checkout-service",
+  "source": "manual"
+}
+
+### --- Support: Jira Webhook (issue created) ---
+
+POST {{base}}/api/support/webhooks/jira
+Content-Type: application/json
+
+{
+  "webhookEvent": "jira:issue_created",
+  "issue": {
+    "id": "10042",
+    "key": "SUPPORT-142",
+    "fields": {
+      "summary": "Cannot export CSV reports from dashboard",
+      "description": "When I click the 'Export CSV' button on the analytics dashboard, nothing happens. No file is downloaded and no error is shown. This worked fine last week. Browser: Chrome 124, OS: macOS.",
+      "reporter": { "displayName": "Jane Smith" },
+      "priority": { "name": "High" },
+      "labels": ["dashboard", "export", "regression"]
+    }
+  }
+}
+
+### --- Support: Jira Webhook (issue updated) ---
+
+POST {{base}}/api/support/webhooks/jira
+Content-Type: application/json
+
+{
+  "webhookEvent": "jira:issue_updated",
+  "issue": {
+    "id": "10038",
+    "key": "SUPPORT-138",
+    "fields": {
+      "summary": "SSO login fails with SAML assertion error",
+      "description": "After our IdP certificate rotation last Friday, some users are unable to log in via SSO. They see 'Invalid SAML assertion' error. Affects roughly 30% of login attempts.",
+      "reporter": { "displayName": "Bob Johnson" },
+      "priority": { "name": "Critical" },
+      "labels": ["sso", "authentication"]
+    }
+  }
+}
+
+### --- Support: Jira Webhook (other event — should be ignored) ---
+
+POST {{base}}/api/support/webhooks/jira
+Content-Type: application/json
+
+{
+  "webhookEvent": "jira:issue_deleted",
+  "issue": {
+    "id": "10001",
+    "key": "SUPPORT-101",
+    "fields": {
+      "summary": "Test ticket",
+      "description": "This event type should be ignored",
+      "reporter": { "displayName": "Test User" },
+      "priority": { "name": "Low" },
+      "labels": []
+    }
+  }
+}
+
+### --- Support: Manual Review ---
+
+POST {{base}}/api/support/review
+Content-Type: application/json
+
+{
+  "id": "manual-001",
+  "key": "SUPPORT-999",
+  "summary": "How to configure webhook notifications",
+  "description": "Customer is asking how to set up webhook notifications for their workspace. They want to receive events for new user signups and subscription changes. They are on the Enterprise plan.",
+  "reporter": "Alice Williams",
+  "priority": "Medium",
+  "labels": ["webhooks", "configuration", "enterprise"]
+}
+
+### --- SRE: Manual Investigation (critical, minimal fields) ---
+
+POST {{base}}/api/sre/investigate
+Content-Type: application/json
+
+{
+  "title": "Complete outage on user-service",
+  "description": "All /api/users endpoints returning 500. Deployment rollback in progress.",
+  "severity": "critical",
+  "service": "user-service"
+}
+
+### --- Support: Manual Review (minimal fields) ---
+
+POST {{base}}/api/support/review
+Content-Type: application/json
+
+{
+  "summary": "Need help with API rate limits",
+  "description": "We are hitting 429 errors on the /api/events endpoint. Our integration sends about 500 requests/minute. What are the current rate limits and can they be increased?"
+}
+
+### --- Jobs: Get Job Status ---
+### Replace the UUID below with a job_id returned from one of the above requests
+
+GET {{base}}/api/jobs/00000000-0000-0000-0000-000000000000
+
+### --- Jobs: Invalid UUID (expect 422) ---
+
+GET {{base}}/api/jobs/not-a-valid-uuid
