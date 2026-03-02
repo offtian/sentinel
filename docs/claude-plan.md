@@ -7,7 +7,7 @@ The team needs two AI-powered automation capabilities:
 1. **AI SRE** - Automatically triage and investigate production alerts from PagerDuty + Datadog, provide root cause analysis and remediation suggestions
 2. **AI Support Agent** - Automatically review Jira Service Desk tickets, search mixed documentation (Notion, Confluence, S3), and suggest responses
 
-These will live in a **single new repository** (`sentinel`) following alfredo's clean architecture patterns. The AI SRE will use a **hybrid approach** with HolmesGPT (their investigation engine wrapped in our Pydantic Graph pipeline).
+These live in the `sentinel` repository following clean architecture patterns. The AI SRE uses a **hybrid approach** with HolmesGPT (their investigation engine wrapped in our Pydantic Graph pipeline).
 
 ---
 
@@ -35,7 +35,7 @@ sentinel/
 │   │   │       ├── root_cause_analyser.py
 │   │   │       ├── ticket_reviewer.py
 │   │   │       ├── response_drafter.py
-│   │   │       └── utils.py          # LiteLLM gateway helper (reuse alfredo pattern)
+│   │   │       └── utils.py          # LiteLLM gateway helper
 │   │   └── webhooks/                 # PagerDuty/Datadog webhook handlers
 │   │       ├── pagerduty.py
 │   │       └── datadog.py
@@ -56,7 +56,7 @@ sentinel/
 │   │   ├── support/
 │   │   │   ├── entities.py           # Ticket, ResponseSuggestion, DocSource
 │   │   │   └── operations.py         # Ticket review lifecycle
-│   │   ├── confidence/               # Shared confidence scoring (port from alfredo)
+│   │   ├── confidence/               # Shared confidence scoring
 │   │   │   └── entities.py
 │   │   ├── search/                   # Shared search abstractions
 │   │   │   └── searcher.py           # BaseDocumentSearcher, BaseMetricsSearcher
@@ -64,7 +64,7 @@ sentinel/
 │   │       ├── pagerduty.py          # PagerDuty API client
 │   │       ├── datadog_client.py     # Datadog API (logs, metrics, traces)
 │   │       ├── jira.py               # Jira Service Desk client
-│   │       ├── notion.py             # Notion search (reuse alfredo's S3-backed approach)
+│   │       ├── notion.py             # Notion search (S3-backed approach)
 │   │       ├── confluence.py         # Confluence REST API client
 │   │       └── s3.py                 # S3 document retrieval
 │   │
@@ -129,7 +129,7 @@ layers = [
 
 ### Graph Pipeline: `sre_investigation.py`
 
-Follows alfredo's `search.py` pattern (State, Dependencies, BaseNode, GraphRunContext):
+Follows the Pydantic Graph pattern (State, Dependencies, BaseNode, GraphRunContext):
 
 ```
 ReceiveAlert
@@ -225,7 +225,7 @@ class Finding(BaseModel):
 
 ### Output Channels
 
-- **Slack**: Post investigation summary to incident channel (using slack_bolt, same pattern as alfredo)
+- **Slack**: Post investigation summary to incident channel (using slack_bolt)
 - **PagerDuty**: Add investigation notes to incident via API
 - **Persisted**: Store investigation results in PostgreSQL for historical analysis
 
@@ -252,10 +252,9 @@ ReceiveTicket
 - Post internal comments with response suggestions
 - Transition ticket status
 
-**`vendor_adapters/notion.py`** - Reuse alfredo's S3-backed Notion search:
-- Alfredo already indexes Notion into S3 buckets
-- Reference: `alfredo/application/search/documents.py` and `alfredo/vendors/notion/`
-- Can point to same S3 buckets or use a shared search backend (Bedrock KB / Kendra)
+**`vendor_adapters/notion.py`** - S3-backed Notion search: <!-- GAP: not implemented -->
+- Notion content indexed into S3 buckets
+- Shared search backend via Bedrock KB / Kendra
 
 **`vendor_adapters/confluence.py`** - Confluence REST API:
 - Search via CQL (Confluence Query Language)
@@ -264,7 +263,7 @@ ReceiveTicket
 
 ### Search Abstraction
 
-Extend alfredo's `BaseDocumentSearcher` pattern for multi-source search:
+Multi-source search via `BaseDocumentSearcher` pattern:
 
 ```python
 # domain/search/searcher.py
@@ -279,10 +278,12 @@ class BasePastTicketSearcher(abc.ABC):
 ```
 
 Implementations:
-- `NotionSearcher` - Queries Bedrock KB / Kendra (same backend as alfredo)
-- `ConfluenceSearcher` - Queries Confluence REST API
-- `S3DocumentSearcher` - Direct S3 object retrieval for indexed docs
-- `JiraPastTicketSearcher` - Searches resolved tickets for similar issues
+- `NotionSearcher` - Queries Bedrock KB / Kendra <!-- GAP: not implemented -->
+- `ConfluenceSearcher` - Queries Confluence REST API <!-- DONE -->
+- `S3DocumentSearcher` - Direct S3 object retrieval for indexed docs <!-- GAP: not implemented -->
+- `JiraPastTicketSearcher` - Searches resolved tickets for similar issues <!-- DONE -->
+- `DatadogMetricsSearcher` - Queries logs and metrics concurrently <!-- DONE (not in original plan) -->
+- `MockSearchers` - Canned results for offline development <!-- DONE (not in original plan) -->
 
 ### Domain Entities
 
@@ -337,14 +338,14 @@ class DocSource(BaseModel):
 Reuse existing LiteLLM deployment at `http://litellm.litellm.svc.cluster.local/`:
 
 ```python
-# interfaces/graphs/agents/utils.py (same pattern as alfredo)
+# interfaces/graphs/agents/utils.py
 def get_model_with_gateway(model_name: str) -> str:
     return f"litellm_proxy/{model_name}"
 ```
 
 ### Configuration (`_config.py`)
 
-Follow alfredo's pattern with environs:
+Pydantic Settings configuration:
 
 ```python
 class Config:
@@ -425,12 +426,12 @@ class TicketReviewRecord(SQLModel, table=True):
 
 ## Deployment
 
-### Infrastructure (OctoCloud)
+### Infrastructure
 
-Add to `octocloud/terraform/workspaces/ktl-services-test/eks_applications.tf`:
+Infrastructure Terraform configuration (separate repo):
 - ECR repos: `sentinel`, `sentinel-helm`
 - IAM role with S3 access (shared doc buckets), Secrets Manager
-- ACM certificate for `sentinel.test.ktl.net`
+- ACM certificate for sentinel subdomain
 - KMS key for SOPS
 
 ### Kubernetes (ktl-services-deployment)
@@ -450,7 +451,7 @@ Deployments within the Helm chart:
 
 ### CI/CD (CircleCI)
 
-Follow alfredo's pattern:
+CI/CD pipeline:
 1. `mypy` → `test-and-lint` → `publish-image` → `package_chart_and_deploy`
 2. Auto-deploy to test, approval-gated for prod
 3. Add to `.github/approveman.yml` for CD
@@ -568,13 +569,12 @@ make test-evals                 # Quality evaluation suite
 
 | Pattern | Source File |
 |---------|-----------|
-| Pydantic Graph pipeline | `alfredo/interfaces/graphs/search.py` |
-| Search abstraction | `alfredo/domain/search/searcher.py` |
-| PydanticAI agents | `alfredo/interfaces/graphs/agents/analyser.py` |
-| LiteLLM gateway helper | `alfredo/interfaces/graphs/agents/utils.py` |
-| Configuration pattern | `alfredo/_config.py` |
-| Import-linter contracts | `alfredo/pyproject.toml` |
-| Deployment config example | `ktl-services-deployment/services-eks-test/applications/alfredo/values.yaml` |
-| Infra module example | `octocloud/terraform/workspaces/ktl-services-test/eks_applications.tf` |
-| Confidence scoring | `alfredo/domain/confidence/entities.py` |
-| Helm chart example | `neuralink/helm/neuralink/values.yaml` |
+| Pydantic Graph pipeline | `src/sentinel/interfaces/graphs/sre_investigation.py` |
+| Search abstraction | `src/sentinel/domain/search/searcher.py` |
+| PydanticAI agents | `src/sentinel/interfaces/graphs/agents/alert_classifier.py` |
+| LiteLLM gateway helper | `src/sentinel/interfaces/graphs/agents/utils.py` |
+| Configuration pattern | `src/sentinel/config.py`, `src/sentinel/settings.py` |
+| Import-linter contracts | `pyproject.toml` |
+| Confidence scoring | `src/sentinel/domain/confidence/entities.py` |
+| Automation runner | `src/sentinel/application/automations/runner.py` |
+| Helm chart | `helm/sentinel/values.yaml` |
