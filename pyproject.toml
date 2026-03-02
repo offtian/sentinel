@@ -1,0 +1,278 @@
+# Packaging
+# ---------
+
+[build-system]
+requires = ["setuptools>=67.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"sentinel" = [
+    "**/*.md",
+    "**/alembic.ini",
+]
+
+# Project
+# -------
+
+[project]
+name = "sentinel"
+requires-python = ">=3.13"
+dynamic = ["version"]
+
+dependencies = [
+    # Core application
+    "environs",
+    "fastapi[standard]",
+    "sqlalchemy[asyncio]",
+    "sqlmodel",
+    "asyncpg",
+    "psycopg2[binary]",
+    "alembic",
+    "pydantic-ai>=1.0.7",
+    "structlog",
+    "Jinja2",
+    "aiofiles",
+    "tenacity",
+    "invoke",
+    "attrs",
+
+    # Vendors
+    "pdpyras",
+    "datadog-api-client",
+    "jira",
+    "atlassian-python-api",
+    "boto3",
+    "aioboto3",
+    "slack_bolt",
+
+    # Observability
+    "ddtrace",
+    "sentry-sdk>=2.35",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest",
+    "pytest-env",
+    "pytest-asyncio",
+    "pytest-postgresql",
+    "pytest-mock",
+    "factory-boy",
+
+    # Linting
+    "import-linter",
+    "mypy",
+    "types-aiofiles",
+    "ruff<0.13.0",
+
+    # Localdev
+    "pre-commit",
+    "ipdb",
+]
+# NOTE: HolmesGPT (holmesgpt) has a dependency conflict with pydantic-ai>=1.0.7.
+# It cannot be installed alongside pydantic-ai. Our adapter in
+# domain/sre/holmes_adapter.py is designed to work with or without
+# the SDK installed. When the conflict is resolved upstream, add:
+#   holmes = ["holmesgpt"]
+
+[tool.setuptools.dynamic]
+version = {attr = "sentinel.version.__version__"}
+
+# Ruff
+# ----
+
+[tool.ruff]
+line-length = 99
+
+[tool.ruff.lint]
+select = ["ALL"]
+exclude = ["build", "migrations", "tests", "*.ipynb"]
+ignore = [
+    "A005",
+    "ANN001",
+    "ANN002",
+    "ANN003",
+    "ANN204",
+    "ANN401",
+    "ARG",
+    "COM812",
+    "D1",
+    "D200",
+    "D203",
+    "D212",
+    "D301",
+    "D400",
+    "D406",
+    "D407",
+    "D408",
+    "D413",
+    "D415",
+    "E501",
+    "EM",
+    "ERA001",
+    "FIX",
+    "N818",
+    "PLC0414",
+    "PLR0904",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR2004",
+    "PLR5501",
+    "PLR6301",
+    "PTH123",
+    "PYI041",
+    "RUF001",
+    "S101",
+    "S311",
+    "SIM102",
+    "SIM108",
+    "SIM300",
+    "SIM910",
+    "TC001",
+    "TC002",
+    "TC003",
+    "TD002",
+    "TD003",
+    "TID252",
+    "TRY003",
+    "W505",
+    "ISC001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"**/migrations/**" = ["ANN", "I001"]
+"tests/**" = ["ANN", "D205", "D213", "SLF001"]
+"tests/factories/**" = ["RUF012", "D417"]
+"tasks/**" = ["T201"]
+
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "project",
+    "local-folder",
+]
+
+[tool.ruff.lint.isort.sections]
+"project" = ["sentinel", "tests"]
+
+[tool.ruff.lint.flake8-builtins]
+strict-checking = true
+
+# Import linter
+# -------------
+
+[tool.importlinter]
+root_package = "sentinel"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Top level layers"
+type = "layers"
+exhaustive = true
+containers = ["sentinel"]
+layers = [
+    "main",
+    "interfaces",
+    "application",
+    "domain",
+    "data",
+    "vendors",
+    "utils",
+    "bootstrap",
+    "_config",
+    "version",
+]
+
+[[tool.importlinter.contracts]]
+name = "Stdlib logging forbidden"
+type = "forbidden"
+source_modules = ["sentinel"]
+forbidden_modules = ["logging"]
+ignore_imports = [
+    "sentinel._config -> logging",
+    "sentinel.utils.logs -> logging",
+]
+
+[[tool.importlinter.contracts]]
+name = "Vendor adapters should not be imported in domain operations"
+type = "forbidden"
+source_modules = ["sentinel.domain.**.operations"]
+forbidden_modules = ["sentinel.domain.vendor_adapters"]
+
+# Mypy
+# ----
+
+[tool.mypy]
+files = "."
+exclude = ["build", "migrations", "tests"]
+plugins = []
+
+strict = true
+warn_unreachable = true
+warn_no_return = true
+
+[[tool.mypy.overrides]]
+module = ["invoke"]
+implicit_reexport = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+allow_untyped_defs = true
+disable_error_code = "attr-defined"
+
+[[tool.mypy.overrides]]
+module = ["aioboto3", "holmesgpt.*", "holmes.*", "pdpyras", "jira.*", "atlassian.*"]
+ignore_missing_imports = true
+
+# Pytest
+# ------
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_test_loop_scope = "session"
+asyncio_default_fixture_loop_scope = "session"
+
+env = [
+    "PYTHONBREAKPOINT=ipdb.set_trace",
+    "DATABASE_URL=postgresql+asyncpg://postgres@localhost/sentinel-test",
+    "AI_GATEWAY_URL=http://localhost:4000",
+    "ALERT_CLASSIFIER_LLM=openai/gpt-test",
+    "ROOT_CAUSE_LLM=openai/gpt-test",
+    "TICKET_REVIEWER_LLM=openai/gpt-test",
+    "RESPONSE_DRAFTER_LLM=openai/gpt-test",
+    "PAGERDUTY_API_KEY=test-pd-key",
+    "DATADOG_API_KEY=test-dd-key",
+    "DATADOG_APP_KEY=test-dd-app-key",
+    "JIRA_BASE_URL=https://test.atlassian.net",
+    "JIRA_API_TOKEN=test-jira-token",
+    "JIRA_USER_EMAIL=test@example.com",
+    "CONFLUENCE_BASE_URL=https://test.atlassian.net/wiki",
+    "SLACK_BOT_TOKEN=xoxb-test",
+    "SRE_SLACK_CHANNEL=C12345678",
+    "SUPPORT_SLACK_CHANNEL=C87654321",
+]
+
+python_files = "test_*.py"
+testpaths = "tests"
+
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:environs",
+    "error::ResourceWarning",
+    "error::RuntimeWarning",
+    "error::DeprecationWarning",
+    "error::pytest.PytestCollectionWarning",
+]
