@@ -11,6 +11,8 @@ from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre.holmes_adapter import HolmesAdapter
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.graphs import common, sre_investigation, support_review
+from sentinel.interfaces.graphs.agents import intent_router
+from sentinel.interfaces.graphs.agents import utils as agent_utils
 from sentinel.interfaces.slack.app import app
 from sentinel.interfaces.slack.status_update import SlackStatusUpdateClient
 from sentinel.settings import get_settings
@@ -18,53 +20,18 @@ from sentinel.utils import logs
 
 
 # ---------------------------------------------------------------------------
-# Keyword-based intent routing
+# LLM-based intent routing
 # ---------------------------------------------------------------------------
 
-_SRE_KEYWORDS: frozenset[str] = frozenset(
-    {
-        "alert",
-        "incident",
-        "outage",
-        "down",
-        "degraded",
-        "error",
-        "errors",
-        "crash",
-        "crashed",
-        "crashing",
-        "pod",
-        "pods",
-        "memory",
-        "cpu",
-        "latency",
-        "timeout",
-        "500",
-        "503",
-        "502",
-        "pagerduty",
-        "pager",
-        "k8s",
-        "kubernetes",
-        "deploy",
-        "deployment",
-        "oom",
-        "restarting",
-        "unhealthy",
-        "spike",
-        "throttle",
-        "throttled",
-        "queue",
-        "deadlock",
-        "leak",
-        "oom-kill",
-    }
-)
 
-
-def _is_sre_request(text: str) -> bool:
-    words = set(re.sub(r"[^a-z0-9 ]", " ", text.lower()).split())
-    return bool(words & _SRE_KEYWORDS)
+async def _classify_intent(text: str) -> intent_router.Intent:
+    """Route user message to SRE or Support via the intent router agent."""
+    result = await intent_router.agent.run(
+        user_prompt=text,
+        model=agent_utils.get_model_with_gateway(get_settings().intent_router_llm),
+        deps=intent_router.Dependencies(message=text),
+    )
+    return result.output.intent
 
 
 def _strip_mention(text: str) -> str:
@@ -288,12 +255,20 @@ async def _handle_request(
         )
         return
 
+    classified_intent = await _classify_intent(clean_text)
+    is_sre = classified_intent == intent_router.Intent.SRE
+
     logs.log_event(
         "slack_request_received",
-        params={"user_id": user_id, "channel": channel, "is_sre": _is_sre_request(clean_text)},
+        params={
+            "user_id": user_id,
+            "channel": channel,
+            "is_sre": is_sre,
+            "intent": classified_intent.value,
+        },
     )
 
-    if _is_sre_request(clean_text):
+    if is_sre:
         await _run_sre(clean_text, client=client, channel=channel, thread_ts=thread_ts)
     else:
         await _run_support(
