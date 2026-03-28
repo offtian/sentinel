@@ -1,17 +1,48 @@
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 import fastapi
 
-from sentinel import _config
+from sentinel.application.jobs import enqueue
+from sentinel.application.support import persist as support_persist
+from sentinel.data import database
 from sentinel.domain.support import entities
-from sentinel.interfaces.graphs import support_review
+from sentinel.domain.support.entities import ReviewStatus
+from sentinel.interfaces.api.dependencies import require_database
+from sentinel.settings import get_settings
 from sentinel.utils import logs
 
 
 router = fastapi.APIRouter(prefix="/support", tags=["support"])
+
+
+async def _enqueue_ticket(
+    ticket: entities.Ticket,
+    *,
+    requested_by: str,
+    priority: int = 2,
+) -> fastapi.responses.JSONResponse:
+    """Enqueue a ticket for async review and return 202 Accepted."""
+    async with database.get_session() as session:
+        job_id = await enqueue.enqueue_review(
+            session,
+            ticket_payload=ticket.model_dump(mode="json"),
+            requested_by=requested_by,
+            ticket_id=ticket.id,
+            priority=priority,
+        )
+
+    return fastapi.responses.JSONResponse(
+        status_code=202,
+        content={
+            "status": "accepted",
+            "job_id": str(job_id),
+            "ticket_key": ticket.key,
+        },
+    )
 
 
 @router.post("/webhooks/jira")
@@ -19,10 +50,10 @@ async def handle_jira_webhook(
     payload: dict[str, Any],
 ) -> fastapi.responses.JSONResponse:
     """
-    Receive and process Jira Service Desk webhook events.
+    Receive Jira Service Desk webhook events and enqueue for async review.
 
-    Jira webhooks fire on issue creation/update. We process new tickets
-    and generate response suggestions.
+    Jira webhooks fire on issue creation/update. We enqueue new tickets
+    for background response suggestion generation.
     """
     webhook_event = payload.get("webhookEvent", "")
     issue = payload.get("issue", {})
@@ -51,24 +82,13 @@ async def handle_jira_webhook(
         params={"ticket_key": ticket.key, "summary": ticket.summary},
     )
 
-    if not _config.SUPPORT_AUTO_DRAFT:
+    if not get_settings().support_auto_draft:
         return fastapi.responses.JSONResponse(
             status_code=200,
             content={"status": "received", "ticket_key": ticket.key, "auto_draft": False},
         )
 
-    result = await support_review.review_ticket(ticket=ticket)
-
-    return fastapi.responses.JSONResponse(
-        status_code=200,
-        content={
-            "status": "reviewed",
-            "ticket_key": ticket.key,
-            "suggested_response": result.suggested_response,
-            "confidence": result.confidence.total if result.confidence else None,
-            "category": result.category,
-        },
-    )
+    return await _enqueue_ticket(ticket, requested_by="webhook:jira")
 
 
 @router.post("/review")
@@ -100,16 +120,91 @@ async def trigger_review(
         raw_payload=payload,
     )
 
-    result = await support_review.review_ticket(ticket=ticket)
+    return await _enqueue_ticket(ticket, requested_by="api:manual")
+
+
+@router.get("/reviews/{review_id}", dependencies=[fastapi.Depends(require_database)])
+async def get_review(
+    review_id: uuid.UUID,
+) -> fastapi.responses.JSONResponse:
+    """
+    Return a ticket review record by its ID.
+
+    Returns 404 if the review is not found.
+    """
+    async with database.get_session() as session:
+        record = await support_persist.get_ticket_review(session, record_id=review_id)
+
+    if record is None:
+        return fastapi.responses.JSONResponse(
+            status_code=404,
+            content={"error": "Review not found", "review_id": str(review_id)},
+        )
 
     return fastapi.responses.JSONResponse(
         status_code=200,
         content={
-            "status": "reviewed",
-            "ticket_key": ticket.key,
-            "suggested_response": result.suggested_response,
-            "sources": result.sources,
-            "confidence": result.confidence.total if result.confidence else None,
-            "category": result.category,
+            "review_id": str(record.id),
+            "ticket_id": record.ticket_id,
+            "ticket_key": record.ticket_key,
+            "suggested_response": record.suggested_response,
+            "sources": record.sources_json,
+            "confidence_score": record.confidence_score,
+            "category": record.category,
+            "status": record.status,
+            "created_at": record.created_at.isoformat(),
+            "reviewed_at": record.reviewed_at.isoformat() if record.reviewed_at else None,
+        },
+    )
+
+
+@router.post(
+    "/reviews/{review_id}/feedback",
+    dependencies=[fastapi.Depends(require_database)],
+)
+async def submit_review_feedback(
+    review_id: uuid.UUID,
+    payload: dict[str, Any],
+) -> fastapi.responses.JSONResponse:
+    """
+    Update the status of a ticket review (accepted, rejected, modified).
+
+    Expects: {"status": "accepted" | "rejected" | "modified"}
+    """
+    new_status = payload.get("status", "")
+    feedback_values = {s.value for s in ReviewStatus if s != ReviewStatus.DRAFTED}
+    if new_status not in feedback_values:
+        return fastapi.responses.JSONResponse(
+            status_code=400,
+            content={
+                "error": f"Invalid status. Must be one of: {', '.join(sorted(feedback_values))}",
+                "received": new_status,
+            },
+        )
+
+    async with database.get_session() as session:
+        record = await support_persist.update_review_status(
+            session,
+            record_id=review_id,
+            status=new_status,
+        )
+
+    if record is None:
+        return fastapi.responses.JSONResponse(
+            status_code=404,
+            content={"error": "Review not found", "review_id": str(review_id)},
+        )
+
+    logs.log_event(
+        "review_feedback_submitted",
+        params={"review_id": str(review_id), "status": new_status},
+    )
+
+    return fastapi.responses.JSONResponse(
+        status_code=200,
+        content={
+            "review_id": str(record.id),
+            "status": record.status,
+            "reviewed_at": record.reviewed_at.isoformat() if record.reviewed_at else None,
         },
     )

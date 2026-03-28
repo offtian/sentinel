@@ -55,9 +55,7 @@ def parse_pagerduty_webhook(payload: dict[str, Any]) -> entities.Alert | None:
 
     triggered_at_str = data.get("created_at")
     triggered_at = (
-        datetime.fromisoformat(triggered_at_str)
-        if triggered_at_str
-        else datetime.now(tz=UTC)
+        datetime.fromisoformat(triggered_at_str) if triggered_at_str else datetime.now(tz=UTC)
     )
 
     return entities.Alert(
@@ -122,9 +120,7 @@ def parse_datadog_webhook(payload: dict[str, Any]) -> entities.Alert | None:
 
     date_epoch = payload.get("date")
     triggered_at = (
-        datetime.fromtimestamp(int(date_epoch), tz=UTC)
-        if date_epoch
-        else datetime.now(tz=UTC)
+        datetime.fromtimestamp(int(date_epoch), tz=UTC) if date_epoch else datetime.now(tz=UTC)
     )
 
     return entities.Alert(
