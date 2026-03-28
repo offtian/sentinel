@@ -3,11 +3,26 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from datadog_api_client import ApiClient, Configuration
+from datadog_api_client.v1.api.metrics_api import MetricsApi
+from datadog_api_client.v1.api.monitors_api import MonitorsApi
+from datadog_api_client.v2.api.logs_api import LogsApi
+from datadog_api_client.v2.api.spans_api import SpansApi
+from datadog_api_client.v2.model.logs_list_request import LogsListRequest
+from datadog_api_client.v2.model.logs_list_request_page import LogsListRequestPage
+from datadog_api_client.v2.model.logs_query_filter import LogsQueryFilter
+from datadog_api_client.v2.model.logs_sort import LogsSort
+from datadog_api_client.v2.model.spans_list_request import SpansListRequest
+from datadog_api_client.v2.model.spans_list_request_page import SpansListRequestPage
+from datadog_api_client.v2.model.spans_query_filter import SpansQueryFilter
+from datadog_api_client.v2.model.spans_sort import SpansSort
+
+from sentinel.domain.vendor_adapters.observability.base import BaseObservabilityClient
 from sentinel.settings import get_settings
 from sentinel.utils import logs
 
 
-class DatadogClient:
+class DatadogClient(BaseObservabilityClient):
     """
     Wraps the datadog-api-client SDK for querying logs, metrics, and traces.
 
@@ -27,9 +42,7 @@ class DatadogClient:
     def is_configured(self) -> bool:
         return bool(self._api_key and self._app_key)
 
-    def _get_configuration(self) -> Any:
-        from datadog_api_client import Configuration
-
+    def _get_configuration(self) -> Configuration:
         configuration = Configuration()  # type: ignore[no-untyped-call]
         configuration.api_key["apiKeyAuth"] = self._api_key
         configuration.api_key["appKeyAuth"] = self._app_key
@@ -45,24 +58,13 @@ class DatadogClient:
         """
         Search Datadog logs using the v2 API.
 
-        Args:
-            query: Datadog log query string (e.g. "service:api-gateway status:error")
-            time_range_minutes: How far back to search.
-            limit: Maximum number of log entries to return.
-
-        Returns:
-            List of log entry dicts with keys: timestamp, message, service, status, attributes.
+        :param query: Datadog log query string (e.g. "service:api-gateway status:error")
+        :param time_range_minutes: How far back to search.
+        :param limit: Maximum number of log entries to return.
         """
         if not self.is_configured:
             logs.log_event("datadog_logs_skipped", params={"reason": "Not configured"})
             return []
-
-        from datadog_api_client import ApiClient
-        from datadog_api_client.v2.api.logs_api import LogsApi
-        from datadog_api_client.v2.model.logs_list_request import LogsListRequest
-        from datadog_api_client.v2.model.logs_list_request_page import LogsListRequestPage
-        from datadog_api_client.v2.model.logs_query_filter import LogsQueryFilter
-        from datadog_api_client.v2.model.logs_sort import LogsSort
 
         now = datetime.now(tz=UTC)
         time_from = now - timedelta(minutes=time_range_minutes)
@@ -114,19 +116,12 @@ class DatadogClient:
         """
         Query Datadog metrics using the v1 timeseries API.
 
-        Args:
-            query: Datadog metric query (e.g. "avg:system.cpu.user{service:api-gateway}")
-            time_range_minutes: How far back to query.
-
-        Returns:
-            List of metric series dicts with keys: metric, scope, points.
+        :param query: Datadog metric query (e.g. "avg:system.cpu.user{service:api-gateway}")
+        :param time_range_minutes: How far back to query.
         """
         if not self.is_configured:
             logs.log_event("datadog_metrics_skipped", params={"reason": "Not configured"})
             return []
-
-        from datadog_api_client import ApiClient
-        from datadog_api_client.v1.api.metrics_api import MetricsApi
 
         now = datetime.now(tz=UTC)
         time_from = now - timedelta(minutes=time_range_minutes)
@@ -170,24 +165,13 @@ class DatadogClient:
         """
         Search Datadog APM spans/traces using the v2 API.
 
-        Args:
-            query: Span search query (e.g. "service:api-gateway @http.status_code:500")
-            time_range_minutes: How far back to search.
-            limit: Maximum number of spans to return.
-
-        Returns:
-            List of span dicts with keys: trace_id, span_id, service, resource, status, duration_ns.
+        :param query: Span search query (e.g. "service:api-gateway @http.status_code:500")
+        :param time_range_minutes: How far back to search.
+        :param limit: Maximum number of spans to return.
         """
         if not self.is_configured:
             logs.log_event("datadog_traces_skipped", params={"reason": "Not configured"})
             return []
-
-        from datadog_api_client import ApiClient
-        from datadog_api_client.v2.api.spans_api import SpansApi
-        from datadog_api_client.v2.model.spans_list_request import SpansListRequest
-        from datadog_api_client.v2.model.spans_list_request_page import SpansListRequestPage
-        from datadog_api_client.v2.model.spans_query_filter import SpansQueryFilter
-        from datadog_api_client.v2.model.spans_sort import SpansSort
 
         now = datetime.now(tz=UTC)
         time_from = now - timedelta(minutes=time_range_minutes)
@@ -241,9 +225,6 @@ class DatadogClient:
         if not self.is_configured:
             return None
 
-        from datadog_api_client import ApiClient
-        from datadog_api_client.v1.api.monitors_api import MonitorsApi
-
         try:
             with ApiClient(self._get_configuration()) as api_client:
                 api = MonitorsApi(api_client)  # type: ignore[no-untyped-call]
@@ -262,3 +243,14 @@ class DatadogClient:
         except Exception as e:
             logs.log_exception(e, params={"monitor_id": monitor_id})
             return None
+
+    # -- Query templates (Datadog query syntax) --------------------------------
+
+    def log_query_template(self, *, service: str) -> str:
+        return f"service:{service} status:error"
+
+    def metrics_query_template(self, *, service: str) -> str:
+        return f"avg:system.cpu.user{{service:{service}}}"
+
+    def trace_query_template(self, *, service: str) -> str:
+        return f"service:{service} @http.status_code:>=500"

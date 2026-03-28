@@ -17,21 +17,19 @@ import signal
 
 from sentinel import bootstrap
 from sentinel.application.jobs import dequeue
+from sentinel.application.sre import persist as sre_persist
+from sentinel.application.support import persist as support_persist
+from sentinel.config import get_config
 from sentinel.data import database, job_models
 from sentinel.domain.jobs import entities
-from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
-from sentinel.domain.vendor_adapters.datadog_client import DatadogClient
-from sentinel.domain.vendor_adapters.pagerduty import PagerDutyClient
+from sentinel.domain.sre import entities as sre_entities
+from sentinel.domain.support import entities as support_entities
+from sentinel.interfaces.graphs import common, sre_investigation, support_review
 from sentinel.settings import get_settings
 from sentinel.utils import logs
 
 
 _shutdown_requested = False
-
-# Long-lived instances so circuit breaker state persists across jobs.
-_datadog_circuit_breaker = CircuitBreaker(name="datadog")
-_datadog_client = DatadogClient()
-_pagerduty_client = PagerDutyClient()
 
 
 def _handle_signal(signum: int, frame: object) -> None:
@@ -87,22 +85,11 @@ async def _execute_job(
 
 async def _run_sre_investigation(payload: dict[str, object]) -> str:
     """Execute the SRE investigation pipeline for a job payload."""
-    from sentinel.application.sre import persist as sre_persist
-    from sentinel.domain.sre import entities as sre_entities
-    from sentinel.domain.sre import holmes_adapter
-    from sentinel.interfaces.graphs import common, sre_investigation
-
     alert = sre_entities.Alert.model_validate(payload)
 
-    if get_settings().holmesgpt_enabled:
-        holmes: holmes_adapter.BaseHolmesAdapter = holmes_adapter.DirectToolsetAdapter(
-            datadog_client=_datadog_client,
-            circuit_breaker=_datadog_circuit_breaker,
-        )
-    else:
-        holmes = holmes_adapter.HolmesAdapter(enabled=False)
-
-    pd_client = _pagerduty_client if get_settings().pagerduty_api_key else None
+    cfg = get_config()
+    holmes = cfg.build_holmes_adapter()
+    pd_client = cfg.pagerduty_client if get_settings().pagerduty_api_key else None
 
     async def _persist(reply: common.InvestigationReply) -> None:
         if not get_settings().database_url:
@@ -133,12 +120,8 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
 
 async def _run_support_review(payload: dict[str, object]) -> str:
     """Execute the support review pipeline for a job payload."""
-    from sentinel.application.support import persist as support_persist
-    from sentinel.domain.search import factory as search_factory
-    from sentinel.domain.support import entities as support_entities
-    from sentinel.interfaces.graphs import common, support_review
-
     ticket = support_entities.Ticket.model_validate(payload)
+    cfg = get_config()
 
     async def _persist(reply: common.SupportReply) -> None:
         if not get_settings().database_url:
@@ -156,8 +139,8 @@ async def _run_support_review(payload: dict[str, object]) -> str:
 
     result = await support_review.review_ticket(
         ticket=ticket,
-        document_searcher=search_factory.build_document_searcher(),
-        ticket_searcher=search_factory.build_ticket_searcher(),
+        document_searcher=cfg.build_document_searcher(),
+        ticket_searcher=cfg.build_ticket_searcher(),
         persist_fn=_persist,
     )
 

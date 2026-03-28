@@ -24,8 +24,12 @@ from sentinel.domain.search import factory as search_factory
 from sentinel.domain.search import searcher
 from sentinel.domain.sre import holmes_adapter
 from sentinel.domain.vendor_adapters.confluence import ConfluenceClient
-from sentinel.domain.vendor_adapters.datadog_client import DatadogClient
 from sentinel.domain.vendor_adapters.jira import JiraClient
+from sentinel.domain.vendor_adapters.observability import (
+    BaseObservabilityClient,
+    DatadogClient,
+    GrafanaClient,
+)
 from sentinel.domain.vendor_adapters.pagerduty import PagerDutyClient
 from sentinel.settings import Settings, get_settings
 from sentinel.utils import logs
@@ -67,25 +71,34 @@ class Configuration(BaseModel):
     settings: Settings
 
     # Vendor adapters — populated by load_vendors()
-    datadog_client: DatadogClient | None = None
+    observability_client: BaseObservabilityClient | None = None
     pagerduty_client: PagerDutyClient | None = None
     jira_client: JiraClient | None = None
     confluence_client: ConfluenceClient | None = None
 
     # Resilience — populated by load_vendors()
-    datadog_circuit_breaker: CircuitBreaker | None = None
+    observability_circuit_breaker: CircuitBreaker | None = None
 
     def load_vendors(self) -> None:
         """
         Build long-lived vendor adapter instances.
 
+        The observability backend is selected by ``OBSERVABILITY_BACKEND``:
+        ``"datadog"`` (default) or ``"grafana"``.
+
         Adapters are no-ops when their credentials are not configured.
         The circuit breaker persists across jobs so that failure state
         accumulates correctly.
         """
-        self.datadog_client = DatadogClient()
+        backend = self.settings.observability_backend
+
+        if backend == "grafana":
+            self.observability_client = GrafanaClient()
+        else:
+            self.observability_client = DatadogClient()
+
         self.pagerduty_client = PagerDutyClient()
-        self.datadog_circuit_breaker = CircuitBreaker(name="datadog")
+        self.observability_circuit_breaker = CircuitBreaker(name="observability")
 
         if self.settings.jira_base_url:
             self.jira_client = JiraClient()
@@ -95,7 +108,8 @@ class Configuration(BaseModel):
 
         logger.info(
             "Vendor adapters loaded",
-            datadog=self.datadog_client is not None,
+            observability_backend=backend,
+            observability_configured=self.observability_client.is_configured,
             pagerduty=self.pagerduty_client is not None,
             jira=self.jira_client is not None,
             confluence=self.confluence_client is not None,
@@ -129,10 +143,10 @@ class Configuration(BaseModel):
         return a ``DirectToolsetAdapter`` that queries observability data.
         Otherwise return a disabled ``HolmesAdapter`` stub.
         """
-        if self.settings.holmesgpt_enabled and self.datadog_client is not None:
+        if self.settings.holmesgpt_enabled and self.observability_client is not None:
             return holmes_adapter.DirectToolsetAdapter(
-                datadog_client=self.datadog_client,
-                circuit_breaker=self.datadog_circuit_breaker,
+                observability_client=self.observability_client,
+                circuit_breaker=self.observability_circuit_breaker,
             )
         return holmes_adapter.HolmesAdapter(enabled=False)
 

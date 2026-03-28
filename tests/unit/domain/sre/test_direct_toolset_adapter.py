@@ -35,6 +35,16 @@ def _make_datadog_client(
     client.query_logs.return_value = logs or []
     client.query_metrics.return_value = metrics or []
     client.query_traces.return_value = traces or []
+    # Query template methods are sync — use regular Mock to avoid coroutine return.
+    client.log_query_template = mock.Mock(
+        side_effect=lambda *, service: f"service:{service} error"
+    )
+    client.metrics_query_template = mock.Mock(
+        side_effect=lambda *, service: f"cpu{{service={service}}}"
+    )
+    client.trace_query_template = mock.Mock(
+        side_effect=lambda *, service: f"service:{service} status:error"
+    )
     return client
 
 
@@ -42,7 +52,7 @@ class TestDirectToolsetAdapter:
     async def test_returns_empty_when_datadog_not_configured(self, sample_alert):
         # Given a Datadog client that is not configured
         client = _make_datadog_client(is_configured=False)
-        adapter = holmes_adapter.DirectToolsetAdapter(datadog_client=client)
+        adapter = holmes_adapter.DirectToolsetAdapter(observability_client=client)
 
         # When an investigation is run
         result = await adapter.investigate(alert=sample_alert)
@@ -54,7 +64,7 @@ class TestDirectToolsetAdapter:
 
     async def test_returns_empty_when_no_client(self, sample_alert):
         # Given no Datadog client at all
-        adapter = holmes_adapter.DirectToolsetAdapter(datadog_client=None)
+        adapter = holmes_adapter.DirectToolsetAdapter(observability_client=None)
 
         # When an investigation is run
         result = await adapter.investigate(alert=sample_alert)
@@ -87,7 +97,7 @@ class TestDirectToolsetAdapter:
             metrics=[metric_entry],
             traces=[trace_entry],
         )
-        adapter = holmes_adapter.DirectToolsetAdapter(datadog_client=client)
+        adapter = holmes_adapter.DirectToolsetAdapter(observability_client=client)
 
         # When an investigation is run
         result = await adapter.investigate(alert=sample_alert)
@@ -101,7 +111,7 @@ class TestDirectToolsetAdapter:
     async def test_analysis_contains_alert_context(self, sample_alert):
         # Given a configured Datadog client
         client = _make_datadog_client()
-        adapter = holmes_adapter.DirectToolsetAdapter(datadog_client=client)
+        adapter = holmes_adapter.DirectToolsetAdapter(observability_client=client)
 
         # When an investigation is run
         result = await adapter.investigate(alert=sample_alert)
@@ -117,7 +127,7 @@ class TestDirectToolsetAdapter:
             traces=[{"service": "api", "resource": "/", "status": "ok", "duration_ns": 1000}],
         )
         client.query_logs.side_effect = Exception("Datadog API timeout")
-        adapter = holmes_adapter.DirectToolsetAdapter(datadog_client=client)
+        adapter = holmes_adapter.DirectToolsetAdapter(observability_client=client)
 
         # When an investigation is run
         result = await adapter.investigate(alert=sample_alert)
@@ -132,7 +142,7 @@ class TestDirectToolsetAdapter:
         client = _make_datadog_client()
         breaker = CircuitBreaker(name="datadog-test", failure_threshold=2)
         adapter = holmes_adapter.DirectToolsetAdapter(
-            datadog_client=client,
+            observability_client=client,
             circuit_breaker=breaker,
         )
 
@@ -148,7 +158,7 @@ class TestDirectToolsetAdapter:
         breaker = CircuitBreaker(name="datadog-test", failure_threshold=1)
         breaker.record_failure()  # Open the circuit
         adapter = holmes_adapter.DirectToolsetAdapter(
-            datadog_client=client,
+            observability_client=client,
             circuit_breaker=breaker,
         )
 
@@ -167,7 +177,7 @@ class TestDirectToolsetAdapter:
                 {"timestamp": "t2", "message": "err2", "service": "svc", "status": "error"},
             ],
         )
-        adapter = holmes_adapter.DirectToolsetAdapter(datadog_client=client)
+        adapter = holmes_adapter.DirectToolsetAdapter(observability_client=client)
 
         # When an investigation is run
         result = await adapter.investigate(alert=sample_alert)

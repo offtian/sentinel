@@ -20,9 +20,21 @@ PROMPTS_DIR = PLUGINS_DIR / "prompts"
 class SRESettings(BaseSettings):
     """SRE-specific vendor and feature settings."""
 
+    # Observability backend: "datadog" or "grafana"
+    observability_backend: str = "datadog"
+
+    # Datadog credentials (when observability_backend = "datadog")
     pagerduty_api_key: str = ""
     datadog_api_key: str = ""
     datadog_app_key: str = ""
+
+    # Grafana credentials (when observability_backend = "grafana")
+    grafana_url: str = ""
+    grafana_api_token: str = ""
+    grafana_prometheus_datasource_uid: str = ""
+    grafana_loki_datasource_uid: str = ""
+    grafana_tempo_datasource_uid: str = ""
+
     holmesgpt_enabled: bool = True
     sre_auto_investigate: bool = True
     sre_slack_channel: str = ""

@@ -5,7 +5,7 @@ from sentinel.domain.search.searcher import (
     MetricsSearchResult,
     UnableToSearchMetricsError,
 )
-from sentinel.domain.vendor_adapters.datadog_client import DatadogClient
+from sentinel.domain.vendor_adapters.observability import DatadogClient
 from sentinel.utils import logs
 
 

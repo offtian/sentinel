@@ -9,15 +9,11 @@ import attrs
 
 from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
 from sentinel.domain.sre import entities
-from sentinel.domain.vendor_adapters.datadog_client import DatadogClient
+from sentinel.domain.vendor_adapters.observability import BaseObservabilityClient
 from sentinel.utils import logs
 
 
 logger = logs.get_logger()
-
-_ALERT_LOG_QUERY_TEMPLATE = "service:{service} status:error"
-_ALERT_METRICS_QUERY_TEMPLATE = "avg:system.cpu.user{{service:{service}}}"
-_ALERT_TRACE_QUERY_TEMPLATE = "service:{service} @http.status_code:>=500"
 
 
 @attrs.frozen
@@ -117,11 +113,11 @@ class DirectToolsetAdapter(BaseHolmesAdapter):
     def __init__(
         self,
         *,
-        datadog_client: DatadogClient | None = None,
+        observability_client: BaseObservabilityClient | None = None,
         circuit_breaker: CircuitBreaker | None = None,
         time_range_minutes: int = 60,
     ) -> None:
-        self._datadog_client = datadog_client
+        self._obs_client = observability_client
         self._circuit_breaker = circuit_breaker
         self._time_range_minutes = time_range_minutes
 
@@ -142,7 +138,7 @@ class DirectToolsetAdapter(BaseHolmesAdapter):
         tool_calls: list[dict[str, Any]] = []
         sources_queried: list[str] = []
 
-        if self._datadog_client is None or not self._datadog_client.is_configured:
+        if self._obs_client is None or not self._obs_client.is_configured:
             return HolmesInvestigationResult(
                 analysis=(
                     f"No observability backends configured for alert: {alert.title}. "
@@ -152,24 +148,24 @@ class DirectToolsetAdapter(BaseHolmesAdapter):
                 sources_queried=[],
             )
 
-        log_query = _ALERT_LOG_QUERY_TEMPLATE.format(service=alert.service)
-        metrics_query = _ALERT_METRICS_QUERY_TEMPLATE.format(service=alert.service)
-        trace_query = _ALERT_TRACE_QUERY_TEMPLATE.format(service=alert.service)
+        log_query = self._obs_client.log_query_template(service=alert.service)
+        metrics_query = self._obs_client.metrics_query_template(service=alert.service)
+        trace_query = self._obs_client.trace_query_template(service=alert.service)
 
         log_results, metric_results, trace_results = await asyncio.gather(
             self._safe_query(
-                self._datadog_client.query_logs,
+                self._obs_client.query_logs,
                 query=log_query,
                 time_range_minutes=self._time_range_minutes,
                 limit=50,
             ),
             self._safe_query(
-                self._datadog_client.query_metrics,
+                self._obs_client.query_metrics,
                 query=metrics_query,
                 time_range_minutes=self._time_range_minutes,
             ),
             self._safe_query(
-                self._datadog_client.query_traces,
+                self._obs_client.query_traces,
                 query=trace_query,
                 time_range_minutes=self._time_range_minutes,
                 limit=20,
