@@ -46,6 +46,16 @@ spec:
       ports:
         - port: 4000
           protocol: TCP
+    # Allow Grafana stack (when OBSERVABILITY_BACKEND=grafana)
+    {{- with .Values.networkPolicy.grafanaNamespace }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+      ports:
+        - port: 3000
+          protocol: TCP
+    {{- end }}
     # Allow external vendor APIs (PagerDuty, Jira, Datadog, Slack) over HTTPS
     - to: []
       ports:

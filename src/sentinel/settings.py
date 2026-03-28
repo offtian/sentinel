@@ -20,8 +20,8 @@ PROMPTS_DIR = PLUGINS_DIR / "prompts"
 class SRESettings(BaseSettings):
     """SRE-specific vendor and feature settings."""
 
-    # Observability backend: "datadog" or "grafana"
-    observability_backend: str = "datadog"
+    # Observability backend: "datadog" | "grafana" | "" (auto: grafana for localdev, datadog otherwise)
+    observability_backend: str = ""
 
     # Datadog credentials (when observability_backend = "datadog")
     pagerduty_api_key: str = ""
@@ -83,6 +83,11 @@ class Settings(LLMSettings, SRESettings, SupportSettings):
     # Environment
     environment: str = "production"
     database_url: str = ""
+
+    @property
+    def is_local(self) -> bool:
+        """Return True when running in local development (docker-compose or local K8s)."""
+        return self.environment == "localdev"
 
     # Slack
     slack_bot_token: str = ""

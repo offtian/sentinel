@@ -65,3 +65,8 @@ env:
   AI_GATEWAY_URL: "http://host.docker.internal:4000"
   SRE_AUTO_INVESTIGATE: "true"
   SUPPORT_AUTO_DRAFT: "true"
+  # Grafana stack (auto-selected when ENVIRONMENT=localdev, deployed via helm/grafana-stack-local.yaml)
+  GRAFANA_URL: "http://grafana:3000"
+  GRAFANA_PROMETHEUS_DATASOURCE_UID: prometheus
+  GRAFANA_LOKI_DATASOURCE_UID: loki
+  GRAFANA_TEMPO_DATASOURCE_UID: tempo

@@ -121,17 +121,30 @@ All search backends implement abstract base classes from `domain/search/searcher
 
 All vendor adapters live in `domain/vendor_adapters/` and follow a consistent pattern:
 
-- Accept explicit constructor parameters or fall back to `_config` defaults
+- Accept explicit constructor parameters or fall back to `settings` defaults
 - Expose an `is_configured` property — operations are no-ops when not configured
-- Use deferred SDK imports inside methods to avoid import-time side effects
 - All methods are async-safe
+
+### Observability (pluggable backend)
+
+`domain/vendor_adapters/observability/` implements the `BaseObservabilityClient` ABC with two backends:
+
+| Backend | SDK | When Used | Query Languages |
+|---------|-----|-----------|-----------------|
+| `DatadogClient` | `datadog-api-client` | Production (`OBSERVABILITY_BACKEND=datadog`) | Datadog query syntax |
+| `GrafanaClient` | `httpx` | Local dev / open-source (`OBSERVABILITY_BACKEND=grafana`) | PromQL, LogQL, TraceQL |
+
+When `OBSERVABILITY_BACKEND` is unset, auto-selects Grafana for `ENVIRONMENT=localdev` and Datadog otherwise.
+
+The `GrafanaClient` queries Prometheus (metrics), Loki (logs), and Tempo (traces) through Grafana's unified `/api/ds/query` endpoint. One URL, one API token.
+
+### Other Vendor Adapters
 
 | Adapter | SDK | Key Methods |
 |---------|-----|-------------|
-| `DatadogClient` | `datadog-api-client` | `query_logs()`, `query_metrics()`, `query_traces()`, `get_monitor()` |
 | `PagerDutyClient` | `pdpyras` | `add_incident_note()`, `get_incident()`, `update_incident_status()` |
-| `JiraClient` | `jira` | `get_issue()`, `search_issues()`, `add_internal_comment()`, `transition_issue()`, `format_suggestion_comment()` |
-| `ConfluenceClient` | `atlassian-python-api` | `search()`, `get_page_content()`, `html_to_plain_text()` |
+| `JiraClient` | `jira` | `get_issue()`, `search_issues()`, `add_internal_comment()`, `transition_issue()` |
+| `ConfluenceClient` | `atlassian-python-api` | `search()`, `get_page_content()` |
 
 ## PydanticAI Agents
 
@@ -148,14 +161,20 @@ All agents route through a LiteLLM gateway for model management, cost tracking, 
 
 ## Configuration
 
-All settings in `src/sentinel/_config.py` using `environs`. Key groups:
+Two modules:
 
+- **`settings.py`** — Pydantic `Settings` class with env var overrides, `get_settings()` singleton
+- **`config.py`** — Application-level `Configuration` class with `load_vendors()`, `build_holmes_adapter()`, `build_document_searcher()`, LLM model name properties
+
+Key settings groups:
+
+- **Environment** - `ENVIRONMENT` (`localdev`/`production`), `DATABASE_URL`
+- **Observability** - `OBSERVABILITY_BACKEND` (auto: grafana for localdev, datadog for production), Datadog or Grafana credentials
 - **LLM models** - Per-agent model selection via LiteLLM gateway
-- **SRE config** - PagerDuty/Datadog API keys, HolmesGPT toggle
+- **SRE config** - PagerDuty API key, HolmesGPT toggle
 - **Support config** - Jira/Confluence URLs and tokens
 - **Feature flags** - `SRE_AUTO_INVESTIGATE`, `SUPPORT_AUTO_DRAFT`
-- **Slack** - Bot token and channel IDs for posting results
-- **Observability** - Datadog service name and environment
+- **Slack** - Bot token, app token, channel IDs
 
 ## Database
 

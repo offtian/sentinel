@@ -66,7 +66,7 @@ Acceptance criteria:
 
 - [x] PagerDuty webhook ingests `incident.triggered` and `incident.escalated` events
 - [x] Alert classifier determines severity, affected service, category, and urgency
-- [x] HolmesGPT integration queries Datadog logs, metrics, traces, and Kubernetes state — implemented via `DirectToolsetAdapter` (bypasses HolmesGPT SDK due to dependency conflict; queries DatadogClient directly)
+- [x] Observability integration queries logs, metrics, and traces — implemented via `DirectToolsetAdapter` with pluggable backends: `DatadogClient` (production) or `GrafanaClient` querying Prometheus/Loki/Tempo (local dev, open-source alternative)
 - [x] Root cause analyser synthesises findings into a structured summary with evidence, timeline, and remediation steps
 - [x] Confidence score (low/medium/high) is calculated and displayed
 - [x] Results are posted to a configurable Slack channel with formatted blocks
@@ -115,7 +115,7 @@ Acceptance criteria:
 
 ## High complexity features
 
-- **HolmesGPT integration** — SDK has dependency conflicts with PydanticAI; currently using an adapter pattern that allows operation with or without the SDK. Full integration requires dependency resolution
+- **Pluggable observability backends** — `BaseObservabilityClient` ABC with `DatadogClient` and `GrafanaClient` implementations. Auto-selects Grafana for local dev, Datadog for production. Each backend provides its own query templates (Datadog query syntax vs PromQL/LogQL/TraceQL)
 - **LiteLLM gateway routing** — All LLM calls route through a LiteLLM proxy, mapping model names to backend providers (Ollama for local dev, cloud providers for production). Configuration management across environments is non-trivial
 - **Multi-source documentation search** — Parallel search across Confluence, Jira, and potentially S3/Notion requires careful timeout handling and result ranking
 - **Job queue consistency** — Ensuring exactly-once processing with idempotency keys across multiple worker replicas under failure conditions
@@ -123,7 +123,7 @@ Acceptance criteria:
 
 ## Technical Stuff
 
-**Stack:** Python 3.13, FastAPI, PydanticAI, Pydantic Graph, PostgreSQL, SQLModel, LiteLLM, HolmesGPT, structlog, Datadog, Sentry
+**Stack:** Python 3.13, FastAPI, PydanticAI, Pydantic Graph, PostgreSQL, SQLModel, LiteLLM, structlog, Sentry. Observability via Datadog (production) or Grafana + Prometheus + Loki + Tempo (local/open-source)
 
 **Architecture:** Clean layered architecture enforced by import-linter:
 

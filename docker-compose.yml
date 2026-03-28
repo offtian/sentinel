@@ -23,6 +23,13 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/sentinel
       AI_GATEWAY_URL: http://host.docker.internal:4000
       ENVIRONMENT: localdev
+      # Grafana stack (auto-selected when ENVIRONMENT=localdev)
+      GRAFANA_URL: http://grafana:3000
+      GRAFANA_API_TOKEN: ${GRAFANA_API_TOKEN:-}
+      GRAFANA_PROMETHEUS_DATASOURCE_UID: prometheus
+      GRAFANA_LOKI_DATASOURCE_UID: loki
+      GRAFANA_TEMPO_DATASOURCE_UID: tempo
+      # Vendor integrations (pass through from host .env)
       PAGERDUTY_API_KEY: ${PAGERDUTY_API_KEY:-}
       DATADOG_API_KEY: ${DATADOG_API_KEY:-}
       DATADOG_APP_KEY: ${DATADOG_APP_KEY:-}
@@ -37,5 +44,63 @@ services:
       db:
         condition: service_healthy
 
+  # ---------------------------------------------------------------------------
+  # Observability stack (Grafana + Prometheus + Loki + Tempo)
+  # ---------------------------------------------------------------------------
+
+  prometheus:
+    image: prom/prometheus:v3.4.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-remote-write-receiver"
+
+  loki:
+    image: grafana/loki:3.5.0
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./docker/loki/loki.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+
+  tempo:
+    image: grafana/tempo:2.7.2
+    ports:
+      - "3200:3200"   # Tempo HTTP API
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+    volumes:
+      - ./docker/tempo/tempo.yml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+
 volumes:
   pgdata:
+  prometheus_data:
+  loki_data:
+  tempo_data:
+  grafana_data:

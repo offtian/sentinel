@@ -2,7 +2,7 @@
 	ruff-check ruff-format typecheck check-imports \
 	run-db-migrations build-migration downgrade-db-migration \
 	docker-build docker-compose-up smoke-test test-evals clean \
-	k8s-up k8s-down k8s-logs
+	k8s-up k8s-deploy k8s-down k8s-logs
 
 # Setup
 install:
@@ -90,11 +90,20 @@ k8s-up:
 		docker save sentinel-api:local | docker exec -i $$node ctr -n k8s.io images import -; \
 	done
 	kubectl apply -f helm/postgres-local.yaml
+	kubectl apply -f helm/grafana-stack-local.yaml
 	kubectl wait --for=condition=ready pod -l app=sentinel-postgres --timeout=60s
+	kubectl wait --for=condition=ready pod -l app=grafana --timeout=60s
 	helm upgrade --install sentinel ./helm/sentinel -f ./helm/sentinel/values-local.yaml
+
+k8s-deploy:
+	# Full rebuild + redeploy (cleans stale migration job, rebuilds image, upgrades Helm)
+	helm uninstall sentinel || true
+	kubectl delete job sentinel-migration --ignore-not-found
+	$(MAKE) k8s-up
 
 k8s-down:
 	helm uninstall sentinel || true
+	kubectl delete -f helm/grafana-stack-local.yaml || true
 	kubectl delete -f helm/postgres-local.yaml || true
 
 k8s-logs:

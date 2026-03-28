@@ -83,14 +83,17 @@ class Configuration(BaseModel):
         """
         Build long-lived vendor adapter instances.
 
-        The observability backend is selected by ``OBSERVABILITY_BACKEND``:
-        ``"datadog"`` (default) or ``"grafana"``.
+        The observability backend is selected by ``OBSERVABILITY_BACKEND``.
+        When unset, defaults to ``"grafana"`` in local dev and ``"datadog"``
+        in production.
 
         Adapters are no-ops when their credentials are not configured.
         The circuit breaker persists across jobs so that failure state
         accumulates correctly.
         """
         backend = self.settings.observability_backend
+        if not backend:
+            backend = "grafana" if self.settings.is_local else "datadog"
 
         if backend == "grafana":
             self.observability_client = GrafanaClient()

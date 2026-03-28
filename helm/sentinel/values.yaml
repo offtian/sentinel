@@ -150,4 +150,6 @@ networkPolicy:
           kubernetes.io/metadata.name: ingress
   databaseCIDR: ""
   litellmNamespace: "litellm"
+  # Grafana namespace for observability queries (Prometheus/Loki/Tempo via Grafana API)
+  grafanaNamespace: ""
   extraEgress: []

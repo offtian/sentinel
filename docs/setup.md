@@ -207,9 +207,30 @@ make downgrade-db-migration
 # Build the image
 make docker-build
 
-# Run everything (db + api)
+# Run everything (db + api + Grafana stack)
 make docker-compose-up
 ```
+
+This starts PostgreSQL, the Sentinel API, and the full Grafana observability stack:
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| Grafana | [localhost:3000](http://localhost:3000) | Dashboards (admin/admin) |
+| Prometheus | [localhost:9090](http://localhost:9090) | Metrics |
+| Loki | localhost:3100 | Logs |
+| Tempo | localhost:3200 | Traces (OTLP on 4317/4318) |
+
+The observability backend auto-selects Grafana when `ENVIRONMENT=localdev`. Datasource UIDs (`prometheus`, `loki`, `tempo`) are pre-provisioned.
+
+## Local Kubernetes
+
+```bash
+make k8s-up    # Deploys PostgreSQL + Grafana stack + Sentinel (api + worker)
+make k8s-down  # Tears down everything
+make k8s-logs  # Tail Sentinel pod logs
+```
+
+The Grafana stack is deployed from `helm/grafana-stack-local.yaml` (Prometheus, Loki, Tempo, Grafana with pre-configured datasources). Grafana is exposed via NodePort on port 3000.
 
 ## Helm Chart
 
