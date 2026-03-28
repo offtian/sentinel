@@ -1,0 +1,376 @@
+from __future__ import annotations
+
+import re
+from datetime import UTC, datetime
+from typing import Any
+
+from slack_bolt.context.ack.async_ack import AsyncAck
+
+from sentinel.domain.search.factory import build_document_searcher, build_ticket_searcher
+from sentinel.domain.sre import entities as sre_entities
+from sentinel.domain.sre.holmes_adapter import HolmesAdapter
+from sentinel.domain.support import entities as support_entities
+from sentinel.interfaces.graphs import common, sre_investigation, support_review
+from sentinel.interfaces.slack.app import app
+from sentinel.interfaces.slack.status_update import SlackStatusUpdateClient
+from sentinel.settings import get_settings
+from sentinel.utils import logs
+
+
+# ---------------------------------------------------------------------------
+# Keyword-based intent routing
+# ---------------------------------------------------------------------------
+
+_SRE_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "alert",
+        "incident",
+        "outage",
+        "down",
+        "degraded",
+        "error",
+        "errors",
+        "crash",
+        "crashed",
+        "crashing",
+        "pod",
+        "pods",
+        "memory",
+        "cpu",
+        "latency",
+        "timeout",
+        "500",
+        "503",
+        "502",
+        "pagerduty",
+        "pager",
+        "k8s",
+        "kubernetes",
+        "deploy",
+        "deployment",
+        "oom",
+        "restarting",
+        "unhealthy",
+        "spike",
+        "throttle",
+        "throttled",
+        "queue",
+        "deadlock",
+        "leak",
+        "oom-kill",
+    }
+)
+
+
+def _is_sre_request(text: str) -> bool:
+    words = set(re.sub(r"[^a-z0-9 ]", " ", text.lower()).split())
+    return bool(words & _SRE_KEYWORDS)
+
+
+def _strip_mention(text: str) -> str:
+    """Remove <@UXXXXXXX> bot mentions from the message text."""
+    return re.sub(r"<@[A-Z0-9]+>", "", text).strip()
+
+
+# ---------------------------------------------------------------------------
+# Block Kit formatters
+# ---------------------------------------------------------------------------
+
+
+def _investigation_blocks(
+    reply: common.InvestigationReply,
+    alert_title: str,
+) -> list[dict[str, object]]:
+    confidence_label = reply.confidence.label.value if reply.confidence else "Unknown"
+    confidence_emoji = {
+        "High": ":large_green_circle:",
+        "Medium": ":large_yellow_circle:",
+    }.get(confidence_label, ":red_circle:")
+
+    blocks: list[dict[str, object]] = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"Investigation: {alert_title[:140]}"},
+        },
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*Alert ID:* {reply.alert_id}"},
+                {"type": "mrkdwn", "text": f"*Confidence:* {confidence_emoji} {confidence_label}"},
+            ],
+        },
+        {"type": "divider"},
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Root Cause:*\n{reply.root_cause or '_Unable to determine._'}",
+            },
+        },
+    ]
+
+    if reply.remediation:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*Remediation:*\n{reply.remediation}"},
+            }
+        )
+
+    if reply.findings_summary:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*Findings:*\n{reply.findings_summary}"},
+            }
+        )
+
+    return blocks
+
+
+def _support_blocks(
+    reply: common.SupportReply,
+    ticket_summary: str,
+) -> list[dict[str, object]]:
+    confidence_label = reply.confidence.label.value if reply.confidence else "Unknown"
+    confidence_emoji = {
+        "High": ":large_green_circle:",
+        "Medium": ":large_yellow_circle:",
+    }.get(confidence_label, ":red_circle:")
+
+    blocks: list[dict[str, object]] = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": "Sentinel Response Suggestion"},
+        },
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*Query:* {ticket_summary[:200]}"},
+                {"type": "mrkdwn", "text": f"*Category:* {reply.category or 'Unknown'}"},
+                {"type": "mrkdwn", "text": f"*Confidence:* {confidence_emoji} {confidence_label}"},
+            ],
+        },
+        {"type": "divider"},
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Suggested Response:*\n{reply.suggested_response}",
+            },
+        },
+    ]
+
+    sources = reply.sources or []
+    if sources:
+        source_lines = "\n".join(
+            f"• <{s['url']}|{s['title']}>" if s.get("url") else f"• {s['title']}"
+            for s in sources[:5]
+        )
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*Sources:*\n{source_lines}"},
+            }
+        )
+
+    return blocks
+
+
+# ---------------------------------------------------------------------------
+# Core pipeline runners
+# ---------------------------------------------------------------------------
+
+
+async def _run_sre(
+    text: str,
+    *,
+    client: Any,
+    channel: str,
+    thread_ts: str,
+) -> None:
+    status = SlackStatusUpdateClient(client=client, channel=channel, thread_ts=thread_ts)
+
+    # Build a minimal Alert from the Slack message text
+    first_line = text.split("\n")[0][:200]
+    alert = sre_entities.Alert(
+        id=f"slack-{thread_ts}",
+        source="manual",
+        title=first_line or "Alert from Slack",
+        description=text,
+        severity=sre_entities.AlertSeverity.MEDIUM,
+        service="unknown",
+        triggered_at=datetime.now(tz=UTC),
+        raw_payload={"slack_text": text},
+    )
+
+    reply = await sre_investigation.investigate_alert(
+        alert=alert,
+        holmes=HolmesAdapter(enabled=get_settings().holmesgpt_enabled),
+        status_update_client=status,
+        post_to_slack=False,  # we post directly in this thread instead
+    )
+
+    blocks = _investigation_blocks(reply, alert.title)
+    await status.replace_with_result(
+        text=f"Investigation complete: {alert.title}",
+        blocks=blocks,
+    )
+
+    logs.log_event(
+        "slack_sre_investigation_complete",
+        params={"alert_id": alert.id, "channel": channel},
+    )
+
+
+async def _run_support(
+    text: str,
+    *,
+    client: Any,
+    channel: str,
+    thread_ts: str,
+    user_id: str,
+) -> None:
+    status = SlackStatusUpdateClient(client=client, channel=channel, thread_ts=thread_ts)
+
+    ticket = support_entities.Ticket(
+        id=f"slack-{thread_ts}",
+        key=f"SLACK-{thread_ts[:8]}",
+        summary=text.split("\n")[0][:200] or "Question from Slack",
+        description=text,
+        reporter=user_id,
+        priority="Medium",
+        created_at=datetime.now(tz=UTC),
+        labels=["slack"],
+        raw_payload={"slack_text": text, "user_id": user_id},
+    )
+
+    reply = await support_review.review_ticket(
+        ticket=ticket,
+        document_searcher=build_document_searcher(),
+        ticket_searcher=build_ticket_searcher(),
+        status_update_client=status,
+    )
+
+    blocks = _support_blocks(reply, ticket.summary)
+    await status.replace_with_result(
+        text=f"Response suggestion ready for: {ticket.summary}",
+        blocks=blocks,
+    )
+
+    logs.log_event(
+        "slack_support_review_complete",
+        params={"ticket_key": ticket.key, "channel": channel},
+    )
+
+
+async def _handle_request(
+    text: str,
+    *,
+    client: Any,
+    channel: str,
+    thread_ts: str,
+    user_id: str,
+) -> None:
+    clean_text = _strip_mention(text)
+
+    if not clean_text:
+        await client.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text=(
+                "Hi! Describe an incident or support question and I'll investigate.\n\n"
+                "*SRE examples:* _'payment-service pods are OOMKilling'_ or "
+                "_'high latency on checkout API'_\n"
+                "*Support examples:* _'How do I reset my API key?'_ or "
+                "_'user cannot log in after domain migration'_"
+            ),
+        )
+        return
+
+    logs.log_event(
+        "slack_request_received",
+        params={"user_id": user_id, "channel": channel, "is_sre": _is_sre_request(clean_text)},
+    )
+
+    if _is_sre_request(clean_text):
+        await _run_sre(clean_text, client=client, channel=channel, thread_ts=thread_ts)
+    else:
+        await _run_support(
+            clean_text, client=client, channel=channel, thread_ts=thread_ts, user_id=user_id
+        )
+
+
+# ---------------------------------------------------------------------------
+# Bolt event handlers
+# ---------------------------------------------------------------------------
+
+
+@app.event("app_mention")
+async def handle_app_mention(
+    event: dict[str, Any],
+    client: Any,
+    ack: AsyncAck,
+) -> None:
+    """
+    Handle @Sentinel mentions in any channel.
+
+    The thread_ts is used as the reply thread. If the mention itself is
+    already in a thread we continue in that thread; otherwise we start one.
+    """
+    await ack()
+
+    text = event.get("text", "")
+    channel = event.get("channel", "")
+    ts = event.get("ts", "")
+    thread_ts = event.get("thread_ts") or ts  # stay in existing thread if present
+    user_id = event.get("user", "unknown")
+
+    try:
+        await _handle_request(
+            text, client=client, channel=channel, thread_ts=thread_ts, user_id=user_id
+        )
+    except Exception as exc:
+        logs.log_exception(exc)
+        await client.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text=":x: Something went wrong while processing your request. Please try again.",
+        )
+
+
+@app.event("message")
+async def handle_direct_message(
+    event: dict[str, Any],
+    client: Any,
+    ack: AsyncAck,
+) -> None:
+    """
+    Handle direct messages to the bot.
+
+    Only processes messages in DM channels (channel_type=im) to avoid
+    double-handling messages that also trigger app_mention.
+    """
+    await ack()
+
+    # Skip bot messages, edits, and non-DM channels
+    if event.get("bot_id") or event.get("subtype") or event.get("channel_type") != "im":
+        return
+
+    text = event.get("text", "")
+    channel = event.get("channel", "")
+    ts = event.get("ts", "")
+    thread_ts = event.get("thread_ts") or ts
+    user_id = event.get("user", "unknown")
+
+    try:
+        await _handle_request(
+            text, client=client, channel=channel, thread_ts=thread_ts, user_id=user_id
+        )
+    except Exception as exc:
+        logs.log_exception(exc)
+        await client.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text=":x: Something went wrong while processing your request. Please try again.",
+        )

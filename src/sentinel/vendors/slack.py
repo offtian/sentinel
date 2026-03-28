@@ -1,7 +1,28 @@
 from __future__ import annotations
 
-from sentinel import _config
+from slack_sdk.web.async_client import AsyncWebClient
+
+from sentinel.settings import get_settings
 from sentinel.utils import logs
+
+
+_CONFIDENCE_EMOJI: dict[str, str] = {
+    "High": ":large_green_circle:",
+    "Medium": ":large_yellow_circle:",
+}
+_CONFIDENCE_EMOJI_DEFAULT = ":red_circle:"
+
+_client: AsyncWebClient | None = None
+
+
+def _get_client() -> AsyncWebClient | None:
+    """
+    Return a cached Slack client, or None if no token is configured.
+    """
+    global _client  # noqa: PLW0603
+    if _client is None and get_settings().slack_bot_token:
+        _client = AsyncWebClient(token=get_settings().slack_bot_token)
+    return _client
 
 
 async def post_investigation_summary(
@@ -19,8 +40,9 @@ async def post_investigation_summary(
 
     Uses Slack Web API to send a formatted message with investigation results.
     """
-    target_channel = channel or _config.SRE_SLACK_CHANNEL
-    if not target_channel or not _config.SLACK_BOT_TOKEN:
+    target_channel = channel or get_settings().sre_slack_channel
+    client = _get_client()
+    if not target_channel or not client:
         logs.log_event(
             "slack_post_skipped",
             params={"reason": "No channel or token configured"},
@@ -37,9 +59,6 @@ async def post_investigation_summary(
     )
 
     try:
-        from slack_sdk.web.async_client import AsyncWebClient
-
-        client = AsyncWebClient(token=_config.SLACK_BOT_TOKEN)
         await client.chat_postMessage(
             channel=target_channel,
             text=f"Investigation complete for: {alert_title}",
@@ -63,8 +82,9 @@ async def post_support_suggestion(
     category: str | None,
 ) -> None:
     """Post a support response suggestion to a Slack channel."""
-    target_channel = channel or _config.SUPPORT_SLACK_CHANNEL
-    if not target_channel or not _config.SLACK_BOT_TOKEN:
+    target_channel = channel or get_settings().support_slack_channel
+    client = _get_client()
+    if not target_channel or not client:
         logs.log_event(
             "slack_post_skipped",
             params={"reason": "No channel or token configured"},
@@ -80,9 +100,6 @@ async def post_support_suggestion(
     )
 
     try:
-        from slack_sdk.web.async_client import AsyncWebClient
-
-        client = AsyncWebClient(token=_config.SLACK_BOT_TOKEN)
         await client.chat_postMessage(
             channel=target_channel,
             text=f"Response suggestion for: {ticket_key}",
@@ -105,9 +122,7 @@ def _build_investigation_blocks(
     confidence_label: str | None,
     findings_summary: str,
 ) -> list[dict[str, object]]:
-    confidence_emoji = {"High": ":large_green_circle:", "Medium": ":large_yellow_circle:"}.get(
-        confidence_label or "", ":red_circle:"
-    )
+    confidence_emoji = _CONFIDENCE_EMOJI.get(confidence_label or "", _CONFIDENCE_EMOJI_DEFAULT)
 
     blocks: list[dict[str, object]] = [
         {
@@ -161,9 +176,7 @@ def _build_support_blocks(
     confidence_label: str | None,
     category: str | None,
 ) -> list[dict[str, object]]:
-    confidence_emoji = {"High": ":large_green_circle:", "Medium": ":large_yellow_circle:"}.get(
-        confidence_label or "", ":red_circle:"
-    )
+    confidence_emoji = _CONFIDENCE_EMOJI.get(confidence_label or "", _CONFIDENCE_EMOJI_DEFAULT)
 
     return [
         {
