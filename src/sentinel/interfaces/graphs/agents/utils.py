@@ -1,17 +1,22 @@
 from __future__ import annotations
 
-from sentinel import _config
-
 
 def get_model_with_gateway(model_name: str) -> str:
     """
-    Prefix a model name with the LiteLLM proxy prefix so that PydanticAI
-    routes the request through our gateway.
+    Normalise model names for pydantic-ai and route via LiteLLM.
+
+    - Config uses \"openai/gpt-4.1-mini\" style names.
+    - pydantic-ai expects \"openai:gpt-4.1-mini\".
+    - LiteLLM runs as an OpenAI-compatible proxy on OPENAI_BASE_URL,
+      so we don't need a custom provider name pydantic-ai's built-in
+      OpenAI provider will hit the proxy.
     """
-    if model_name.startswith("litellm_proxy/"):
-        return model_name
-    return f"litellm_proxy/{model_name}"
+    # Strip any legacy litellm_proxy/ prefix
+    model_name = model_name.removeprefix("litellm_proxy/")
 
+    # Convert \"provider/model\" → \"provider:model\" if needed
+    if ":" not in model_name and "/" in model_name:
+        provider, name = model_name.split("/", 1)
+        model_name = f"{provider}:{name}"
 
-def get_gateway_base_url() -> str:
-    return _config.AI_GATEWAY_URL
+    return model_name

@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import abc
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from pydantic import BaseModel
 
 from sentinel.domain.confidence import entities as confidence_entities
+
+
+# Callable types for optional persistence hooks injected into pipeline dependencies.
+PersistInvestigationFn = Callable[["InvestigationReply"], Awaitable[None]]
+PersistTicketReviewFn = Callable[["SupportReply"], Awaitable[None]]
 
 
 class InvestigationReply(BaseModel):

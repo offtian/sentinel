@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import dataclasses
+from collections.abc import Awaitable
 from datetime import UTC, datetime
 
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
@@ -8,9 +10,12 @@ from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre import holmes_adapter
+from sentinel.domain.vendor_adapters.pagerduty import PagerDutyClient
 from sentinel.interfaces.graphs import common
 from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser, utils
+from sentinel.settings import get_settings
 from sentinel.utils import logs
+from sentinel.vendors import slack
 
 
 @dataclasses.dataclass
@@ -19,6 +24,9 @@ class Dependencies:
     classifier_model: str
     analyser_model: str
     holmes: holmes_adapter.BaseHolmesAdapter
+    pagerduty_client: PagerDutyClient | None = None
+    post_to_slack: bool = True
+    persist_fn: common.PersistInvestigationFn | None = None
 
 
 @dataclasses.dataclass
@@ -78,9 +86,7 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
 class InvestigateWithHolmes(BaseNode[State, Dependencies, common.InvestigationReply]):
     """Run HolmesGPT investigation to gather context from observability systems."""
 
-    async def run(
-        self, ctx: GraphRunContext[State, Dependencies]
-    ) -> AnalyseRootCause:
+    async def run(self, ctx: GraphRunContext[State, Dependencies]) -> AnalyseRootCause:
         await ctx.deps.status_update_client.update_status(
             "Investigating with observability tools..."
         )
@@ -111,9 +117,7 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
     holmes_tool_calls: list[dict[str, object]] = dataclasses.field(default_factory=list)
     holmes_sources: list[str] = dataclasses.field(default_factory=list)
 
-    async def run(
-        self, ctx: GraphRunContext[State, Dependencies]
-    ) -> DetermineConfidence:
+    async def run(self, ctx: GraphRunContext[State, Dependencies]) -> DetermineConfidence:
         await ctx.deps.status_update_client.update_status("Analysing root cause...")
 
         result = await root_cause_analyser.agent.run(
@@ -154,7 +158,7 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
                     "findings": findings,
                     "root_cause": result.output.root_cause,
                     "remediation": "\n".join(
-                        f"{i+1}. {step}"
+                        f"{i + 1}. {step}"
                         for i, step in enumerate(result.output.remediation_steps)
                     ),
                 }
@@ -169,9 +173,7 @@ class DetermineConfidence(BaseNode[State, Dependencies, common.InvestigationRepl
 
     raw_confidence: float = 0.0
 
-    async def run(
-        self, ctx: GraphRunContext[State, Dependencies]
-    ) -> PublishFindings:
+    async def run(self, ctx: GraphRunContext[State, Dependencies]) -> PublishFindings:
         confidence = confidence_entities.ConfidenceScore.from_total(self.raw_confidence)
 
         if ctx.state.investigation:
@@ -184,7 +186,7 @@ class DetermineConfidence(BaseNode[State, Dependencies, common.InvestigationRepl
 
 @dataclasses.dataclass
 class PublishFindings(BaseNode[State, Dependencies, common.InvestigationReply]):
-    """Format and return the investigation results."""
+    """Format and publish the investigation results to Slack, PagerDuty, and database."""
 
     confidence: confidence_entities.ConfidenceScore | None = None
 
@@ -209,16 +211,51 @@ class PublishFindings(BaseNode[State, Dependencies, common.InvestigationReply]):
                 f"- [{f.source}] {f.summary}" for f in investigation.findings
             )
 
+        confidence_label = self.confidence.label.value if self.confidence else None
+
         reply = common.InvestigationReply(
             alert_id=ctx.state.alert.id,
             root_cause=investigation.root_cause if investigation else None,
             remediation=investigation.remediation if investigation else None,
             confidence=self.confidence,
             findings_summary=findings_summary,
-            sources_queried=(
-                [f.source for f in investigation.findings] if investigation else []
-            ),
+            sources_queried=([f.source for f in investigation.findings] if investigation else []),
         )
+
+        # Publish to all output channels concurrently
+        publish_tasks: list[Awaitable[object]] = []
+
+        if ctx.deps.post_to_slack:
+            publish_tasks.append(
+                slack.post_investigation_summary(
+                    alert_id=ctx.state.alert.id,
+                    alert_title=ctx.state.alert.title,
+                    root_cause=reply.root_cause,
+                    remediation=reply.remediation,
+                    confidence_label=confidence_label,
+                    findings_summary=findings_summary,
+                )
+            )
+
+        if ctx.deps.pagerduty_client and ctx.state.alert.source == "pagerduty":
+            note_content = ctx.deps.pagerduty_client.format_investigation_note(
+                root_cause=reply.root_cause,
+                remediation=reply.remediation,
+                confidence_label=confidence_label,
+                findings_summary=findings_summary,
+            )
+            publish_tasks.append(
+                ctx.deps.pagerduty_client.add_incident_note(
+                    incident_id=ctx.state.alert.id,
+                    content=note_content,
+                )
+            )
+
+        if ctx.deps.persist_fn:
+            publish_tasks.append(ctx.deps.persist_fn(reply))
+
+        if publish_tasks:
+            await asyncio.gather(*publish_tasks)
 
         logs.log_event(
             "investigation_completed",
@@ -239,20 +276,24 @@ async def investigate_alert(
     status_update_client: common.StatusUpdateClient | None = None,
     classifier_model: str = "",
     analyser_model: str = "",
+    pagerduty_client: PagerDutyClient | None = None,
+    post_to_slack: bool = True,
+    persist_fn: common.PersistInvestigationFn | None = None,
 ) -> common.InvestigationReply:
     """
     Run the full SRE investigation pipeline for an alert.
 
     This is the main entry point for the investigation graph.
     """
-    from sentinel import _config
-
     state = State(alert=alert)
     dependencies = Dependencies(
         status_update_client=status_update_client or common.NoOpStatusUpdateClient(),
-        classifier_model=classifier_model or _config.ALERT_CLASSIFIER_LLM,
-        analyser_model=analyser_model or _config.ROOT_CAUSE_LLM,
+        classifier_model=classifier_model or get_settings().alert_classifier_llm,
+        analyser_model=analyser_model or get_settings().root_cause_llm,
         holmes=holmes,
+        pagerduty_client=pagerduty_client,
+        post_to_slack=post_to_slack,
+        persist_fn=persist_fn,
     )
 
     investigation_graph = Graph(

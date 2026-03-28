@@ -6,8 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
-from sentinel import _config
-from sentinel.interfaces.graphs.agents import utils
+from sentinel.plugins import prompts
 
 
 class RootCauseAnalysis(BaseModel):
@@ -29,27 +28,11 @@ class Dependencies:
     holmes_sources: list[str]
 
 
-SYSTEM_PROMPT = """\
-You are an expert Site Reliability Engineer performing root cause analysis.
+SYSTEM_PROMPT = prompts.load_system_prompt("root_cause_analyser")
 
-You have been given an alert and the results of an automated investigation that
-queried logs, metrics, traces, and Kubernetes state. Synthesise all findings into
-a clear root cause analysis.
-
-Your analysis must include:
-1. **Root cause**: A clear, specific explanation of what went wrong and why
-2. **Confidence**: A score from 0.0 to 1.0 indicating how confident you are
-3. **Evidence**: Specific data points from the investigation that support your conclusion
-4. **Remediation steps**: Ordered list of actions to resolve the issue
-5. **Affected services**: All services impacted by this incident
-6. **Timeline**: A brief reconstruction of the incident timeline
-
-Be specific and actionable. Avoid vague statements. If you're uncertain, say so
-and suggest further investigation steps.
-"""
 
 agent: Agent[Dependencies, RootCauseAnalysis] = Agent(
-    utils.get_model_with_gateway(_config.ROOT_CAUSE_LLM),
+    "test",  # Default placeholder; overridden at call site with the configured LiteLLM model.
     deps_type=Dependencies,
     output_type=RootCauseAnalysis,
     system_prompt=SYSTEM_PROMPT,
@@ -59,24 +42,14 @@ agent: Agent[Dependencies, RootCauseAnalysis] = Agent(
 
 @agent.instructions
 def build_investigation_context(ctx: RunContext[Dependencies]) -> str:
-    tool_call_summary = "\n".join(
-        f"- {call.get('tool', 'unknown')}: {call.get('result', 'no result')}"
-        for call in ctx.deps.holmes_tool_calls
+    return prompts.render_user_prompt(
+        "root_cause_analyser",
+        alert_title=ctx.deps.alert_title,
+        alert_description=ctx.deps.alert_description,
+        alert_severity=ctx.deps.alert_severity,
+        holmes_analysis=ctx.deps.holmes_analysis,
+        sources_queried=(
+            ", ".join(ctx.deps.holmes_sources) if ctx.deps.holmes_sources else "none"
+        ),
+        tool_calls=ctx.deps.holmes_tool_calls,
     )
-    sources = ", ".join(ctx.deps.holmes_sources) if ctx.deps.holmes_sources else "none"
-
-    return f"""
-## Alert Details
-- **Title**: {ctx.deps.alert_title}
-- **Description**: {ctx.deps.alert_description}
-- **Severity**: {ctx.deps.alert_severity}
-
-## Investigation Results
-{ctx.deps.holmes_analysis}
-
-## Data Sources Queried
-{sources}
-
-## Tool Call Results
-{tool_call_summary}
-"""

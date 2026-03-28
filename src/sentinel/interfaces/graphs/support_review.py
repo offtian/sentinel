@@ -10,6 +10,7 @@ from sentinel.domain.search import searcher
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.graphs import common
 from sentinel.interfaces.graphs.agents import response_drafter, ticket_reviewer, utils
+from sentinel.settings import get_settings
 from sentinel.utils import logs
 
 
@@ -20,6 +21,7 @@ class Dependencies:
     drafter_model: str
     document_searcher: searcher.BaseDocumentSearcher | None = None
     ticket_searcher: searcher.BasePastTicketSearcher | None = None
+    persist_fn: common.PersistTicketReviewFn | None = None
 
 
 @dataclasses.dataclass
@@ -31,9 +33,7 @@ class State:
 class ClassifyTicket(BaseNode[State, Dependencies, common.SupportReply]):
     """Classify the incoming ticket using a PydanticAI agent."""
 
-    async def run(
-        self, ctx: GraphRunContext[State, Dependencies]
-    ) -> SearchDocumentation:
+    async def run(self, ctx: GraphRunContext[State, Dependencies]) -> SearchDocumentation:
         await ctx.deps.status_update_client.update_status("Reviewing ticket...")
 
         result = await ticket_reviewer.agent.run(
@@ -117,8 +117,7 @@ class SearchDocumentation(BaseNode[State, Dependencies, common.SupportReply]):
                 ticket_id=ctx.state.ticket.id,
                 ticket_key=ctx.state.ticket.key,
                 suggested_response=(
-                    "No relevant documentation found for this ticket. "
-                    "Manual review recommended."
+                    "No relevant documentation found for this ticket. Manual review recommended."
                 ),
                 category=self.category,
             )
@@ -138,16 +137,10 @@ class DraftResponse(BaseNode[State, Dependencies, common.SupportReply]):
 
     category: str = ""
     key_questions: list[str] = dataclasses.field(default_factory=list)
-    document_results: list[searcher.DocumentSearchResult] = dataclasses.field(
-        default_factory=list
-    )
-    ticket_results: list[searcher.TicketSearchResult] = dataclasses.field(
-        default_factory=list
-    )
+    document_results: list[searcher.DocumentSearchResult] = dataclasses.field(default_factory=list)
+    ticket_results: list[searcher.TicketSearchResult] = dataclasses.field(default_factory=list)
 
-    async def run(
-        self, ctx: GraphRunContext[State, Dependencies]
-    ) -> DetermineConfidence:
+    async def run(self, ctx: GraphRunContext[State, Dependencies]) -> DetermineConfidence:
         await ctx.deps.status_update_client.update_status("Drafting response...")
 
         result = await response_drafter.agent.run(
@@ -186,22 +179,15 @@ class DetermineConfidence(BaseNode[State, Dependencies, common.SupportReply]):
     """Calculate confidence score for the response suggestion."""
 
     drafted_response: str = ""
-    sources_used: list[response_drafter.SourceReference] = dataclasses.field(
-        default_factory=list
-    )
+    sources_used: list[response_drafter.SourceReference] = dataclasses.field(default_factory=list)
     raw_confidence: float = 0.0
     category: str = ""
     notes: str = ""
 
-    async def run(
-        self, ctx: GraphRunContext[State, Dependencies]
-    ) -> End[common.SupportReply]:
+    async def run(self, ctx: GraphRunContext[State, Dependencies]) -> End[common.SupportReply]:
         confidence = confidence_entities.ConfidenceScore.from_total(self.raw_confidence)
 
-        sources = [
-            {"title": s.title, "url": s.url}
-            for s in self.sources_used
-        ]
+        sources = [{"title": s.title, "url": s.url} for s in self.sources_used]
 
         reply = common.SupportReply(
             ticket_id=ctx.state.ticket.id,
@@ -211,6 +197,9 @@ class DetermineConfidence(BaseNode[State, Dependencies, common.SupportReply]):
             confidence=confidence,
             category=self.category,
         )
+
+        if ctx.deps.persist_fn:
+            await ctx.deps.persist_fn(reply)
 
         logs.log_event(
             "support_review_completed",
@@ -232,21 +221,21 @@ async def review_ticket(
     status_update_client: common.StatusUpdateClient | None = None,
     reviewer_model: str = "",
     drafter_model: str = "",
+    persist_fn: common.PersistTicketReviewFn | None = None,
 ) -> common.SupportReply:
     """
     Run the full support ticket review pipeline.
 
     This is the main entry point for the support review graph.
     """
-    from sentinel import _config
-
     state = State(ticket=ticket)
     dependencies = Dependencies(
         status_update_client=status_update_client or common.NoOpStatusUpdateClient(),
-        reviewer_model=reviewer_model or _config.TICKET_REVIEWER_LLM,
-        drafter_model=drafter_model or _config.RESPONSE_DRAFTER_LLM,
+        reviewer_model=reviewer_model or get_settings().ticket_reviewer_llm,
+        drafter_model=drafter_model or get_settings().response_drafter_llm,
         document_searcher=document_searcher,
         ticket_searcher=ticket_searcher,
+        persist_fn=persist_fn,
     )
 
     review_graph = Graph(

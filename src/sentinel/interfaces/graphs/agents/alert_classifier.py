@@ -5,8 +5,7 @@ import dataclasses
 from pydantic import BaseModel
 from pydantic_ai import Agent
 
-from sentinel import _config
-from sentinel.interfaces.graphs.agents import utils
+from sentinel.plugins import prompts
 
 
 class AlertClassification(BaseModel):
@@ -24,22 +23,10 @@ class Dependencies:
     alert_source: str
 
 
-SYSTEM_PROMPT = """\
-You are an expert SRE alert classifier. Given an alert from a monitoring system,
-classify it accurately.
-
-Determine:
-1. **Severity**: critical, high, medium, or low
-2. **Affected service**: The primary service or component affected
-3. **Category**: One of: infrastructure, application, database, network, security, performance, availability
-4. **Summary**: A brief one-sentence summary of the issue
-5. **Requires immediate action**: Whether this needs immediate human intervention
-
-Be precise and avoid over-escalating. Use context from the alert source and description.
-"""
+SYSTEM_PROMPT = prompts.load_system_prompt("alert_classifier")
 
 agent: Agent[Dependencies, AlertClassification] = Agent(
-    utils.get_model_with_gateway(_config.ALERT_CLASSIFIER_LLM),
+    "test",  # Placeholder; overridden at call site with the configured LiteLLM model.
     deps_type=Dependencies,
     output_type=AlertClassification,
     system_prompt=SYSTEM_PROMPT,
