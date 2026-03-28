@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import enum
 import uuid
 from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+
+class ReviewStatus(enum.Enum):
+    DRAFTED = "drafted"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    MODIFIED = "modified"
 
 
 class TicketComment(BaseModel):

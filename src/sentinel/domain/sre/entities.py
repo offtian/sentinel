@@ -17,7 +17,7 @@ class AlertSeverity(enum.Enum):
 
 class Alert(BaseModel):
     id: str
-    source: Literal["pagerduty", "datadog"]
+    source: Literal["pagerduty", "datadog", "manual"]
     title: str
     description: str
     severity: AlertSeverity
