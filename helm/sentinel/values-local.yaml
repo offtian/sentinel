@@ -34,6 +34,31 @@ deployments:
     autoscaling:
       enabled: false
 
+  chat:
+    enabled: true
+    replicaCount: 1
+    port: 8501
+    command: [".venv/bin/streamlit", "run", "src/sentinel/interfaces/chat/app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    autoscaling:
+      enabled: false
+    livenessProbe:
+      httpGet:
+        path: /_stcore/health
+        port: 8501
+      initialDelaySeconds: 10
+    readinessProbe:
+      httpGet:
+        path: /_stcore/health
+        port: 8501
+      initialDelaySeconds: 5
+
 # Disable security constraints that block local development
 podSecurityContext:
   runAsNonRoot: true
@@ -62,7 +87,13 @@ service:
 env:
   ENVIRONMENT: localdev
   DATABASE_URL: "postgresql+asyncpg://postgres:postgres@sentinel-postgres:5432/sentinel"
-  AI_GATEWAY_URL: "http://host.docker.internal:4000"
+  AI_GATEWAY_URL: "http://ollama:11434"
+  # LLM models routed through Ollama (override to match your pulled models)
+  INTENT_ROUTER_LLM: "ollama/qwen3:8b"
+  ALERT_CLASSIFIER_LLM: "ollama/qwen3:8b"
+  ROOT_CAUSE_LLM: "ollama/qwen3:8b"
+  TICKET_REVIEWER_LLM: "ollama/qwen3:8b"
+  RESPONSE_DRAFTER_LLM: "ollama/qwen3:8b"
   SRE_AUTO_INVESTIGATE: "true"
   SUPPORT_AUTO_DRAFT: "true"
   # Grafana stack (auto-selected when ENVIRONMENT=localdev, deployed via helm/grafana-stack-local.yaml)

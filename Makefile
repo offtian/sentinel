@@ -1,4 +1,4 @@
-.PHONY: install verify-install lock run run-api run-worker test lint lint-fix \
+.PHONY: install verify-install lock run run-api run-worker run-chat test lint lint-fix \
 	ruff-check ruff-format typecheck check-imports \
 	run-db-migrations build-migration downgrade-db-migration \
 	docker-build docker-compose-up smoke-test test-evals clean \
@@ -27,6 +27,10 @@ run-api:
 run-worker:
 	# Background worker that polls the job queue and executes pipelines
 	uv run python -m sentinel.worker
+
+run-chat:
+	# Streamlit chat UI for local e2e testing (no Slack/K8s required)
+	uv run streamlit run src/sentinel/interfaces/chat/app.py --server.port 8501
 
 # Testing
 test:
@@ -89,8 +93,10 @@ k8s-up:
 		echo "  → $$node"; \
 		docker save sentinel-api:local | docker exec -i $$node ctr -n k8s.io images import -; \
 	done
+	kubectl apply -f helm/ollama-local.yaml
 	kubectl apply -f helm/postgres-local.yaml
 	kubectl apply -f helm/grafana-stack-local.yaml
+	kubectl wait --for=condition=ready pod -l app=ollama --timeout=120s
 	kubectl wait --for=condition=ready pod -l app=sentinel-postgres --timeout=60s
 	kubectl wait --for=condition=ready pod -l app=grafana --timeout=60s
 	helm upgrade --install sentinel ./helm/sentinel -f ./helm/sentinel/values-local.yaml
@@ -105,6 +111,7 @@ k8s-down:
 	helm uninstall sentinel || true
 	kubectl delete -f helm/grafana-stack-local.yaml || true
 	kubectl delete -f helm/postgres-local.yaml || true
+	kubectl delete -f helm/ollama-local.yaml || true
 
 k8s-logs:
 	kubectl logs -l app.kubernetes.io/name=sentinel --all-containers --prefix -f

@@ -16,3 +16,22 @@ spec:
     {{- include "sentinel.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: api
 {{- end }}
+{{- if and .Values.deployments.chat .Values.deployments.chat.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sentinel.fullname" . }}-chat
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+spec:
+  type: NodePort
+  ports:
+    - port: 8501
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "sentinel.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: chat
+{{- end }}

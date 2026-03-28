@@ -54,6 +54,7 @@ dependencies = [
     "ddtrace",
     "sentry-sdk>=2.35",
     "tiktoken>=0.12.0",
+    "streamlit>=1.39",
 ]
 
 [project.optional-dependencies]
@@ -262,6 +263,7 @@ env = [
     "PYTHONBREAKPOINT=ipdb.set_trace",
     "DATABASE_URL=postgresql+asyncpg://postgres@localhost/sentinel-test",
     "AI_GATEWAY_URL=http://localhost:4000",
+    "INTENT_ROUTER_LLM=openai/gpt-test",
     "ALERT_CLASSIFIER_LLM=openai/gpt-test",
     "ROOT_CAUSE_LLM=openai/gpt-test",
     "TICKET_REVIEWER_LLM=openai/gpt-test",
