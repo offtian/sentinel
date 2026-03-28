@@ -1,0 +1,67 @@
+# Local development overrides for Docker Desktop Kubernetes.
+
+image:
+  repository: sentinel-api
+  tag: local
+  pullPolicy: Never  # Image loaded directly into containerd
+
+deployments:
+  api:
+    enabled: true
+    replicaCount: 1
+    command: [".venv/bin/uvicorn", "sentinel.interfaces.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    autoscaling:
+      enabled: false
+
+  worker:
+    enabled: true
+    replicaCount: 1
+    command: [".venv/bin/python", "-m", "sentinel.worker"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    autoscaling:
+      enabled: false
+
+# Disable security constraints that block local development
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false  # Allow uv to write to .venv cache
+  capabilities:
+    drop:
+      - ALL
+
+# Run migrations before deploy
+migration:
+  enabled: true
+  command: [".venv/bin/python", "-m", "alembic", "-c", "src/sentinel/data/alembic.ini", "upgrade", "head"]
+
+# Expose API via NodePort for localhost access
+service:
+  type: NodePort
+  port: 8000
+
+# Environment variables for local development
+env:
+  ENVIRONMENT: localdev
+  DATABASE_URL: "postgresql+asyncpg://postgres:postgres@sentinel-postgres:5432/sentinel"
+  AI_GATEWAY_URL: "http://host.docker.internal:4000"
+  SRE_AUTO_INVESTIGATE: "true"
+  SUPPORT_AUTO_DRAFT: "true"

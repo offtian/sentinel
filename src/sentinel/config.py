@@ -47,7 +47,7 @@ def _normalise_model_name(model_name: str) -> str:
     LiteLLM runs as an OpenAI-compatible proxy on ``OPENAI_BASE_URL``.
     """
     model_name = model_name.removeprefix("litellm_proxy/")
-    if ":" not in model_name and "/" in model_name:
+    if "/" in model_name:
         provider, name = model_name.split("/", 1)
         model_name = f"{provider}:{name}"
     return model_name

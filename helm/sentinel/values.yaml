@@ -1,0 +1,153 @@
+# Default values for sentinel.
+
+replicaCount: 1
+
+image:
+  repository: ""
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# -- Deployments to create from this chart. Each key becomes a separate Deployment.
+deployments:
+  api:
+    enabled: true
+    replicaCount: 2
+    command: ["uv", "run", "uvicorn", "sentinel.interfaces.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    port: 8000
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+    livenessProbe:
+      httpGet:
+        path: /health
+        port: 8000
+      initialDelaySeconds: 10
+      periodSeconds: 30
+    readinessProbe:
+      httpGet:
+        path: /health
+        port: 8000
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+
+  # Worker deployment for background task processing (investigations + reviews).
+  # Minimum 2 replicas for HA in financial services environments.
+  worker:
+    enabled: true
+    replicaCount: 2
+    command: ["uv", "run", "python", "-m", "sentinel.worker"]
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+    # Must exceed WORKER_JOB_TIMEOUT (default 300s) to allow graceful finish
+    terminationGracePeriodSeconds: 330
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 80
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: false
+  className: "alb"
+  annotations: {}
+  hosts:
+    - host: sentinel.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# -- Environment variables injected into all deployments
+env: {}
+
+# -- Environment variables from ConfigMaps or Secrets
+envFrom: []
+
+# -- Extra volumes to mount into pods
+extraVolumes: []
+extraVolumeMounts: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# -- Database migration job runs before deployment
+migration:
+  enabled: false
+  command: ["uv", "run", "python", "-m", "alembic", "-c", "alembic.ini", "upgrade", "head"]
+  backoffLimit: 3
+
+# -- Pod disruption budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# -- Scheduled automation CronJobs
+# Each key becomes a separate CronJob resource.
+cronJobs: {}
+  # Example:
+  # repo-maintenance:
+  #   enabled: true
+  #   schedule: "0 17 * * 4"  # Every Thursday at 5pm
+  #   command: ["uv", "run", "python", "-m", "sentinel.worker", "--job-type", "scheduled"]
+  #   resources:
+  #     requests:
+  #       cpu: 250m
+  #       memory: 512Mi
+  #     limits:
+  #       cpu: "1"
+  #       memory: 1Gi
+
+# -- Network policy for pod-level traffic isolation.
+# Required for financial services environments.
+networkPolicy:
+  enabled: false
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress
+  databaseCIDR: ""
+  litellmNamespace: "litellm"
+  extraEgress: []

@@ -1,0 +1,36 @@
+{{- range $name, $deploy := .Values.deployments }}
+{{- if and $deploy.enabled $deploy.autoscaling $deploy.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "sentinel.fullname" $ }}-{{ $name }}
+  labels:
+    {{- include "sentinel.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "sentinel.fullname" $ }}-{{ $name }}
+  minReplicas: {{ $deploy.autoscaling.minReplicas }}
+  maxReplicas: {{ $deploy.autoscaling.maxReplicas }}
+  metrics:
+    {{- if $deploy.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $deploy.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if $deploy.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $deploy.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}
+{{- end }}

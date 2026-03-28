@@ -15,7 +15,7 @@ def get_model_with_gateway(model_name: str) -> str:
     model_name = model_name.removeprefix("litellm_proxy/")
 
     # Convert \"provider/model\" → \"provider:model\" if needed
-    if ":" not in model_name and "/" in model_name:
+    if "/" in model_name:
         provider, name = model_name.split("/", 1)
         model_name = f"{provider}:{name}"
 

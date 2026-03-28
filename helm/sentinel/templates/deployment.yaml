@@ -1,0 +1,94 @@
+{{- range $name, $deploy := .Values.deployments }}
+{{- if $deploy.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sentinel.fullname" $ }}-{{ $name }}
+  labels:
+    {{- include "sentinel.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  {{- if not (and $deploy.autoscaling $deploy.autoscaling.enabled) }}
+  replicas: {{ $deploy.replicaCount | default $.Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "sentinel.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $name }}
+  template:
+    metadata:
+      {{- with $.Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "sentinel.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ $name }}
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "sentinel.serviceAccountName" $ }}
+      securityContext:
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ $name }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          {{- if $deploy.command }}
+          command:
+            {{- toYaml $deploy.command | nindent 12 }}
+          {{- end }}
+          {{- if $deploy.port }}
+          ports:
+            - name: http
+              containerPort: {{ $deploy.port }}
+              protocol: TCP
+          {{- end }}
+          {{- if $deploy.livenessProbe }}
+          livenessProbe:
+            {{- toYaml $deploy.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if $deploy.readinessProbe }}
+          readinessProbe:
+            {{- toYaml $deploy.readinessProbe | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml ($deploy.resources | default dict) | nindent 12 }}
+          {{- if or $.Values.env $.Values.envFrom }}
+          env:
+            {{- range $key, $value := $.Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- if $.Values.envFrom }}
+          envFrom:
+            {{- toYaml $.Values.envFrom | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          {{- with $.Values.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with $.Values.extraVolumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}

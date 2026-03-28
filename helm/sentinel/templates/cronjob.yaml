@@ -1,0 +1,68 @@
+{{- range $name, $cron := .Values.cronJobs }}
+{{- if $cron.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "sentinel.fullname" $ }}-{{ $name }}
+  labels:
+    {{- include "sentinel.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: cronjob-{{ $name }}
+spec:
+  schedule: {{ $cron.schedule | quote }}
+  concurrencyPolicy: {{ $cron.concurrencyPolicy | default "Forbid" }}
+  successfulJobsHistoryLimit: {{ $cron.successfulJobsHistoryLimit | default 3 }}
+  failedJobsHistoryLimit: {{ $cron.failedJobsHistoryLimit | default 3 }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ $cron.backoffLimit | default 1 }}
+      activeDeadlineSeconds: {{ $cron.activeDeadlineSeconds | default 600 }}
+      template:
+        metadata:
+          labels:
+            {{- include "sentinel.selectorLabels" $ | nindent 12 }}
+            app.kubernetes.io/component: cronjob-{{ $name }}
+          {{- with $.Values.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          {{- with $.Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "sentinel.serviceAccountName" $ }}
+          securityContext:
+            {{- toYaml $.Values.podSecurityContext | nindent 12 }}
+          restartPolicy: Never
+          containers:
+            - name: {{ $name }}
+              image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+              imagePullPolicy: {{ $.Values.image.pullPolicy }}
+              command:
+                {{- toYaml $cron.command | nindent 16 }}
+              {{- with $cron.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              securityContext:
+                {{- toYaml $.Values.securityContext | nindent 16 }}
+              envFrom:
+                {{- with $.Values.envFrom }}
+                {{- toYaml . | nindent 16 }}
+                {{- end }}
+              env:
+                {{- range $key, $value := $.Values.env }}
+                - name: {{ $key }}
+                  value: {{ $value | quote }}
+                {{- end }}
+          {{- with $.Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $.Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
+{{- end }}

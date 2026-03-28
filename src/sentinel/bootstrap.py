@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 
+from sentinel import settings
 from sentinel.utils import logs
 
 
@@ -19,12 +20,19 @@ def _configure_llm_env() -> None:
     - **Ollama** — ``OLLAMA_BASE_URL``
 
     This function ensures the gateway URL is available under whichever
-    name the selected provider expects.
+    name the selected provider expects.  We read from :class:`Settings`
+    so that values defined in ``.env`` are picked up even when the
+    corresponding shell variable is not exported.
     """
-    gateway_url = os.environ.get("AI_GATEWAY_URL")
-    if gateway_url:
-        os.environ.setdefault("OPENAI_BASE_URL", gateway_url)
-        os.environ.setdefault("OLLAMA_BASE_URL", gateway_url)
+    cfg = settings.get_settings()
+    gateway_url = cfg.ai_gateway_url
+
+    ollama_url = gateway_url.rstrip("/")
+    if not ollama_url.endswith("/v1"):
+        ollama_url = f"{ollama_url}/v1"
+
+    os.environ.setdefault("OPENAI_BASE_URL", gateway_url)
+    os.environ.setdefault("OLLAMA_BASE_URL", ollama_url)
     os.environ.setdefault("OPENAI_API_KEY", "sentinel-not-needed")
 
 
