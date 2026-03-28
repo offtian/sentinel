@@ -42,6 +42,9 @@ DATADOG_APP_KEY=
 JIRA_BASE_URL=
 JIRA_API_TOKEN=
 JIRA_USER_EMAIL=
+CONFLUENCE_BASE_URL=
+CONFLUENCE_USERNAME=
+CONFLUENCE_API_TOKEN=
 SLACK_BOT_TOKEN=
 ```
 
@@ -157,6 +160,12 @@ make lint-fix
 4. Filter by project (e.g., `project = SUPPORT`)
 5. Set `JIRA_BASE_URL`, `JIRA_API_TOKEN`, and `JIRA_USER_EMAIL`
 
+### Confluence
+
+1. Set `CONFLUENCE_BASE_URL` to your Confluence instance (e.g., `https://your-org.atlassian.net/wiki`)
+2. Set `CONFLUENCE_USERNAME` (email) and `CONFLUENCE_API_TOKEN`
+3. The ConfluenceClient adapter searches via CQL and retrieves page content as plain text
+
 ### Slack
 
 1. Create a Slack app with `chat:write` scope
@@ -201,6 +210,31 @@ make docker-build
 # Run everything (db + api)
 make docker-compose-up
 ```
+
+## Helm Chart
+
+The Helm chart is at `helm/sentinel/`. To render templates locally:
+
+```bash
+helm template sentinel helm/sentinel/ -f helm/sentinel/values.yaml
+```
+
+The chart supports two deployments (`api` and `worker`) from the same image. Configuration in `values.yaml` controls:
+
+- Replica counts, resource requests/limits
+- HPA settings (min/max replicas, CPU target)
+- Ingress (AWS ALB with optional Zscaler SG)
+- Pre-install migration job (alembic)
+- ServiceAccount with IRSA annotation
+
+## CI/CD
+
+CircleCI pipeline (`.circleci/config.yml`) runs:
+
+1. **mypy** - Strict type checking
+2. **test-and-lint** - Unit tests + ruff + import-linter (with PostgreSQL sidecar)
+3. **publish-image** - Docker build + push to ECR
+4. **package-chart** - Helm chart packaging via ktl-services-deployment-orb
 
 ## Troubleshooting
 

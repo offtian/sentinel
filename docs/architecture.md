@@ -54,7 +54,7 @@ DetermineConfidence
   │  Calculate confidence score from analysis confidence
   ↓
 PublishFindings
-  │  Format and return investigation results
+  │  Posts to Slack, adds PagerDuty incident note, persists to database
   ↓
 End(InvestigationReply)
 ```
@@ -63,6 +63,14 @@ End(InvestigationReply)
 - `POST /api/sre/webhooks/pagerduty` - PagerDuty V3 webhook receiver
 - `POST /api/sre/webhooks/datadog` - Datadog webhook receiver
 - `POST /api/sre/investigate` - Manual investigation trigger
+
+### PublishFindings Integrations
+
+The `PublishFindings` node is wired to three output channels via the `Dependencies` dataclass:
+
+1. **Slack** - Calls `vendors.slack.post_investigation_summary()` with formatted blocks (controlled by `post_to_slack` flag)
+2. **PagerDuty** - Calls `PagerDutyClient.add_incident_note()` with markdown-formatted investigation note (skipped if client not configured)
+3. **Database** - Calls an injected `PersistInvestigationFn` callback that saves an `InvestigationRecord` via the application persistence layer
 
 ### HolmesGPT Integration (Hybrid Approach)
 
@@ -107,6 +115,24 @@ All search backends implement abstract base classes from `domain/search/searcher
 - `BasePastTicketSearcher` - For searching resolved Jira tickets
 - `BaseMetricsSearcher` - For querying metrics/logs (SRE use)
 
+**Note**: Concrete search implementations (NotionSearcher, ConfluenceSearcher, etc.) are planned for Phase 3.
+
+## Vendor Adapters
+
+All vendor adapters live in `domain/vendor_adapters/` and follow a consistent pattern:
+
+- Accept explicit constructor parameters or fall back to `_config` defaults
+- Expose an `is_configured` property — operations are no-ops when not configured
+- Use deferred SDK imports inside methods to avoid import-time side effects
+- All methods are async-safe
+
+| Adapter | SDK | Key Methods |
+|---------|-----|-------------|
+| `DatadogClient` | `datadog-api-client` | `query_logs()`, `query_metrics()`, `query_traces()`, `get_monitor()` |
+| `PagerDutyClient` | `pdpyras` | `add_incident_note()`, `get_incident()`, `update_incident_status()` |
+| `JiraClient` | `jira` | `get_issue()`, `search_issues()`, `add_internal_comment()`, `transition_issue()`, `format_suggestion_comment()` |
+| `ConfluenceClient` | `atlassian-python-api` | `search()`, `get_page_content()`, `html_to_plain_text()` |
+
 ## PydanticAI Agents
 
 | Agent | Purpose | Default Model |
@@ -115,6 +141,8 @@ All search backends implement abstract base classes from `domain/search/searcher
 | `root_cause_analyser` | Synthesise findings into root cause + remediation | GPT-4.1 |
 | `ticket_reviewer` | Classify ticket, extract questions, generate search queries | GPT-4.1-mini |
 | `response_drafter` | Draft customer response from documentation | GPT-4.1 |
+
+All agents are defined with `model="test"` at module level to avoid import-time validation. The actual model is injected at runtime via `model=utils.get_model_with_gateway(_config.MODEL_SETTING)`.
 
 All agents route through a LiteLLM gateway for model management, cost tracking, and fallback.
 
@@ -138,12 +166,62 @@ PostgreSQL with SQLModel (async via asyncpg). Two main tables:
 
 Migrations managed by Alembic.
 
+## Session Management
+
+`data/database.py` provides:
+
+- `get_engine()` / `get_session_factory()` - Lazy-initialised singletons (async engine with `pool_pre_ping`, `pool_size=5`, `max_overflow=10`)
+- `get_session()` - Async generator yielding `AsyncSession` (use in FastAPI dependencies or `async for`)
+- `close_engine()` - Called during FastAPI lifespan shutdown
+
+## Persistence Layer
+
+- `application/sre/persist.py` - `save_investigation()`, `get_investigation()`, `get_investigations_for_service()`, `get_investigations_by_alert_id()`
+- `application/support/persist.py` - `save_ticket_review()`, `get_ticket_review()`, `get_reviews_for_ticket()`, `update_review_status()`
+
+Both use `sqlmodel.col()` for type-safe column references in WHERE and ORDER BY clauses.
+
+Migrations managed by Alembic.
+
 ## Deployment
 
-Designed for Kubernetes deployment via Helm + ArgoCD GitOps:
+## Helm Chart
+
+Located in `helm/sentinel/`. Multi-deployment chart supporting:
 
 - **api** deployment - FastAPI server (webhook receivers + API endpoints)
-- **worker** deployment - Background task processor (for long-running investigations)
+- **worker** deployment - Background task processor (optional, configurable via `values.yaml`)
+- **migration-job** - Pre-install/upgrade Helm hook running `alembic upgrade head`
+- **HPA** - Per-deployment horizontal pod autoscaler (configurable min/max replicas, CPU target)
+- **PDB** - Pod disruption budget (`minAvailable: 1`)
+- **Ingress** - AWS ALB with optional Zscaler security group
+- **ServiceAccount** - With IRSA annotation for AWS IAM integration
+
+## CI/CD (CircleCI)
+
+Pipeline: `mypy` → `test-and-lint` → `publish-image` → `package-chart`
+
+- Uses PostgreSQL sidecar for integration tests
+- Publishes Docker image and Helm chart to ECR as OCI artifacts
+- Uses `krakentech/ktl-services-deployment-orb` for chart packaging
+
+## GitOps
+
+Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
+
 - Secrets encrypted via SOPS + KMS
 - IAM roles via IRSA for AWS service access
 - Datadog APM for observability
+
+## Test Count
+
+116 unit tests covering:
+
+- Domain entities and operations (SRE, Support, Confidence, Search)
+- Webhook parsers (PagerDuty, Datadog)
+- Vendor adapters (Datadog, PagerDuty, Jira, Confluence)
+- DirectToolsetAdapter (14 tests)
+- Persistence layer (database session management)
+- API routers (support feedback endpoints)
+- API app lifecycle
+- Slack message formatting
