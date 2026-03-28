@@ -1,17 +1,32 @@
-.PHONY: install lock run-api run-celery-worker test lint lint-fix \
+.PHONY: install verify-install lock run run-api run-worker test lint lint-fix \
+	ruff-check ruff-format typecheck check-imports \
 	run-db-migrations build-migration downgrade-db-migration \
-	docker-build docker-compose-up smoke-test test-evals
+	docker-build docker-compose-up smoke-test test-evals clean \
+	k8s-up k8s-down k8s-logs
 
 # Setup
 install:
-	uv sync --all-extras
+	uv sync --locked --all-extras
+	@$(MAKE) verify-install
+
+verify-install:
+	@".venv/bin/python" -c "import sentinel; print(sentinel.__file__)"
 
 lock:
 	uv lock
 
 # Development
+run:
+	# Starts HTTP API + Slack Socket Mode handler together (reads SLACK_APP_TOKEN from .env)
+	uv run python -m sentinel.main
+
 run-api:
-	uv run uvicorn sentinel.interfaces.api.app:app --host 0.0.0.0 --port 8000 --reload
+	# API-only mode with hot-reload (no Slack bot — use `make run` for the full bot)
+	uv run uvicorn sentinel.interfaces.api.app:app --host 127.0.0.1 --port 8000 --reload
+
+run-worker:
+	# Background worker that polls the job queue and executes pipelines
+	uv run python -m sentinel.worker
 
 # Testing
 test:
@@ -37,15 +52,27 @@ lint-fix:
 	uv run ruff check --fix src/ tests/
 	uv run ruff format src/ tests/
 
+ruff-check:
+	uv run ruff check src/ tests/
+
+ruff-format:
+	uv run ruff format src/ tests/
+
+typecheck:
+	uv run mypy src/
+
+check-imports:
+	uv run lint-imports
+
 # Database
 run-db-migrations:
-	uv run alembic -c src/sentinel/data/migrations/alembic.ini upgrade head
+	uv run python -m alembic -c src/sentinel/data/alembic.ini upgrade head
 
 build-migration:
-	uv run alembic -c src/sentinel/data/migrations/alembic.ini revision --autogenerate -m "$(MESSAGE)"
+	uv run python -m alembic -c src/sentinel/data/alembic.ini revision --autogenerate -m "$(MESSAGE)"
 
 downgrade-db-migration:
-	uv run alembic -c src/sentinel/data/migrations/alembic.ini downgrade -1
+	uv run python -m alembic -c src/sentinel/data/alembic.ini downgrade -1
 
 # Docker
 docker-build:
@@ -53,3 +80,27 @@ docker-build:
 
 docker-compose-up:
 	docker compose up -d
+
+# Kubernetes (local — Docker Desktop)
+k8s-up:
+	docker build -t sentinel-api:local .
+	@echo "Loading image into K8s nodes..."
+	@for node in $$(kubectl get nodes -o name | cut -d/ -f2); do \
+		echo "  → $$node"; \
+		docker save sentinel-api:local | docker exec -i $$node ctr -n k8s.io images import -; \
+	done
+	kubectl apply -f helm/postgres-local.yaml
+	kubectl wait --for=condition=ready pod -l app=sentinel-postgres --timeout=60s
+	helm upgrade --install sentinel ./helm/sentinel -f ./helm/sentinel/values-local.yaml
+
+k8s-down:
+	helm uninstall sentinel || true
+	kubectl delete -f helm/postgres-local.yaml || true
+
+k8s-logs:
+	kubectl logs -l app.kubernetes.io/name=sentinel --all-containers --prefix -f
+
+clean:
+	find src/ tests/ -type d -name "__pycache__" -exec rm -rf {} +
+	find . -maxdepth 1 -type d -name "*.egg-info" -exec rm -rf {} +
+	rm -rf .mypy_cache .pytest_cache .ruff_cache htmlcov .coverage

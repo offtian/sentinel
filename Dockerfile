@@ -5,6 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    libc6-dev \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -16,14 +17,15 @@ WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 COPY pyproject.toml uv.lock ./
+COPY src/sentinel/version/ src/sentinel/version/
 RUN uv sync --no-dev --frozen
 
 COPY src/ src/
 
-RUN uv pip install --no-deps -e .
+RUN uv pip install --no-deps .
 
 USER sentinel
 
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "sentinel.interfaces.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD [".venv/bin/uvicorn", "sentinel.interfaces.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

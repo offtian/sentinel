@@ -29,7 +29,7 @@ def configure_logging() -> None:
 
 
 def get_logger(**kwargs: Any) -> structlog.stdlib.BoundLogger:
-    return structlog.get_logger(**kwargs)
+    return structlog.get_logger(**kwargs)  # type: ignore[no-any-return]
 
 
 def log_event(event: str, *, params: dict[str, Any] | None = None) -> None:
