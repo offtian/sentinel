@@ -34,19 +34,37 @@ class State:
 class ClassifyTicket(BaseNode[State, Dependencies, common.SupportReply]):
     """Classify the incoming ticket using a PydanticAI agent."""
 
-    async def run(self, ctx: GraphRunContext[State, Dependencies]) -> SearchDocumentation:
+    async def run(
+        self, ctx: GraphRunContext[State, Dependencies]
+    ) -> SearchDocumentation | End[common.SupportReply]:
         await ctx.deps.status_update_client.update_status("Reviewing ticket...")
 
-        result = await ticket_reviewer.agent.run(
-            user_prompt=f"Ticket: {ctx.state.ticket.summary}\n\n{ctx.state.ticket.description}",
-            model=utils.get_model_with_gateway(ctx.deps.reviewer_model),
-            deps=ticket_reviewer.Dependencies(
-                ticket_summary=ctx.state.ticket.summary,
-                ticket_description=ctx.state.ticket.description,
-                ticket_priority=ctx.state.ticket.priority,
-                ticket_labels=ctx.state.ticket.labels,
-            ),
-        )
+        try:
+            result = await ticket_reviewer.agent.run(
+                user_prompt=f"Ticket: {ctx.state.ticket.summary}\n\n{ctx.state.ticket.description}",
+                model=utils.get_model_with_gateway(ctx.deps.reviewer_model),
+                deps=ticket_reviewer.Dependencies(
+                    ticket_summary=ctx.state.ticket.summary,
+                    ticket_description=ctx.state.ticket.description,
+                    ticket_priority=ctx.state.ticket.priority,
+                    ticket_labels=ctx.state.ticket.labels,
+                ),
+            )
+        except Exception as exc:
+            logs.log_exception(
+                exc,
+                params={"ticket_key": ctx.state.ticket.key, "node": "ClassifyTicket"},
+            )
+            return End(
+                common.SupportReply(
+                    ticket_id=ctx.state.ticket.id,
+                    ticket_key=ctx.state.ticket.key,
+                    suggested_response=(
+                        f"Classification failed: {type(exc).__name__} — {exc}. "
+                        "Manual review required."
+                    ),
+                )
+            )
 
         if ctx.deps.trace_collector:
             ctx.deps.trace_collector.record(
@@ -88,27 +106,30 @@ class SearchDocumentation(BaseNode[State, Dependencies, common.SupportReply]):
         doc_results: list[searcher.DocumentSearchResult] = []
         ticket_results: list[searcher.TicketSearchResult] = []
 
-        tasks: list[asyncio.Task[object]] = []
-        doc_task = None
-        ticket_task = None
+        try:
+            doc_task = None
+            ticket_task = None
 
-        async with asyncio.TaskGroup() as tg:
-            if ctx.deps.document_searcher:
-                doc_task = tg.create_task(
-                    ctx.deps.document_searcher.search(query=combined_query, limit=10)
-                )
-                tasks.append(doc_task)
+            async with asyncio.TaskGroup() as tg:
+                if ctx.deps.document_searcher:
+                    doc_task = tg.create_task(
+                        ctx.deps.document_searcher.search(query=combined_query, limit=10)
+                    )
 
-            if ctx.deps.ticket_searcher:
-                ticket_task = tg.create_task(
-                    ctx.deps.ticket_searcher.search(query=combined_query, limit=5)
-                )
-                tasks.append(ticket_task)
+                if ctx.deps.ticket_searcher:
+                    ticket_task = tg.create_task(
+                        ctx.deps.ticket_searcher.search(query=combined_query, limit=5)
+                    )
 
-        if doc_task:
-            doc_results = doc_task.result()
-        if ticket_task:
-            ticket_results = ticket_task.result()
+            if doc_task:
+                doc_results = doc_task.result()
+            if ticket_task:
+                ticket_results = ticket_task.result()
+        except BaseException as exc:
+            logs.log_exception(
+                exc,
+                params={"ticket_key": ctx.state.ticket.key, "node": "SearchDocumentation"},
+            )
 
         logs.log_event(
             "documentation_searched",
@@ -150,18 +171,35 @@ class DraftResponse(BaseNode[State, Dependencies, common.SupportReply]):
     async def run(self, ctx: GraphRunContext[State, Dependencies]) -> DetermineConfidence:
         await ctx.deps.status_update_client.update_status("Drafting response...")
 
-        result = await response_drafter.agent.run(
-            user_prompt=f"Draft a response for: {ctx.state.ticket.summary}",
-            model=utils.get_model_with_gateway(ctx.deps.drafter_model),
-            deps=response_drafter.Dependencies(
-                ticket_summary=ctx.state.ticket.summary,
-                ticket_description=ctx.state.ticket.description,
-                ticket_category=self.category,
-                key_questions=self.key_questions,
-                document_search_results=self.document_results,
-                ticket_search_results=self.ticket_results,
-            ),
-        )
+        try:
+            result = await response_drafter.agent.run(
+                user_prompt=f"Draft a response for: {ctx.state.ticket.summary}",
+                model=utils.get_model_with_gateway(ctx.deps.drafter_model),
+                deps=response_drafter.Dependencies(
+                    ticket_summary=ctx.state.ticket.summary,
+                    ticket_description=ctx.state.ticket.description,
+                    ticket_category=self.category,
+                    key_questions=self.key_questions,
+                    document_search_results=self.document_results,
+                    ticket_search_results=self.ticket_results,
+                ),
+            )
+        except Exception as exc:
+            logs.log_exception(
+                exc,
+                params={"ticket_key": ctx.state.ticket.key, "node": "DraftResponse"},
+            )
+            return DetermineConfidence(
+                drafted_response=(
+                    "Response drafting failed due to an internal error. "
+                    "Please review this ticket manually. "
+                    f"Documentation was found for: {', '.join(q[:50] for q in self.key_questions[:3])}"
+                ),
+                sources_used=[],
+                raw_confidence=0.0,
+                category=self.category,
+                notes="Automated drafting failed — manual review required.",
+            )
 
         if ctx.deps.trace_collector:
             ctx.deps.trace_collector.record(
