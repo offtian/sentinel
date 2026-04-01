@@ -168,6 +168,124 @@ def _build_investigation_blocks(
     return blocks
 
 
+async def post_approval_request(
+    *,
+    channel: str | None = None,
+    investigation_id: str,
+    alert_id: str,
+    alert_title: str,
+    root_cause: str | None,
+    remediation: str | None,
+    confidence_label: str | None,
+    findings_summary: str,
+) -> str | None:
+    """
+    Post an investigation summary with Approve/Reject buttons to Slack.
+
+    Return the message timestamp (``ts``) for tracking, or None if posting was skipped.
+    """
+    target_channel = channel or get_settings().sre_slack_channel
+    client = _get_client()
+    if not target_channel or not client:
+        logs.log_event(
+            "slack_approval_skipped",
+            params={"reason": "No channel or token configured"},
+        )
+        return None
+
+    confidence_emoji = _CONFIDENCE_EMOJI.get(confidence_label or "", _CONFIDENCE_EMOJI_DEFAULT)
+
+    blocks: list[dict[str, object]] = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"Approval Required: {alert_title}",
+            },
+        },
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*Alert ID:* {alert_id}"},
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Confidence:* {confidence_emoji} {confidence_label or 'Unknown'}",
+                },
+            ],
+        },
+        {"type": "divider"},
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Root Cause:*\n{root_cause or 'Unable to determine root cause.'}",
+            },
+        },
+    ]
+
+    if remediation:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*Remediation:*\n{remediation}"},
+            }
+        )
+
+    if findings_summary:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*Findings:*\n{findings_summary}"},
+            }
+        )
+
+    blocks.append(
+        {
+            "type": "actions",
+            "block_id": f"approval_{investigation_id}",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Approve & Publish"},
+                    "style": "primary",
+                    "action_id": "approve_investigation",
+                    "value": investigation_id,
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Reject"},
+                    "style": "danger",
+                    "action_id": "reject_investigation",
+                    "value": investigation_id,
+                },
+            ],
+        }
+    )
+
+    try:
+        response = await client.chat_postMessage(
+            channel=target_channel,
+            text=f"Approval required for investigation: {alert_title}",
+            blocks=blocks,
+        )
+        message_ts = response.get("ts")
+        logs.log_event(
+            "slack_approval_posted",
+            params={
+                "channel": target_channel,
+                "investigation_id": investigation_id,
+                "message_ts": message_ts,
+            },
+        )
+        return message_ts
+    except Exception as exc:
+        logs.log_exception(
+            exc,
+            params={"investigation_id": investigation_id, "channel": target_channel},
+        )
+        return None
+
+
 def _build_support_blocks(
     *,
     ticket_key: str,
