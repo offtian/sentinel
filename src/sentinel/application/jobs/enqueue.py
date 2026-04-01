@@ -110,3 +110,29 @@ async def enqueue_review(
         source_id=ticket_id,
         priority=priority,
     )
+
+
+async def enqueue_automation(
+    session: AsyncSession,
+    *,
+    automation_name: str,
+    params: dict[str, Any] | None = None,
+    requested_by: str,
+    priority: int = 2,
+) -> uuid.UUID:
+    """
+    Enqueue a scheduled automation job.
+
+    Convenience wrapper around ``enqueue_job`` for the automation pipeline.
+    """
+    return await enqueue_job(
+        session,
+        job_type=entities.JobType.SCHEDULED_AUTOMATION,
+        payload={
+            "automation_name": automation_name,
+            "params": params or {},
+        },
+        requested_by=requested_by,
+        source_id=f"automation:{automation_name}",
+        priority=priority,
+    )

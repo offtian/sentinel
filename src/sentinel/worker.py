@@ -6,10 +6,14 @@ This is the module referenced by the Helm chart worker deployment:
 
 The worker claims jobs using ``SELECT ... FOR UPDATE SKIP LOCKED`` so
 multiple replicas can run safely without contention.
+
+Supports ``--run-once`` mode for Kubernetes CronJob execution: claims
+a single job, executes it, and exits.
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import os
@@ -41,12 +45,24 @@ def _handle_signal(signum: int, frame: object) -> None:
     )
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Sentinel background worker")
+    parser.add_argument(
+        "--run-once",
+        action="store_true",
+        help="Claim and execute a single job, then exit. Designed for CronJob usage.",
+    )
+    return parser.parse_args()
+
+
 async def _dispatch_job(job_type: str, payload: dict[str, object]) -> str:
     """Route the job to the correct pipeline handler."""
     if job_type == entities.JobType.SRE_INVESTIGATION.value:
         return await _run_sre_investigation(payload)
     if job_type == entities.JobType.SUPPORT_REVIEW.value:
         return await _run_support_review(payload)
+    if job_type == entities.JobType.SCHEDULED_AUTOMATION.value:
+        return await _run_scheduled_automation(payload)
     raise ValueError(f"Unknown job type: {job_type}")
 
 
@@ -147,6 +163,21 @@ async def _run_support_review(payload: dict[str, object]) -> str:
     return result.model_dump_json()
 
 
+async def _run_scheduled_automation(payload: dict[str, object]) -> str:
+    """Execute a scheduled automation job."""
+    from sentinel.application.automations import runner
+
+    automation_name = str(payload.get("automation_name", ""))
+    raw_params = payload.get("params", {}) or {}
+    params: dict[str, object] = dict(raw_params) if isinstance(raw_params, dict) else {}
+
+    result = await runner.run_automation(
+        automation_name=automation_name,
+        params=params,
+    )
+    return json.dumps(result, default=str)
+
+
 async def _poll_loop(*, worker_id: str) -> None:
     """Main poll loop: claim and execute jobs until shutdown is requested."""
     poll_interval = get_settings().worker_poll_interval
@@ -203,8 +234,50 @@ async def _poll_loop(*, worker_id: str) -> None:
     logs.log_event("worker.shutdown_complete", params={"worker_id": worker_id})
 
 
+async def _run_once(*, worker_id: str) -> None:
+    """Claim and execute a single job, then exit. Designed for CronJob usage."""
+    job_timeout = get_settings().worker_job_timeout
+
+    logs.log_event(
+        "worker.run_once_started",
+        params={"worker_id": worker_id, "job_timeout": job_timeout},
+    )
+
+    async with database.get_session() as session:
+        job_record = await dequeue.claim_next_job(
+            session,
+            worker_id=worker_id,
+        )
+
+    if job_record is None:
+        logs.log_event("worker.run_once_no_jobs")
+        return
+
+    try:
+        await asyncio.wait_for(
+            _execute_job(job_record, worker_id=worker_id),
+            timeout=job_timeout,
+        )
+    except TimeoutError:
+        logs.log_event(
+            "worker.job_timed_out",
+            params={"job_id": str(job_record.id), "timeout": job_timeout},
+        )
+        async with database.get_session() as session:
+            fresh_record = await dequeue.fetch_job_record(session, job_id=job_record.id)
+            await dequeue.fail_job(
+                session,
+                job_record=fresh_record,
+                error_message=f"Job timed out after {job_timeout}s",
+                worker_id=worker_id,
+            )
+
+    logs.log_event("worker.run_once_complete", params={"worker_id": worker_id})
+
+
 async def _main() -> None:
     bootstrap.initialise()
+    args = _parse_args()
 
     worker_id = os.environ.get("HOSTNAME", f"worker-{os.getpid()}")
 
@@ -213,7 +286,10 @@ async def _main() -> None:
         logs.log_event("worker.database_initialised")
 
     try:
-        await _poll_loop(worker_id=worker_id)
+        if args.run_once:
+            await _run_once(worker_id=worker_id)
+        else:
+            await _poll_loop(worker_id=worker_id)
     finally:
         await database.close_engine()
 

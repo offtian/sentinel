@@ -11,6 +11,7 @@ import attrs
 class JobType(enum.Enum):
     SRE_INVESTIGATION = "sre_investigation"
     SUPPORT_REVIEW = "support_review"
+    SCHEDULED_AUTOMATION = "scheduled_automation"
 
 
 class JobStatus(enum.Enum):
