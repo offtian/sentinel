@@ -85,3 +85,93 @@ class TestIndividualScore:
         # Then no error is raised
         score = entities.IndividualScore(raw=value, weighted=value)
         assert score.raw == value
+
+
+class TestConfidenceScoreFromFactors:
+    def test_high_confidence_with_many_sources(self):
+        # Given many relevant, recent sources
+        # When building from factors
+        score = entities.ConfidenceScore.from_factors(
+            source_count=5,
+            max_expected_sources=5,
+            relevance=0.9,
+            recency=0.9,
+        )
+
+        # Then confidence is HIGH
+        assert score.label == entities.ConfidenceLabel.HIGH
+        # 0.3*1.0 + 0.5*0.9 + 0.2*0.9 = 0.3 + 0.45 + 0.18 = 0.93
+        assert score.total == pytest.approx(0.93, abs=0.01)
+
+    def test_low_confidence_with_no_sources(self):
+        # Given zero sources and low relevance
+        # When building from factors
+        score = entities.ConfidenceScore.from_factors(
+            source_count=0,
+            relevance=0.2,
+            recency=0.5,
+        )
+
+        # Then confidence is LOW
+        assert score.label == entities.ConfidenceLabel.LOW
+        # 0.3*0.0 + 0.5*0.2 + 0.2*0.5 = 0 + 0.1 + 0.1 = 0.2
+        assert score.total == pytest.approx(0.2, abs=0.01)
+
+    def test_medium_confidence_with_partial_data(self):
+        # Given some sources with moderate relevance
+        # When building from factors
+        score = entities.ConfidenceScore.from_factors(
+            source_count=2,
+            max_expected_sources=5,
+            relevance=0.7,
+            recency=0.6,
+        )
+
+        # Then confidence is MEDIUM
+        assert score.label == entities.ConfidenceLabel.MEDIUM
+        # 0.3*0.4 + 0.5*0.7 + 0.2*0.6 = 0.12 + 0.35 + 0.12 = 0.59
+        assert score.total == pytest.approx(0.59, abs=0.01)
+
+    def test_components_are_individually_weighted(self):
+        # Given specific factor values
+        # When building from factors
+        score = entities.ConfidenceScore.from_factors(
+            source_count=3,
+            max_expected_sources=5,
+            relevance=0.8,
+            recency=0.5,
+        )
+
+        # Then each component has correct raw and weighted values
+        assert score.components.source_count_score.raw == pytest.approx(0.6, abs=0.01)
+        assert score.components.source_count_score.weighted == pytest.approx(0.18, abs=0.01)
+        assert score.components.relevance_score.raw == pytest.approx(0.8, abs=0.01)
+        assert score.components.relevance_score.weighted == pytest.approx(0.4, abs=0.01)
+        assert score.components.recency_score.raw == pytest.approx(0.5, abs=0.01)
+        assert score.components.recency_score.weighted == pytest.approx(0.1, abs=0.01)
+
+    def test_source_count_capped_at_max(self):
+        # Given more sources than max_expected
+        # When building from factors
+        score = entities.ConfidenceScore.from_factors(
+            source_count=10,
+            max_expected_sources=5,
+            relevance=0.5,
+            recency=0.5,
+        )
+
+        # Then source_count_score.raw is capped at 1.0
+        assert score.components.source_count_score.raw == pytest.approx(1.0)
+
+    def test_relevance_clamped_to_valid_range(self):
+        # Given out-of-range relevance
+        # When building from factors
+        score = entities.ConfidenceScore.from_factors(
+            source_count=1,
+            relevance=1.5,
+            recency=-0.3,
+        )
+
+        # Then values are clamped
+        assert score.components.relevance_score.raw == pytest.approx(1.0)
+        assert score.components.recency_score.raw == pytest.approx(0.0)

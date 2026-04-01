@@ -198,7 +198,12 @@ class DetermineConfidence(BaseNode[State, Dependencies, common.SupportReply]):
     notes: str = ""
 
     async def run(self, ctx: GraphRunContext[State, Dependencies]) -> End[common.SupportReply]:
-        confidence = confidence_entities.ConfidenceScore.from_total(self.raw_confidence)
+        confidence = confidence_entities.ConfidenceScore.from_factors(
+            source_count=len(self.sources_used),
+            max_expected_sources=5,
+            relevance=self.raw_confidence,
+            recency=0.7,
+        )
 
         sources = [{"title": s.title, "url": s.url} for s in self.sources_used]
 

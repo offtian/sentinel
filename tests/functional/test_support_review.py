@@ -28,8 +28,9 @@ class TestSupportReviewPipeline:
         assert reply.suggested_response != ""
         assert "SSO" in reply.suggested_response or "password" in reply.suggested_response.lower()
         assert reply.confidence is not None
-        assert reply.confidence.total == pytest.approx(0.82)
-        assert reply.confidence.label.value == "High"
+        # Multi-factor scoring: 0.3*(1/5) + 0.5*0.82 + 0.2*0.7 = 0.61
+        assert reply.confidence.total == pytest.approx(0.61, abs=0.01)
+        assert reply.confidence.label.value == "Medium"
 
     async def test_pipeline_populates_sources(self, sample_ticket):
         # Given documentation search returns results

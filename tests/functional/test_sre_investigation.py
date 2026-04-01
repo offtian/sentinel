@@ -57,7 +57,8 @@ class TestSreInvestigationPipeline:
         assert reply.remediation is not None
         assert "memory" in reply.remediation.lower()
         assert reply.confidence is not None
-        assert reply.confidence.total == pytest.approx(0.85)
+        # Multi-factor scoring: 0.3*(2/5) + 0.5*0.85 + 0.2*0.8 = 0.705
+        assert reply.confidence.total == pytest.approx(0.705, abs=0.01)
         assert reply.confidence.label.value == "High"
 
     async def test_pipeline_populates_findings_summary(self, mock_holmes, sample_alert):
@@ -201,4 +202,5 @@ class TestSrePipelineWithLowConfidence:
         # Then confidence is low
         assert reply.confidence is not None
         assert reply.confidence.label.value == "Low"
-        assert reply.confidence.total == pytest.approx(0.2)
+        # Multi-factor scoring: 0.3*(0/5) + 0.5*0.2 + 0.2*0.8 = 0.26
+        assert reply.confidence.total == pytest.approx(0.26, abs=0.01)

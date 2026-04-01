@@ -182,12 +182,20 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
 
 @dataclasses.dataclass
 class DetermineConfidence(BaseNode[State, Dependencies, common.InvestigationReply]):
-    """Calculate confidence score for the investigation."""
+    """Calculate confidence score using multi-factor analysis."""
 
     raw_confidence: float = 0.0
 
     async def run(self, ctx: GraphRunContext[State, Dependencies]) -> PublishFindings:
-        confidence = confidence_entities.ConfidenceScore.from_total(self.raw_confidence)
+        findings_count = (
+            len(ctx.state.investigation.findings) if ctx.state.investigation else 0
+        )
+        confidence = confidence_entities.ConfidenceScore.from_factors(
+            source_count=findings_count,
+            max_expected_sources=5,
+            relevance=self.raw_confidence,
+            recency=0.8,
+        )
 
         if ctx.state.investigation:
             ctx.state.investigation = ctx.state.investigation.model_copy(
