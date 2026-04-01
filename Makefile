@@ -40,7 +40,7 @@ test-integration:
 	uv run pytest tests/integration/ -x -vv
 
 test-evals:
-	uv run pytest tests/functional/ -x -vv
+	uv run pytest tests/functional/ tests/evals/ -x -vv
 
 smoke-test:
 	curl -s http://localhost:8000/health | python -m json.tool

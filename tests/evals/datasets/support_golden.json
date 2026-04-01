@@ -1,0 +1,107 @@
+[
+  {
+    "id": "support-001",
+    "description": "User unable to log in via SSO",
+    "ticket": {
+      "id": "10001",
+      "key": "SUPPORT-101",
+      "summary": "Cannot log in to dashboard — SSO error",
+      "description": "I've been unable to log in to the dashboard since this morning. I get redirected to our SSO provider but then receive an 'invalid_grant' error when it tries to complete the login. I've tried clearing cookies and using incognito mode. Other team members can log in fine.",
+      "reporter": "Jane Smith",
+      "priority": "High",
+      "created_at": "2026-03-15T09:00:00Z",
+      "labels": ["authentication", "sso"],
+      "raw_payload": {}
+    },
+    "expected": {
+      "category_keywords": ["authentication", "sso", "login"],
+      "response_keywords": ["SSO", "token", "session"],
+      "min_confidence": 0.4,
+      "should_cite_sources": true
+    }
+  },
+  {
+    "id": "support-002",
+    "description": "API rate limiting affecting integration",
+    "ticket": {
+      "id": "10002",
+      "key": "SUPPORT-102",
+      "summary": "Getting 429 Too Many Requests from REST API",
+      "description": "Our integration has been hitting 429 errors since yesterday. We haven't changed our request volume. The API documentation says our plan allows 1000 requests/minute but we're being throttled at around 200/minute. We need this resolved urgently as it's blocking our data sync.",
+      "reporter": "Bob Johnson",
+      "priority": "High",
+      "created_at": "2026-03-15T11:30:00Z",
+      "labels": ["api", "rate-limiting"],
+      "raw_payload": {}
+    },
+    "expected": {
+      "category_keywords": ["api", "rate", "limit"],
+      "response_keywords": ["rate", "limit", "429"],
+      "min_confidence": 0.3,
+      "should_cite_sources": true
+    }
+  },
+  {
+    "id": "support-003",
+    "description": "Data export timing out for large datasets",
+    "ticket": {
+      "id": "10003",
+      "key": "SUPPORT-103",
+      "summary": "CSV export fails with timeout for reports over 100k rows",
+      "description": "When I try to export our monthly transaction report (approximately 150,000 rows) as CSV, the export starts but then fails after about 5 minutes with a gateway timeout. Smaller exports work fine. We need this data for our quarterly audit.",
+      "reporter": "Alice Chen",
+      "priority": "Medium",
+      "created_at": "2026-03-15T14:00:00Z",
+      "labels": ["export", "performance"],
+      "raw_payload": {}
+    },
+    "expected": {
+      "category_keywords": ["export", "performance", "timeout"],
+      "response_keywords": ["export", "timeout", "batch"],
+      "min_confidence": 0.3,
+      "should_cite_sources": false
+    }
+  },
+  {
+    "id": "support-004",
+    "description": "Webhook delivery failures",
+    "ticket": {
+      "id": "10004",
+      "key": "SUPPORT-104",
+      "summary": "Webhooks not being delivered to our endpoint",
+      "description": "We configured webhooks for order.created and order.updated events but stopped receiving them 3 days ago. Our endpoint is https://api.ourapp.com/webhooks/orders and it's responding with 200 OK when we test it manually. The webhook logs in our dashboard show 'delivery_failed' status.",
+      "reporter": "David Park",
+      "priority": "High",
+      "created_at": "2026-03-15T10:15:00Z",
+      "labels": ["webhooks", "integration"],
+      "raw_payload": {}
+    },
+    "expected": {
+      "category_keywords": ["webhook", "integration", "delivery"],
+      "response_keywords": ["webhook", "endpoint", "delivery"],
+      "min_confidence": 0.3,
+      "should_cite_sources": false
+    }
+  },
+  {
+    "id": "support-005",
+    "description": "Permission denied accessing team resources",
+    "ticket": {
+      "id": "10005",
+      "key": "SUPPORT-105",
+      "summary": "403 Forbidden when accessing shared team dashboard",
+      "description": "I was recently added to the Analytics team but I'm getting 403 Forbidden when trying to access our shared dashboards. My team lead confirmed I should have access. My user ID is user-8472 and the dashboard ID is dash-analytics-main.",
+      "reporter": "Maria Garcia",
+      "priority": "Medium",
+      "created_at": "2026-03-15T13:45:00Z",
+      "labels": ["permissions", "access"],
+      "raw_payload": {}
+    },
+    "expected": {
+      "category_keywords": ["permission", "access", "authorization"],
+      "response_keywords": ["permission", "role", "access"],
+      "min_confidence": 0.3,
+      "should_cite_sources": false
+    }
+  }
+]

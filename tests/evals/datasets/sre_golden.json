@@ -1,0 +1,132 @@
+[
+  {
+    "id": "sre-001",
+    "description": "OOMKill causing 5xx errors in API service",
+    "alert": {
+      "id": "alert-oom-001",
+      "source": "pagerduty",
+      "title": "High 5xx Error Rate on api-service",
+      "description": "5xx error rate exceeded 10% threshold for api-service. Current rate: 35%. Started at 14:30 UTC.",
+      "severity": "high",
+      "service": "api-service",
+      "triggered_at": "2026-03-15T14:30:00Z",
+      "raw_payload": {}
+    },
+    "holmes_analysis": "Datadog logs show a 5x spike in 5xx errors starting at 14:32 UTC. Kubernetes pod api-service-7b8c was OOMKilled at 14:30 UTC. Memory usage ramped from 512Mi to 2Gi over 10 minutes.",
+    "holmes_tool_calls": [
+      {"tool": "datadog_query_logs", "result": "5xx errors: 250/min (baseline 50/min)"},
+      {"tool": "kubernetes_get_pods", "result": "api-service-7b8c OOMKilled 14:30 UTC"}
+    ],
+    "holmes_sources": ["datadog_logs", "kubernetes"],
+    "expected": {
+      "root_cause_keywords": ["OOMKill", "memory", "api-service"],
+      "remediation_keywords": ["memory", "limit"],
+      "min_confidence": 0.6,
+      "expected_label": "High"
+    }
+  },
+  {
+    "id": "sre-002",
+    "description": "Database connection pool exhaustion",
+    "alert": {
+      "id": "alert-db-001",
+      "source": "datadog",
+      "title": "PostgreSQL Connection Pool Exhausted",
+      "description": "Active connections reached max_connections (100). New connections are being refused. Affecting payment-service and order-service.",
+      "severity": "critical",
+      "service": "payment-service",
+      "triggered_at": "2026-03-15T09:15:00Z",
+      "raw_payload": {}
+    },
+    "holmes_analysis": "PostgreSQL active connections at 100/100. payment-service holds 45 connections (normally 15). order-service holds 30. A long-running query on payments table has been running for 47 minutes, blocking connection releases.",
+    "holmes_tool_calls": [
+      {"tool": "datadog_query_metrics", "result": "pg_stat_activity.count=100, max_connections=100"},
+      {"tool": "datadog_query_logs", "result": "Connection refused errors from payment-service at 09:12 UTC"}
+    ],
+    "holmes_sources": ["datadog_metrics", "datadog_logs"],
+    "expected": {
+      "root_cause_keywords": ["connection", "pool", "query"],
+      "remediation_keywords": ["connection", "query", "kill"],
+      "min_confidence": 0.5,
+      "expected_label": "Medium"
+    }
+  },
+  {
+    "id": "sre-003",
+    "description": "SSL certificate expiry causing service unavailability",
+    "alert": {
+      "id": "alert-ssl-001",
+      "source": "pagerduty",
+      "title": "SSL Certificate Expired for checkout.example.com",
+      "description": "SSL certificate for checkout.example.com expired 2 hours ago. Users receiving ERR_CERT_DATE_INVALID. Revenue impact detected.",
+      "severity": "critical",
+      "service": "checkout-service",
+      "triggered_at": "2026-03-15T06:00:00Z",
+      "raw_payload": {}
+    },
+    "holmes_analysis": "SSL certificate for checkout.example.com expired at 2026-03-15T04:00:00Z. cert-manager logs show renewal failure: ACME challenge failed due to DNS misconfiguration. Let's Encrypt rate limit hit 3 days ago.",
+    "holmes_tool_calls": [
+      {"tool": "kubernetes_get_pods", "result": "cert-manager-xyz CrashLoopBackOff"},
+      {"tool": "datadog_query_logs", "result": "ACME challenge failed: DNS TXT record not found"}
+    ],
+    "holmes_sources": ["kubernetes", "datadog_logs"],
+    "expected": {
+      "root_cause_keywords": ["SSL", "certificate", "expired"],
+      "remediation_keywords": ["certificate", "renew"],
+      "min_confidence": 0.5,
+      "expected_label": "Medium"
+    }
+  },
+  {
+    "id": "sre-004",
+    "description": "Deployment rollout failure with CrashLoopBackOff",
+    "alert": {
+      "id": "alert-deploy-001",
+      "source": "pagerduty",
+      "title": "Deployment Rollout Stuck — user-service",
+      "description": "Deployment user-service-v2.3.1 stuck at 1/3 replicas ready. New pods in CrashLoopBackOff. Old pods still serving traffic via rollout strategy.",
+      "severity": "high",
+      "service": "user-service",
+      "triggered_at": "2026-03-15T11:45:00Z",
+      "raw_payload": {}
+    },
+    "holmes_analysis": "New pods for user-service-v2.3.1 crash on startup with 'ModuleNotFoundError: No module named redis'. The Docker image was built without the redis dependency. Previous version user-service-v2.3.0 still serving traffic (3/3 ready).",
+    "holmes_tool_calls": [
+      {"tool": "kubernetes_get_pods", "result": "user-service-v2.3.1-abc CrashLoopBackOff, restartCount=5"},
+      {"tool": "datadog_query_logs", "result": "ModuleNotFoundError: No module named 'redis'"}
+    ],
+    "holmes_sources": ["kubernetes", "datadog_logs"],
+    "expected": {
+      "root_cause_keywords": ["CrashLoopBackOff", "module", "redis"],
+      "remediation_keywords": ["rollback", "dependency"],
+      "min_confidence": 0.5,
+      "expected_label": "Medium"
+    }
+  },
+  {
+    "id": "sre-005",
+    "description": "Kafka consumer lag causing delayed order processing",
+    "alert": {
+      "id": "alert-kafka-001",
+      "source": "datadog",
+      "title": "Kafka Consumer Lag Exceeds Threshold",
+      "description": "Consumer group order-processor lag on topic orders.created exceeded 50,000 messages. Current lag: 127,000. Processing delay estimated at 45 minutes.",
+      "severity": "high",
+      "service": "order-processor",
+      "triggered_at": "2026-03-15T16:20:00Z",
+      "raw_payload": {}
+    },
+    "holmes_analysis": "Consumer group order-processor has 3 consumers but topic has 12 partitions. Consumer throughput dropped from 5000/s to 800/s at 15:30 UTC. GC pauses averaging 2.5s on order-processor pods. Heap usage at 95%.",
+    "holmes_tool_calls": [
+      {"tool": "datadog_query_metrics", "result": "kafka.consumer_lag=127000, consumer.throughput=800/s"},
+      {"tool": "datadog_query_logs", "result": "GC pause 2.5s, heap usage 95%"}
+    ],
+    "holmes_sources": ["datadog_metrics", "datadog_logs"],
+    "expected": {
+      "root_cause_keywords": ["consumer", "lag", "GC"],
+      "remediation_keywords": ["heap", "consumer", "scale"],
+      "min_confidence": 0.5,
+      "expected_label": "Medium"
+    }
+  }
+]
