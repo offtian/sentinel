@@ -1,6 +1,10 @@
 """
-Tier 2 component evaluation framework for Sentinel agents.
+Sentinel evaluation framework using pydantic_evals.
 
 Evaluate individual agent quality against golden datasets using
-rule-based scoring (offline/CI) or LLM-as-judge (online/nightly).
+composable pattern-based evaluators.
 """
+
+from . import cases, evaluators, rendering, reporting, types
+from .runner import run as run
+from .types import RunType as RunType

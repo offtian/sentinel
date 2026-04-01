@@ -1,163 +1,223 @@
 """
-Tests for the AlertClassifierEvaluator.
+Tests for the alert classifier evaluators via the pydantic_evals pattern.
 """
 
 from __future__ import annotations
 
-import pytest
+from typing import Any
 
-from sentinel.evals.agents import alert_classifier
+from sentinel.evals import types
+from sentinel.evals.evaluators import structural
 
 
-class TestAlertClassifierEvaluator:
-    async def test_all_metrics_pass_on_correct_output(self) -> None:
-        # Given a case where output matches expected exactly
-        case = {
-            "id": "ac-test-001",
-            "output": {
-                "severity": "high",
-                "category": "resource_exhaustion",
-                "summary": "API service OOMKilled causing 5xx errors.",
-            },
-            "expected": {
-                "severity": "high",
-                "category": "resource_exhaustion",
-            },
-        }
-        evaluator = alert_classifier.AlertClassifierEvaluator()
+def _make_context(
+    *,
+    case_payload: dict[str, Any],
+) -> Any:
+    """
+    Build a minimal mock EvaluatorContext with the given case_payload.
+    """
+    from unittest import mock
 
-        # When evaluating the case
-        result = await evaluator.evaluate_case(case=case)
+    ctx = mock.MagicMock()
+    ctx.inputs = types.InputData(
+        agent_name="alert_classifier",
+        case_payload=case_payload,
+    )
+    ctx.output = ""
+    return ctx
 
-        # Then all metrics pass
-        assert result.passed is True
-        assert result.case_id == "ac-test-001"
-        assert len(result.metrics) == 3
-        assert all(m.passed for m in result.metrics)
 
-    async def test_severity_mismatch_fails(self) -> None:
+class TestAlertClassifierSeverityCheck:
+    async def test_passes_on_exact_match(self) -> None:
+        # Given a case where severity matches exactly
+        ctx = _make_context(
+            case_payload={
+                "id": "ac-test-001",
+                "output": {
+                    "severity": "high",
+                    "category": "resource_exhaustion",
+                    "summary": "Some summary.",
+                },
+                "expected": {"severity": "high", "category": "resource_exhaustion"},
+            }
+        )
+        evaluator = structural.StructuralCheck(
+            field_path="output.severity",
+            expected_field_path="expected.severity",
+            check_type="exact_match",
+            rubric="Severity matches",
+        )
+
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
+
+        # Then the assertion passes
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is True
+
+    async def test_fails_on_mismatch(self) -> None:
         # Given a case where severity does not match
-        case = {
-            "id": "ac-test-002",
-            "output": {
-                "severity": "low",
-                "category": "database",
-                "summary": "Some summary.",
-            },
-            "expected": {
-                "severity": "critical",
-                "category": "database",
-            },
-        }
-        evaluator = alert_classifier.AlertClassifierEvaluator()
+        ctx = _make_context(
+            case_payload={
+                "id": "ac-test-002",
+                "output": {"severity": "low", "category": "database", "summary": "Some summary."},
+                "expected": {"severity": "critical", "category": "database"},
+            }
+        )
+        evaluator = structural.StructuralCheck(
+            field_path="output.severity",
+            expected_field_path="expected.severity",
+            check_type="exact_match",
+            rubric="Severity matches",
+        )
 
-        # When evaluating the case
-        result = await evaluator.evaluate_case(case=case)
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
 
-        # Then severity metric fails and overall case fails
-        severity_metric = next(m for m in result.metrics if m.name == "severity_accuracy")
-        assert severity_metric.passed is False
-        assert severity_metric.value == 0.0
-        assert result.passed is False
-
-    async def test_category_mismatch_fails(self) -> None:
-        # Given a case where category does not match
-        case = {
-            "id": "ac-test-003",
-            "output": {
-                "severity": "high",
-                "category": "networking",
-                "summary": "Network issue detected.",
-            },
-            "expected": {
-                "severity": "high",
-                "category": "resource_exhaustion",
-            },
-        }
-        evaluator = alert_classifier.AlertClassifierEvaluator()
-
-        # When evaluating the case
-        result = await evaluator.evaluate_case(case=case)
-
-        # Then category metric fails
-        category_metric = next(m for m in result.metrics if m.name == "category_accuracy")
-        assert category_metric.passed is False
-        assert result.passed is False
-
-    async def test_empty_summary_fails(self) -> None:
-        # Given a case with empty summary
-        case = {
-            "id": "ac-test-004",
-            "output": {
-                "severity": "high",
-                "category": "database",
-                "summary": "",
-            },
-            "expected": {
-                "severity": "high",
-                "category": "database",
-            },
-        }
-        evaluator = alert_classifier.AlertClassifierEvaluator()
-
-        # When evaluating the case
-        result = await evaluator.evaluate_case(case=case)
-
-        # Then has_summary metric fails
-        summary_metric = next(m for m in result.metrics if m.name == "has_summary")
-        assert summary_metric.passed is False
-        assert summary_metric.value == 0.0
-        assert result.passed is False
+        # Then the assertion fails
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is False
 
     async def test_case_insensitive_matching(self) -> None:
-        # Given a case where severity and category differ only in casing
-        case = {
-            "id": "ac-test-005",
-            "output": {
-                "severity": "HIGH",
-                "category": "Resource_Exhaustion",
-                "summary": "Some summary text here.",
-            },
-            "expected": {
-                "severity": "high",
-                "category": "resource_exhaustion",
-            },
-        }
-        evaluator = alert_classifier.AlertClassifierEvaluator()
+        # Given a case where severity differs only in casing
+        ctx = _make_context(
+            case_payload={
+                "id": "ac-test-005",
+                "output": {
+                    "severity": "HIGH",
+                    "category": "Resource_Exhaustion",
+                    "summary": "Some text.",
+                },
+                "expected": {"severity": "high", "category": "resource_exhaustion"},
+            }
+        )
+        evaluator = structural.StructuralCheck(
+            field_path="output.severity",
+            expected_field_path="expected.severity",
+            check_type="exact_match",
+            rubric="Severity matches",
+        )
 
-        # When evaluating the case
-        result = await evaluator.evaluate_case(case=case)
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
 
-        # Then all metrics pass despite case differences
-        assert result.passed is True
+        # Then the assertion passes despite case differences
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is True
 
-    async def test_evaluator_name(self) -> None:
-        # Given an alert classifier evaluator
-        evaluator = alert_classifier.AlertClassifierEvaluator()
 
-        # Then the name is correct
-        assert evaluator.name == "alert_classifier"
+class TestAlertClassifierCategoryCheck:
+    async def test_passes_on_match(self) -> None:
+        # Given a case where category matches
+        ctx = _make_context(
+            case_payload={
+                "id": "ac-test-001",
+                "output": {"severity": "high", "category": "resource_exhaustion", "summary": "X"},
+                "expected": {"severity": "high", "category": "resource_exhaustion"},
+            }
+        )
+        evaluator = structural.StructuralCheck(
+            field_path="output.category",
+            expected_field_path="expected.category",
+            check_type="exact_match",
+            rubric="Category matches",
+        )
 
-    async def test_run_with_full_dataset(self) -> None:
-        # Given the evaluator and a small passing dataset
-        evaluator = alert_classifier.AlertClassifierEvaluator()
-        dataset = [
-            {
-                "id": "run-001",
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
+
+        # Then the assertion passes
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is True
+
+    async def test_fails_on_mismatch(self) -> None:
+        # Given a case where category does not match
+        ctx = _make_context(
+            case_payload={
+                "id": "ac-test-003",
+                "output": {"severity": "high", "category": "networking", "summary": "Net issue."},
+                "expected": {"severity": "high", "category": "resource_exhaustion"},
+            }
+        )
+        evaluator = structural.StructuralCheck(
+            field_path="output.category",
+            expected_field_path="expected.category",
+            check_type="exact_match",
+            rubric="Category matches",
+        )
+
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
+
+        # Then the assertion fails
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is False
+
+
+class TestAlertClassifierSummaryCheck:
+    async def test_passes_on_non_empty_summary(self) -> None:
+        # Given a case with a non-empty summary
+        ctx = _make_context(
+            case_payload={
+                "id": "ac-test-001",
                 "output": {"severity": "high", "category": "database", "summary": "DB issue."},
                 "expected": {"severity": "high", "category": "database"},
-            },
-            {
-                "id": "run-002",
-                "output": {"severity": "critical", "category": "networking", "summary": "Net down."},
-                "expected": {"severity": "critical", "category": "networking"},
-            },
-        ]
+            }
+        )
+        evaluator = structural.StructuralCheck(
+            field_path="output.summary",
+            check_type="non_empty",
+            rubric="Summary is non-empty",
+        )
 
-        # When running the evaluator
-        report = await evaluator.run(dataset=dataset)
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
 
-        # Then both cases pass
-        assert report.evaluator_name == "alert_classifier"
-        assert report.pass_rate == 1.0
-        assert len(report.results) == 2
+        # Then the assertion passes
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is True
+
+    async def test_fails_on_empty_summary(self) -> None:
+        # Given a case with an empty summary
+        ctx = _make_context(
+            case_payload={
+                "id": "ac-test-004",
+                "output": {"severity": "high", "category": "database", "summary": ""},
+                "expected": {"severity": "high", "category": "database"},
+            }
+        )
+        evaluator = structural.StructuralCheck(
+            field_path="output.summary",
+            check_type="non_empty",
+            rubric="Summary is non-empty",
+        )
+
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
+
+        # Then the assertion fails
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is False
+
+
+class TestAlertClassifierCaseLoading:
+    def test_loads_alert_classifier_dataset(self) -> None:
+        # Given the alert_classifier agent name
+        from sentinel.evals import cases
+
+        # When loading cases
+        dataset = cases.load_cases(agent_name="alert_classifier")
+
+        # Then cases are loaded from the JSON file
+        assert len(dataset.cases) == 5
+
+    def test_each_case_has_three_evaluators(self) -> None:
+        # Given the loaded alert_classifier dataset
+        from sentinel.evals import cases
+
+        dataset = cases.load_cases(agent_name="alert_classifier")
+
+        # Then each case has three evaluators (severity, category, summary)
+        for case in dataset.cases:
+            assert len(case.evaluators) == 3

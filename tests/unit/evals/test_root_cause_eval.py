@@ -1,15 +1,36 @@
 """
-Tests for the RootCauseAnalyserEvaluator.
+Tests for the root cause analyser evaluators via the pydantic_evals pattern.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
-from sentinel.evals.agents import root_cause_analyser
+from sentinel.evals import types
+from sentinel.evals.evaluators import keyword_coverage, structural
 
 
-def _make_passing_case(*, case_id: str = "rca-test-001") -> dict:
+def _make_context(
+    *,
+    case_payload: dict[str, Any],
+) -> Any:
+    """
+    Build a minimal mock EvaluatorContext with the given case_payload.
+    """
+    from unittest import mock
+
+    ctx = mock.MagicMock()
+    ctx.inputs = types.InputData(
+        agent_name="root_cause_analyser",
+        case_payload=case_payload,
+    )
+    ctx.output = ""
+    return ctx
+
+
+def _make_passing_payload(*, case_id: str = "rca-test-001") -> dict[str, Any]:
     return {
         "id": case_id,
         "output": {
@@ -27,23 +48,28 @@ def _make_passing_case(*, case_id: str = "rca-test-001") -> dict:
     }
 
 
-class TestRootCauseAnalyserEvaluator:
-    async def test_all_metrics_pass_on_good_output(self) -> None:
-        # Given a case where output matches all expected criteria
-        case = _make_passing_case()
-        evaluator = root_cause_analyser.RootCauseAnalyserEvaluator()
+class TestKeywordCoverageEvaluator:
+    async def test_passes_when_all_keywords_present(self) -> None:
+        # Given a case where all expected keywords are in the root cause text
+        payload = _make_passing_payload()
+        ctx = _make_context(case_payload=payload)
+        evaluator = keyword_coverage.KeywordCoverage(
+            field_path="output.root_cause",
+            keywords=("OOMKill", "memory"),
+            threshold=0.5,
+            rubric="Root cause covers keywords",
+        )
 
-        # When evaluating the case
-        result = await evaluator.evaluate_case(case=case)
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
 
-        # Then all metrics pass
-        assert result.passed is True
-        assert len(result.metrics) == 4
-        assert all(m.passed for m in result.metrics)
+        # Then the assertion passes
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is True
 
-    async def test_low_keyword_coverage_fails(self) -> None:
-        # Given a case with root_cause missing expected keywords
-        case = {
+    async def test_fails_when_no_keywords_match(self) -> None:
+        # Given a case where root_cause text misses all expected keywords
+        payload = {
             "id": "rca-test-002",
             "output": {
                 "root_cause": "The service experienced some issues.",
@@ -58,61 +84,24 @@ class TestRootCauseAnalyserEvaluator:
                 "min_confidence": 0.5,
             },
         }
-        evaluator = root_cause_analyser.RootCauseAnalyserEvaluator()
+        ctx = _make_context(case_payload=payload)
+        evaluator = keyword_coverage.KeywordCoverage(
+            field_path="output.root_cause",
+            keywords=("OOMKill", "memory", "api-service", "pod"),
+            threshold=0.5,
+            rubric="Root cause covers keywords",
+        )
 
-        # When evaluating the case
-        result = await evaluator.evaluate_case(case=case)
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
 
-        # Then keyword_coverage metric fails
-        kw_metric = next(m for m in result.metrics if m.name == "keyword_coverage")
-        assert kw_metric.passed is False
-        assert kw_metric.value == 0.0
+        # Then the assertion fails
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is False
 
-    async def test_empty_remediation_fails(self) -> None:
-        # Given a case with empty remediation steps
-        case = _make_passing_case()
-        case = {**case, "output": {**case["output"], "remediation_steps": []}}
-        evaluator = root_cause_analyser.RootCauseAnalyserEvaluator()
-
-        # When evaluating the case
-        result = await evaluator.evaluate_case(case=case)
-
-        # Then has_remediation metric fails
-        rem_metric = next(m for m in result.metrics if m.name == "has_remediation")
-        assert rem_metric.passed is False
-        assert result.passed is False
-
-    async def test_empty_evidence_fails(self) -> None:
-        # Given a case with no evidence
-        case = _make_passing_case()
-        case = {**case, "output": {**case["output"], "evidence": []}}
-        evaluator = root_cause_analyser.RootCauseAnalyserEvaluator()
-
-        # When evaluating the case
-        result = await evaluator.evaluate_case(case=case)
-
-        # Then has_evidence metric fails
-        ev_metric = next(m for m in result.metrics if m.name == "has_evidence")
-        assert ev_metric.passed is False
-        assert result.passed is False
-
-    async def test_confidence_below_minimum_fails(self) -> None:
-        # Given a case with confidence below the expected minimum
-        case = _make_passing_case()
-        case = {**case, "output": {**case["output"], "confidence": 0.3}}
-        evaluator = root_cause_analyser.RootCauseAnalyserEvaluator()
-
-        # When evaluating the case
-        result = await evaluator.evaluate_case(case=case)
-
-        # Then confidence_above_minimum metric fails
-        conf_metric = next(m for m in result.metrics if m.name == "confidence_above_minimum")
-        assert conf_metric.passed is False
-        assert result.passed is False
-
-    async def test_keyword_coverage_is_partial(self) -> None:
-        # Given a case where only some keywords match
-        case = {
+    async def test_partial_coverage_below_threshold(self) -> None:
+        # Given a case where only 1 of 4 keywords matches
+        payload = {
             "id": "rca-test-006",
             "output": {
                 "root_cause": "Memory exhaustion caused the failure.",
@@ -127,34 +116,180 @@ class TestRootCauseAnalyserEvaluator:
                 "min_confidence": 0.5,
             },
         }
-        evaluator = root_cause_analyser.RootCauseAnalyserEvaluator()
+        ctx = _make_context(case_payload=payload)
+        evaluator = keyword_coverage.KeywordCoverage(
+            field_path="output.root_cause",
+            keywords=("memory", "OOMKill", "pod", "api-service"),
+            threshold=0.5,
+            rubric="Root cause covers keywords",
+        )
 
-        # When evaluating the case
-        result = await evaluator.evaluate_case(case=case)
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
 
-        # Then keyword coverage is 0.25 (1 of 4) which is below 0.5 threshold
-        kw_metric = next(m for m in result.metrics if m.name == "keyword_coverage")
-        assert kw_metric.value == pytest.approx(0.25)
-        assert kw_metric.passed is False
+        # Then the assertion fails (0.25 < 0.5)
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is False
+        assert "0.25" in result[assertion_key].reason
 
-    async def test_evaluator_name(self) -> None:
-        # Given a root cause analyser evaluator
-        evaluator = root_cause_analyser.RootCauseAnalyserEvaluator()
+    async def test_passes_with_empty_keywords(self) -> None:
+        # Given a case with no expected keywords
+        payload = _make_passing_payload()
+        ctx = _make_context(case_payload=payload)
+        evaluator = keyword_coverage.KeywordCoverage(
+            field_path="output.root_cause",
+            keywords=(),
+            threshold=0.5,
+            rubric="Root cause covers keywords",
+        )
 
-        # Then the name is correct
-        assert evaluator.name == "root_cause_analyser"
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
 
-    async def test_run_produces_report(self) -> None:
-        # Given the evaluator and a dataset of two passing cases
-        evaluator = root_cause_analyser.RootCauseAnalyserEvaluator()
-        dataset = [
-            _make_passing_case(case_id="run-001"),
-            _make_passing_case(case_id="run-002"),
-        ]
+        # Then the assertion passes (vacuous truth)
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is True
 
-        # When running the evaluator
-        report = await evaluator.run(dataset=dataset)
 
-        # Then both cases pass
-        assert report.pass_rate == 1.0
-        assert len(report.results) == 2
+class TestRemediationCheck:
+    async def test_passes_when_steps_exist(self) -> None:
+        # Given a case with non-empty remediation steps
+        payload = _make_passing_payload()
+        ctx = _make_context(case_payload=payload)
+        evaluator = structural.StructuralCheck(
+            field_path="output.remediation_steps",
+            check_type="has_items",
+            rubric="Remediation steps are non-empty",
+        )
+
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
+
+        # Then the assertion passes
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is True
+
+    async def test_fails_when_steps_empty(self) -> None:
+        # Given a case with empty remediation steps
+        payload = _make_passing_payload()
+        payload = {**payload, "output": {**payload["output"], "remediation_steps": []}}
+        ctx = _make_context(case_payload=payload)
+        evaluator = structural.StructuralCheck(
+            field_path="output.remediation_steps",
+            check_type="has_items",
+            rubric="Remediation steps are non-empty",
+        )
+
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
+
+        # Then the assertion fails
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is False
+
+
+class TestEvidenceCheck:
+    async def test_passes_when_evidence_exists(self) -> None:
+        # Given a case with evidence items
+        payload = _make_passing_payload()
+        ctx = _make_context(case_payload=payload)
+        evaluator = structural.StructuralCheck(
+            field_path="output.evidence",
+            check_type="has_items",
+            rubric="Evidence is non-empty",
+        )
+
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
+
+        # Then the assertion passes
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is True
+
+    async def test_fails_when_evidence_empty(self) -> None:
+        # Given a case with no evidence
+        payload = _make_passing_payload()
+        payload = {**payload, "output": {**payload["output"], "evidence": []}}
+        ctx = _make_context(case_payload=payload)
+        evaluator = structural.StructuralCheck(
+            field_path="output.evidence",
+            check_type="has_items",
+            rubric="Evidence is non-empty",
+        )
+
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
+
+        # Then the assertion fails
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is False
+
+
+class TestConfidenceCheck:
+    async def test_passes_when_confidence_above_minimum(self) -> None:
+        # Given a case where confidence exceeds minimum
+        payload = _make_passing_payload()
+        ctx = _make_context(case_payload=payload)
+        evaluator = structural.StructuralCheck(
+            field_path="output.confidence",
+            expected_field_path="expected.min_confidence",
+            check_type="gte",
+            rubric="Confidence above minimum",
+        )
+
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
+
+        # Then the assertion passes
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is True
+
+    async def test_fails_when_confidence_below_minimum(self) -> None:
+        # Given a case where confidence is below minimum
+        payload = _make_passing_payload()
+        payload = {**payload, "output": {**payload["output"], "confidence": 0.3}}
+        ctx = _make_context(case_payload=payload)
+        evaluator = structural.StructuralCheck(
+            field_path="output.confidence",
+            expected_field_path="expected.min_confidence",
+            check_type="gte",
+            rubric="Confidence above minimum",
+        )
+
+        # When evaluating
+        result = await evaluator.evaluate(ctx)
+
+        # Then the assertion fails
+        assertion_key = next(k for k in result if k.endswith("_pass"))
+        assert result[assertion_key].value is False
+
+
+class TestRootCauseCaseLoading:
+    def test_loads_root_cause_dataset(self) -> None:
+        # Given the root_cause_analyser agent name
+        from sentinel.evals import cases
+
+        # When loading cases
+        dataset = cases.load_cases(agent_name="root_cause_analyser")
+
+        # Then cases are loaded from the JSON file
+        assert len(dataset.cases) == 5
+
+    def test_each_case_has_four_evaluators(self) -> None:
+        # Given the loaded root_cause_analyser dataset
+        from sentinel.evals import cases
+
+        dataset = cases.load_cases(agent_name="root_cause_analyser")
+
+        # Then each case has four evaluators (keyword, remediation, evidence, confidence)
+        for case in dataset.cases:
+            assert len(case.evaluators) == 4
+
+    def test_raises_for_unknown_agent(self) -> None:
+        # Given an unknown agent name
+        from sentinel.evals import cases
+
+        # When loading cases
+        # Then a ValueError is raised
+        with pytest.raises(ValueError, match="Unknown agent name"):
+            cases.load_cases(agent_name="nonexistent")
