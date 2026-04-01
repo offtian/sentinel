@@ -3,6 +3,7 @@ from __future__ import annotations
 from sentinel.domain.supervisor import entities
 from sentinel.interfaces.graphs import common
 
+
 # Phrases that indicate a generic/fallback response rather than real analysis.
 _GENERIC_ROOT_CAUSE_PHRASES: tuple[str, ...] = (
     "manual investigation required",
@@ -37,23 +38,14 @@ def evaluate_sre_quality(*, reply: common.InvestigationReply) -> entities.Qualit
     """
     issues: list[str] = []
 
-    # Check root_cause presence and quality.
-    if reply.root_cause is None:
-        issues.append("root_cause is None")
-    elif reply.root_cause.strip() == "":
-        issues.append("root_cause is empty")
-    elif _contains_generic_phrase(reply.root_cause, _GENERIC_ROOT_CAUSE_PHRASES):
-        issues.append("root_cause contains generic/fallback text")
-
-    # Check remediation presence and quality.
-    if reply.remediation is None:
-        issues.append("remediation is None")
-    elif reply.remediation.strip() == "":
-        issues.append("remediation is empty")
-    elif _contains_generic_phrase(reply.remediation, _GENERIC_REMEDIATION_PHRASES):
-        issues.append("remediation contains generic/fallback text")
-    elif not _has_actionable_steps(reply.remediation):
-        issues.append("remediation lacks actionable steps")
+    issues.extend(
+        _check_text_field(
+            value=reply.root_cause,
+            field_name="root_cause",
+            generic_phrases=_GENERIC_ROOT_CAUSE_PHRASES,
+        )
+    )
+    issues.extend(_check_remediation(reply.remediation))
 
     # Check confidence is present.
     if reply.confidence is None:
@@ -115,6 +107,46 @@ def evaluate_support_quality(*, reply: common.SupportReply) -> entities.QualityV
     )
 
 
+def _check_text_field(
+    *,
+    value: str | None,
+    field_name: str,
+    generic_phrases: tuple[str, ...],
+) -> list[str]:
+    """
+    Validate a text field for presence, emptiness, and generic content.
+
+    Return a list of issue descriptions (empty if the field passes).
+    """
+    if value is None:
+        return [f"{field_name} is None"]
+    if value.strip() == "":
+        return [f"{field_name} is empty"]
+    if _contains_generic_phrase(value, generic_phrases):
+        return [f"{field_name} contains generic/fallback text"]
+    return []
+
+
+def _check_remediation(value: str | None) -> list[str]:
+    """
+    Validate a remediation field for presence, quality, and actionability.
+
+    Return a list of issue descriptions (empty if the field passes).
+    """
+    base_issues = _check_text_field(
+        value=value,
+        field_name="remediation",
+        generic_phrases=_GENERIC_REMEDIATION_PHRASES,
+    )
+    if base_issues:
+        return base_issues
+    # value is guaranteed non-None and non-empty at this point.
+    assert value is not None
+    if not _has_actionable_steps(value):
+        return ["remediation lacks actionable steps"]
+    return []
+
+
 def _contains_generic_phrase(text: str, phrases: tuple[str, ...]) -> bool:
     """Return True if the text contains any of the generic/fallback phrases."""
     lowered = text.lower()
@@ -133,11 +165,7 @@ def _has_actionable_steps(remediation: str) -> bool:
         return False
 
     actionable_markers = ("1.", "2.", "-", "*", "- [")
-    return any(
-        line.strip().startswith(marker)
-        for line in lines
-        for marker in actionable_markers
-    )
+    return any(line.strip().startswith(marker) for line in lines for marker in actionable_markers)
 
 
 def _compute_sre_score(

@@ -103,8 +103,8 @@ async def supervise_sre_investigation(
         retry_count += 1
 
     # All retries exhausted -- decide between ESCALATE and REJECT.
-    assert best_reply is not None  # noqa: S101
-    assert best_verdict is not None  # noqa: S101
+    assert best_reply is not None
+    assert best_verdict is not None
 
     decision = _decide_on_failure(verdict=best_verdict)
 
@@ -209,8 +209,8 @@ async def supervise_support_review(
 
         retry_count += 1
 
-    assert best_reply is not None  # noqa: S101
-    assert best_verdict is not None  # noqa: S101
+    assert best_reply is not None
+    assert best_verdict is not None
 
     decision = _decide_on_failure(verdict=best_verdict)
 

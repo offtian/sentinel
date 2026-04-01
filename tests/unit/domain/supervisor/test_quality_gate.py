@@ -4,7 +4,7 @@ import attrs
 import pytest
 
 from sentinel.domain.confidence import entities as confidence_entities
-from sentinel.domain.supervisor import entities, quality_gate
+from sentinel.domain.supervisor import quality_gate
 from sentinel.interfaces.graphs import common
 
 

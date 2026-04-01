@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import enum
-from typing import Generic, TypeVar
 
 import attrs
 
@@ -38,11 +37,8 @@ class QualityVerdict:
     score: float  # 0.0 (worst) to 1.0 (best)
 
 
-ReplyT = TypeVar("ReplyT")
-
-
 @attrs.frozen
-class SupervisedResult(Generic[ReplyT]):
+class SupervisedResult[ReplyT]:
     """
     Wrap a pipeline reply with supervisor metadata.
 
