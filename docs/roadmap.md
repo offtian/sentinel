@@ -162,7 +162,7 @@
 ### Must Implement
 
 1. **Document Search Implementations**
-   - `NotionSearcher` implementing `BaseDocumentSearcher` — query via Bedrock KB or S3 (reuse alfredo's pattern)
+   - `NotionSearcher` implementing `BaseDocumentSearcher` — query via Bedrock KB or S3
    - `ConfluenceSearcher` implementing `BaseDocumentSearcher` — query via the Confluence vendor adapter
    - `S3DocumentSearcher` implementing `BaseDocumentSearcher` — direct S3 retrieval
    - `JiraPastTicketSearcher` implementing `BasePastTicketSearcher` — JQL for resolved tickets via the Jira vendor adapter

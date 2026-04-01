@@ -149,7 +149,7 @@ Acceptance criteria:
 - [x] Configurable confidence threshold (`require_approval_below_confidence`, default 0.7)
 - [x] Immutable `ApprovalRequest` domain entity with approve/reject/auto-approve transitions
 - [x] Append-only audit log with SHA-256 input hashes for regulatory traceability
-- [ ] Supervisor graph wrapping both pipelines with rule-based quality gate before publishing
+- [x] Supervisor graph wrapping both pipelines with rule-based quality gate before publishing
 - [ ] Tier 2 component evaluations: per-agent quality scoring with golden datasets
 
 ---
@@ -164,18 +164,58 @@ The following items were originally listed as out of scope but have since been d
 |------|------------|--------------|
 | Scheduled maintenance agents | `SCHEDULED_AUTOMATION` job type, automation registry, `--run-once` worker mode, `POST /api/automations/trigger` API, Helm CronJob template | Phase C |
 
-### Resolved — Open Questions
+### Toby's Questions
 
-| Question | Resolution |
-|----------|------------|
-| Where should scheduled agentic jobs live? | Sentinel worker with `--run-once` mode, triggered by K8s CronJobs. No additional runtime needed. |
-| How do we build a feedback loop so investigations keep getting better? | Multi-factor confidence scoring + feedback stats API + evaluation framework with golden datasets |
+These were raised during the initial project kickoff after KubeCon. Each has been investigated and resolved (or deferred with reasoning).
 
-### Open Questions
+#### Q1: Where should scheduled agentic jobs live? Custom CronJob with Python + Agents SDK, or an OSS framework like kagent?
 
-| Question | Status |
-|----------|--------|
-| Should we adopt AgentGateway for standardised agent-to-tool communication? | Deferred to Phase D framework evaluation |
+**Answer: Sentinel's own worker with `--run-once` mode, triggered by Kubernetes CronJobs.**
+
+We chose the simplest architecture that avoids introducing a new runtime. The worker already exists for async pipeline execution — adding `--run-once` mode (`worker.py:237-275`) lets a CronJob spin up a worker pod that claims exactly one job, runs it, and exits. This is the same pattern used by Sidekiq and Celery beat in the Rails/Django ecosystem: the scheduler (K8s CronJob) is decoupled from the executor (Sentinel worker).
+
+Why not kagent or Temporal:
+- **kagent** is a Kubernetes operator that manages agent CRDs. It's well-suited when you need K8s-native lifecycle management (auto-scaling agents, health probes per agent). But Sentinel's automations are short-lived batch jobs (health checks, repo scans), not long-running agents — a CronJob is the idiomatic K8s primitive for this.
+- **Temporal** adds a separate cluster dependency (Temporal server + database). For "run this Python function on a schedule", that's unnecessary infrastructure. The PostgreSQL job queue (`application/jobs/`) already handles retries, timeouts, and stale job recovery.
+- **Argo Workflows** was considered but rejected — it orchestrates DAGs of containers, whereas our automations are single-step Python functions. Overkill.
+
+The escape hatch: the automation registry pattern (`application/automations/runner.py`) uses a `register_automation()` decorator, so if a future automation needs multi-step orchestration, it can internally call Temporal or spawn sub-jobs without changing the scheduling layer.
+
+**Implementation:** `worker.py` `--run-once` flag, `application/automations/runner.py` registry, `POST /api/automations/trigger` endpoint, Helm CronJob template in `helm/sentinel/values.yaml`.
+
+#### Q2: How do we build a feedback loop so investigations "keep getting better over time"?
+
+**Answer: Three-layer feedback loop — human feedback API, multi-factor confidence scoring, and golden-case evaluation framework.**
+
+This mirrors the standard RLHF-lite pattern used in production agent systems (e.g., Notion AI, Intercom's Fin, Klarna's support agent):
+
+1. **Human feedback collection** — Support engineers accept, reject, or modify AI-drafted responses via `POST /api/support/reviews/{id}/feedback`. Each decision is timestamped and stored with the original suggestion. The `GET /api/support/stats` endpoint aggregates acceptance rates, giving a live accuracy signal without requiring labelled datasets. This is the same pattern Intercom uses with their "Fin" AI agent — every resolved conversation becomes a training signal.
+
+2. **Multi-factor confidence scoring** — `ConfidenceScore.from_factors()` (`domain/confidence/entities.py:49-99`) independently scores three dimensions: source evidence count (30% weight), relevance quality (50%), and data recency (20%). This decomposition means you can track *why* confidence is low (no sources? stale data? poor relevance?) rather than just a single opaque number. The label thresholds (HIGH >= 0.7, MEDIUM >= 0.4) directly gate the approval workflow — investigations below the threshold require human sign-off before publishing.
+
+3. **Evaluation framework** — Golden test datasets (`tests/evals/datasets/`) with known-good alert→investigation pairs. Each case specifies expected keywords, minimum confidence thresholds, and expected labels. Running `make test-evals` validates that prompt changes or model swaps don't regress quality. This is the "eval-driven development" pattern advocated by Anthropic and OpenAI for production agent systems — you write the eval before changing the prompt, same as TDD for code.
+
+The feedback data feeds back into the eval loop: when a human rejects an investigation, the case can be added to the golden dataset as a regression test. Over time, the golden dataset grows to reflect real failure modes seen in production.
+
+**Implementation:** `POST /api/support/reviews/{id}/feedback`, `GET /api/support/stats` (`interfaces/api/routers/support/router.py`), `ConfidenceScore.from_factors()` (`domain/confidence/entities.py`), `tests/evals/` framework.
+
+#### Q3: Should we adopt AgentGateway for standardised agent-to-tool communication?
+
+**Answer: Deferred. Adopt MCP (Model Context Protocol) via FastMCP first; evaluate AgentGateway when we have multiple agent runtimes.**
+
+AgentGateway is a proxy that sits between agents and tools, providing centralised routing, auth, and observability. It solves a real problem — but only when you have **multiple agent runtimes** calling the same tools (e.g., a PydanticAI agent and a LangGraph agent both needing Datadog access). Sentinel currently has one runtime (PydanticAI + Pydantic Graph), so AgentGateway would be an extra network hop with no practical benefit.
+
+The better near-term investment is **MCP (Model Context Protocol)**. MCP standardises how agents discover and call tools without requiring a centralised gateway. PydanticAI has native MCP client support, and FastMCP provides a lightweight server implementation. This gives us:
+- Tool discoverability (agents learn what tools are available at runtime)
+- Schema-driven tool calling (no custom adapter code per tool)
+- Portability (MCP tools work across agent frameworks)
+
+AgentGateway becomes relevant when:
+- We add a second agent runtime (kagent for K8s, Claude Agent SDK for coding tasks)
+- We need centralised tool auth (one API key per tool, not per agent)
+- We need cross-agent observability (which agent called which tool, when)
+
+**Status:** MCP integration is planned for Phase C. AgentGateway evaluation is Phase D, contingent on whether we add a second agent runtime.
 
 ### Remaining Gaps
 
@@ -185,7 +225,7 @@ The following items were originally listed as out of scope but have since been d
 | Review < 3min benchmark | Production deployment (separate repo) | Post-deploy |
 | Datadog APM distributed tracing | ddtrace dependency + Datadog agent in cluster | Phase B |
 | MCP tool integration | FastMCP design + first MCP server to integrate with | Phase C |
-| Supervisor graph + quality gate | In progress | Current sprint |
+| Supervisor graph + quality gate | Done — `domain/supervisor/quality_gate.py`, `application/supervisor/orchestrator.py` | Current sprint |
 | Tier 2 component evals | In progress | Current sprint |
 
 ---
