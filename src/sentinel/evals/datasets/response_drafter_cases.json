@@ -1,0 +1,136 @@
+[
+  {
+    "id": "rd-001",
+    "description": "SSO login failure response",
+    "input": {
+      "ticket_summary": "Cannot log in to dashboard — SSO error",
+      "ticket_description": "I've been unable to log in to the dashboard since this morning. I get redirected to our SSO provider but then receive an 'invalid_grant' error.",
+      "ticket_category": "authentication",
+      "key_questions": ["What SSO provider?", "When did it start?", "Other users affected?"],
+      "document_search_results": [
+        {"title": "SSO Troubleshooting Guide", "url": "https://docs.example.com/sso-troubleshooting", "excerpt": "The invalid_grant error occurs when the authorization code has expired or been reused. Clear browser cookies and retry."}
+      ],
+      "ticket_search_results": [
+        {"key": "SUPPORT-050", "url": "https://jira.example.com/SUPPORT-050", "summary": "SSO invalid_grant error after IdP migration", "resolution": "Cleared stale sessions on IdP side, user re-authenticated successfully."}
+      ]
+    },
+    "output": {
+      "response": "Based on our documentation and similar past tickets, the 'invalid_grant' SSO error typically occurs when the authorization code has expired or been reused. Please try the following steps:\n\n1. Clear all browser cookies for our domain and your SSO provider\n2. Try logging in using an incognito/private browser window\n3. If the issue persists, your SSO administrator may need to clear stale sessions on the Identity Provider side\n\nA similar issue (SUPPORT-050) was resolved by clearing stale sessions on the IdP side after a migration.",
+      "sources_used": [
+        {"title": "SSO Troubleshooting Guide", "url": "https://docs.example.com/sso-troubleshooting"},
+        {"title": "SUPPORT-050", "url": "https://jira.example.com/SUPPORT-050"}
+      ],
+      "confidence": 0.8,
+      "notes_for_agent": "Check if customer's IdP had recent changes"
+    },
+    "expected": {
+      "response_keywords": ["SSO", "invalid_grant", "cookies", "session"]
+    }
+  },
+  {
+    "id": "rd-002",
+    "description": "API rate limiting response",
+    "input": {
+      "ticket_summary": "Getting 429 Too Many Requests from REST API",
+      "ticket_description": "Our integration has been hitting 429 errors since yesterday. We haven't changed our request volume.",
+      "ticket_category": "api",
+      "key_questions": ["What endpoint?", "Current request volume?", "API plan tier?"],
+      "document_search_results": [
+        {"title": "API Rate Limiting Documentation", "url": "https://docs.example.com/api/rate-limits", "excerpt": "Rate limits are applied per API key. Standard plan: 1000 req/min. Enterprise: 5000 req/min. Limits reset every 60 seconds."}
+      ],
+      "ticket_search_results": []
+    },
+    "output": {
+      "response": "I understand you're experiencing 429 Too Many Requests errors. Our API rate limits are applied per API key, with Standard plan allowing 1000 requests/minute.\n\nTo investigate further, could you please provide:\n1. Which specific API endpoint(s) are being throttled\n2. Your API key identifier (not the secret)\n3. Your current request volume pattern\n\nIn the meantime, I recommend implementing exponential backoff in your integration to handle rate limit responses gracefully.",
+      "sources_used": [
+        {"title": "API Rate Limiting Documentation", "url": "https://docs.example.com/api/rate-limits"}
+      ],
+      "confidence": 0.6,
+      "notes_for_agent": "May need to check if rate limit configuration was recently changed"
+    },
+    "expected": {
+      "response_keywords": ["rate", "limit", "429", "API"]
+    }
+  },
+  {
+    "id": "rd-003",
+    "description": "CSV export timeout response",
+    "input": {
+      "ticket_summary": "CSV export fails with timeout for reports over 100k rows",
+      "ticket_description": "When I try to export our monthly transaction report (approximately 150,000 rows) as CSV, the export fails after about 5 minutes with a gateway timeout.",
+      "ticket_category": "performance",
+      "key_questions": ["Report size?", "When did it last work?", "Specific report?"],
+      "document_search_results": [
+        {"title": "Export Limitations", "url": "https://docs.example.com/exports/limitations", "excerpt": "CSV exports are limited to 100,000 rows in a single export. For larger datasets, use the async export API or apply date range filters to reduce the result set."}
+      ],
+      "ticket_search_results": [
+        {"key": "SUPPORT-089", "url": "https://jira.example.com/SUPPORT-089", "summary": "Large CSV export timing out", "resolution": "Advised customer to use async export API endpoint for datasets over 100k rows."}
+      ]
+    },
+    "output": {
+      "response": "The CSV export timeout you're experiencing is expected for datasets over 100,000 rows, as our synchronous export has a row limit. For your 150,000-row report, we recommend:\n\n1. Use the async export API endpoint which handles large datasets without timeout constraints\n2. Alternatively, split the export by applying date range filters (e.g., export two half-month reports)\n\nOur documentation on export limitations covers the async export API in detail.",
+      "sources_used": [
+        {"title": "Export Limitations", "url": "https://docs.example.com/exports/limitations"},
+        {"title": "SUPPORT-089", "url": "https://jira.example.com/SUPPORT-089"}
+      ],
+      "confidence": 0.85,
+      "notes_for_agent": "Customer needs this for quarterly audit — time-sensitive"
+    },
+    "expected": {
+      "response_keywords": ["export", "timeout", "async", "rows"]
+    }
+  },
+  {
+    "id": "rd-004",
+    "description": "Webhook delivery failure response",
+    "input": {
+      "ticket_summary": "Webhooks not being delivered to our endpoint",
+      "ticket_description": "We configured webhooks for order.created and order.updated events but stopped receiving them 3 days ago. Our endpoint responds with 200 OK when tested manually.",
+      "ticket_category": "integration",
+      "key_questions": ["Endpoint URL?", "Webhook signature verification?", "Recent endpoint changes?"],
+      "document_search_results": [
+        {"title": "Webhook Delivery Guide", "url": "https://docs.example.com/webhooks/delivery", "excerpt": "Webhooks are automatically disabled after 5 consecutive delivery failures. Check the webhook logs in your dashboard for delivery status. Re-enable via Settings > Webhooks."}
+      ],
+      "ticket_search_results": []
+    },
+    "output": {
+      "response": "Based on our webhook delivery documentation, webhooks are automatically disabled after 5 consecutive delivery failures. Since your webhooks stopped working 3 days ago, they may have been automatically disabled.\n\nPlease check the following:\n1. Go to Settings > Webhooks and verify the webhook endpoint is still enabled\n2. Check the webhook delivery logs in your dashboard for any failed delivery attempts\n3. If the endpoint was disabled, re-enable it from the same settings page\n\nIf the endpoint shows as active, please share the webhook ID so we can investigate the delivery logs on our side.",
+      "sources_used": [
+        {"title": "Webhook Delivery Guide", "url": "https://docs.example.com/webhooks/delivery"}
+      ],
+      "confidence": 0.7,
+      "notes_for_agent": "Check if there were platform-side webhook delivery issues 3 days ago"
+    },
+    "expected": {
+      "response_keywords": ["webhook", "delivery", "disabled", "endpoint"]
+    }
+  },
+  {
+    "id": "rd-005",
+    "description": "Permission denied response",
+    "input": {
+      "ticket_summary": "403 Forbidden when accessing shared team dashboard",
+      "ticket_description": "I was recently added to the Analytics team but I'm getting 403 Forbidden when trying to access our shared dashboards. My user ID is user-8472.",
+      "ticket_category": "permissions",
+      "key_questions": ["Team role?", "Dashboard ID?", "When were they added?"],
+      "document_search_results": [
+        {"title": "Team Permissions Guide", "url": "https://docs.example.com/teams/permissions", "excerpt": "Team members must be assigned a role (viewer, editor, admin) to access team resources. New members default to no role until explicitly assigned by a team admin."}
+      ],
+      "ticket_search_results": [
+        {"key": "SUPPORT-095", "url": "https://jira.example.com/SUPPORT-095", "summary": "New team member cannot access shared resources", "resolution": "Team admin needed to assign viewer role explicitly. Adding to team alone does not grant resource access."}
+      ]
+    },
+    "output": {
+      "response": "The 403 Forbidden error is likely because your team membership doesn't yet include a role assignment for the shared dashboards. Being added to the Analytics team does not automatically grant access to team resources — a team admin must explicitly assign you a role (viewer, editor, or admin).\n\nTo resolve this:\n1. Ask your team lead or Analytics team admin to assign you the appropriate role via the team settings page\n2. After the role is assigned, log out and log back in to refresh your permissions\n\nA similar issue was resolved in SUPPORT-095 by having the team admin assign the viewer role explicitly.",
+      "sources_used": [
+        {"title": "Team Permissions Guide", "url": "https://docs.example.com/teams/permissions"},
+        {"title": "SUPPORT-095", "url": "https://jira.example.com/SUPPORT-095"}
+      ],
+      "confidence": 0.75,
+      "notes_for_agent": "Verify user-8472 team membership and role assignment"
+    },
+    "expected": {
+      "response_keywords": ["permission", "role", "access", "team"]
+    }
+  }
+]

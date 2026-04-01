@@ -1,0 +1,102 @@
+[
+  {
+    "id": "ac-001",
+    "description": "OOMKill causing 5xx errors",
+    "input": {
+      "alert_title": "High 5xx Error Rate on api-service",
+      "alert_description": "5xx error rate exceeded 10% threshold for api-service. Current rate: 35%. Started at 14:30 UTC.",
+      "alert_source": "pagerduty"
+    },
+    "output": {
+      "severity": "high",
+      "affected_service": "api-service",
+      "category": "resource_exhaustion",
+      "summary": "API service experiencing high 5xx error rate (35%) due to resource issues starting at 14:30 UTC.",
+      "requires_immediate_action": true
+    },
+    "expected": {
+      "severity": "high",
+      "category": "resource_exhaustion"
+    }
+  },
+  {
+    "id": "ac-002",
+    "description": "Database connection pool exhaustion",
+    "input": {
+      "alert_title": "PostgreSQL Connection Pool Exhausted",
+      "alert_description": "Active connections reached max_connections (100). New connections are being refused. Affecting payment-service and order-service.",
+      "alert_source": "datadog"
+    },
+    "output": {
+      "severity": "critical",
+      "affected_service": "payment-service",
+      "category": "database",
+      "summary": "PostgreSQL connection pool exhausted at 100/100 connections, refusing new connections to payment and order services.",
+      "requires_immediate_action": true
+    },
+    "expected": {
+      "severity": "critical",
+      "category": "database"
+    }
+  },
+  {
+    "id": "ac-003",
+    "description": "SSL certificate expiry",
+    "input": {
+      "alert_title": "SSL Certificate Expired for checkout.example.com",
+      "alert_description": "SSL certificate for checkout.example.com expired 2 hours ago. Users receiving ERR_CERT_DATE_INVALID. Revenue impact detected.",
+      "alert_source": "pagerduty"
+    },
+    "output": {
+      "severity": "critical",
+      "affected_service": "checkout-service",
+      "category": "certificate",
+      "summary": "SSL certificate for checkout.example.com expired, causing user-facing errors and revenue impact.",
+      "requires_immediate_action": true
+    },
+    "expected": {
+      "severity": "critical",
+      "category": "certificate"
+    }
+  },
+  {
+    "id": "ac-004",
+    "description": "Deployment rollout failure",
+    "input": {
+      "alert_title": "Deployment Rollout Stuck — user-service",
+      "alert_description": "Deployment user-service-v2.3.1 stuck at 1/3 replicas ready. New pods in CrashLoopBackOff.",
+      "alert_source": "pagerduty"
+    },
+    "output": {
+      "severity": "high",
+      "affected_service": "user-service",
+      "category": "deployment",
+      "summary": "Deployment of user-service v2.3.1 stuck with pods in CrashLoopBackOff, only 1/3 replicas ready.",
+      "requires_immediate_action": true
+    },
+    "expected": {
+      "severity": "high",
+      "category": "deployment"
+    }
+  },
+  {
+    "id": "ac-005",
+    "description": "Kafka consumer lag",
+    "input": {
+      "alert_title": "Kafka Consumer Lag Exceeds Threshold",
+      "alert_description": "Consumer group order-processor lag on topic orders.created exceeded 50,000 messages. Current lag: 127,000.",
+      "alert_source": "datadog"
+    },
+    "output": {
+      "severity": "high",
+      "affected_service": "order-processor",
+      "category": "messaging",
+      "summary": "Kafka consumer group order-processor has 127,000 message lag on orders.created topic, exceeding 50,000 threshold.",
+      "requires_immediate_action": false
+    },
+    "expected": {
+      "severity": "high",
+      "category": "messaging"
+    }
+  }
+]

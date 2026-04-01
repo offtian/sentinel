@@ -1,0 +1,178 @@
+[
+  {
+    "id": "rca-001",
+    "description": "OOMKill causing 5xx errors in API service",
+    "input": {
+      "alert_title": "High 5xx Error Rate on api-service",
+      "alert_description": "5xx error rate exceeded 10% threshold for api-service. Current rate: 35%.",
+      "alert_severity": "high",
+      "holmes_analysis": "Datadog logs show a 5x spike in 5xx errors starting at 14:32 UTC. Kubernetes pod api-service-7b8c was OOMKilled at 14:30 UTC. Memory usage ramped from 512Mi to 2Gi over 10 minutes.",
+      "holmes_tool_calls": [
+        {"tool": "datadog_query_logs", "result": "5xx errors: 250/min (baseline 50/min)"},
+        {"tool": "kubernetes_get_pods", "result": "api-service-7b8c OOMKilled 14:30 UTC"}
+      ],
+      "holmes_sources": ["datadog_logs", "kubernetes"]
+    },
+    "output": {
+      "root_cause": "The api-service pod was OOMKilled due to memory exhaustion, ramping from 512Mi to 2Gi. This caused the 5xx error spike as requests lost their serving pod.",
+      "confidence": 0.85,
+      "evidence": [
+        "Kubernetes pod api-service-7b8c OOMKilled at 14:30 UTC",
+        "Memory usage ramped from 512Mi to 2Gi over 10 minutes",
+        "5xx errors spiked 5x starting at 14:32 UTC"
+      ],
+      "remediation_steps": [
+        "Increase memory limits for api-service pods",
+        "Investigate memory leak in api-service",
+        "Add memory usage alerting with lower threshold"
+      ],
+      "affected_services": ["api-service"],
+      "timeline": "14:20 UTC memory ramp began, 14:30 UTC OOMKill, 14:32 UTC 5xx spike"
+    },
+    "expected": {
+      "root_cause_keywords": ["OOMKill", "memory", "api-service"],
+      "min_confidence": 0.6
+    }
+  },
+  {
+    "id": "rca-002",
+    "description": "Database connection pool exhaustion",
+    "input": {
+      "alert_title": "PostgreSQL Connection Pool Exhausted",
+      "alert_description": "Active connections reached max_connections (100). New connections are being refused.",
+      "alert_severity": "critical",
+      "holmes_analysis": "PostgreSQL active connections at 100/100. payment-service holds 45 connections (normally 15). A long-running query on payments table has been running for 47 minutes.",
+      "holmes_tool_calls": [
+        {"tool": "datadog_query_metrics", "result": "pg_stat_activity.count=100, max_connections=100"},
+        {"tool": "datadog_query_logs", "result": "Connection refused errors from payment-service at 09:12 UTC"}
+      ],
+      "holmes_sources": ["datadog_metrics", "datadog_logs"]
+    },
+    "output": {
+      "root_cause": "A long-running query on the payments table (47 minutes) blocked connection releases in payment-service, causing the connection pool to exhaust all 100 available connections.",
+      "confidence": 0.75,
+      "evidence": [
+        "PostgreSQL active connections at 100/100",
+        "payment-service holds 45 connections (normally 15)",
+        "Long-running query on payments table for 47 minutes"
+      ],
+      "remediation_steps": [
+        "Kill the long-running query on the payments table",
+        "Add query timeout configuration for payment-service",
+        "Increase max_connections or add connection pooling via PgBouncer"
+      ],
+      "affected_services": ["payment-service", "order-service"],
+      "timeline": "08:25 UTC long-running query started, 09:12 UTC connection pool exhausted"
+    },
+    "expected": {
+      "root_cause_keywords": ["connection", "pool", "query"],
+      "min_confidence": 0.5
+    }
+  },
+  {
+    "id": "rca-003",
+    "description": "SSL certificate expiry causing service unavailability",
+    "input": {
+      "alert_title": "SSL Certificate Expired for checkout.example.com",
+      "alert_description": "SSL certificate for checkout.example.com expired 2 hours ago. Users receiving ERR_CERT_DATE_INVALID.",
+      "alert_severity": "critical",
+      "holmes_analysis": "SSL certificate for checkout.example.com expired at 04:00 UTC. cert-manager logs show renewal failure: ACME challenge failed due to DNS misconfiguration.",
+      "holmes_tool_calls": [
+        {"tool": "kubernetes_get_pods", "result": "cert-manager-xyz CrashLoopBackOff"},
+        {"tool": "datadog_query_logs", "result": "ACME challenge failed: DNS TXT record not found"}
+      ],
+      "holmes_sources": ["kubernetes", "datadog_logs"]
+    },
+    "output": {
+      "root_cause": "The SSL certificate for checkout.example.com expired because cert-manager failed to renew it. The ACME challenge failed due to a DNS misconfiguration preventing TXT record validation.",
+      "confidence": 0.9,
+      "evidence": [
+        "SSL certificate expired at 04:00 UTC",
+        "cert-manager in CrashLoopBackOff",
+        "ACME challenge failed: DNS TXT record not found"
+      ],
+      "remediation_steps": [
+        "Fix DNS TXT record configuration for ACME validation",
+        "Manually renew the SSL certificate as an immediate fix",
+        "Restart cert-manager after DNS fix"
+      ],
+      "affected_services": ["checkout-service"],
+      "timeline": "04:00 UTC certificate expired, 06:00 UTC alert triggered"
+    },
+    "expected": {
+      "root_cause_keywords": ["SSL", "certificate", "expired"],
+      "min_confidence": 0.5
+    }
+  },
+  {
+    "id": "rca-004",
+    "description": "Deployment rollout failure with CrashLoopBackOff",
+    "input": {
+      "alert_title": "Deployment Rollout Stuck — user-service",
+      "alert_description": "Deployment user-service-v2.3.1 stuck at 1/3 replicas ready. New pods in CrashLoopBackOff.",
+      "alert_severity": "high",
+      "holmes_analysis": "New pods for user-service-v2.3.1 crash on startup with ModuleNotFoundError: No module named redis. The Docker image was built without the redis dependency.",
+      "holmes_tool_calls": [
+        {"tool": "kubernetes_get_pods", "result": "user-service-v2.3.1-abc CrashLoopBackOff, restartCount=5"},
+        {"tool": "datadog_query_logs", "result": "ModuleNotFoundError: No module named 'redis'"}
+      ],
+      "holmes_sources": ["kubernetes", "datadog_logs"]
+    },
+    "output": {
+      "root_cause": "The user-service v2.3.1 deployment fails because the Docker image is missing the redis module dependency, causing CrashLoopBackOff on startup.",
+      "confidence": 0.95,
+      "evidence": [
+        "Pods crash with ModuleNotFoundError: No module named redis",
+        "CrashLoopBackOff with restartCount=5",
+        "Docker image built without redis dependency"
+      ],
+      "remediation_steps": [
+        "Rollback to user-service v2.3.0",
+        "Add redis to the Docker image dependencies and rebuild",
+        "Redeploy with the corrected image"
+      ],
+      "affected_services": ["user-service"],
+      "timeline": "11:45 UTC deployment started, pods immediately entered CrashLoopBackOff"
+    },
+    "expected": {
+      "root_cause_keywords": ["CrashLoopBackOff", "module", "redis"],
+      "min_confidence": 0.5
+    }
+  },
+  {
+    "id": "rca-005",
+    "description": "Kafka consumer lag causing delayed order processing",
+    "input": {
+      "alert_title": "Kafka Consumer Lag Exceeds Threshold",
+      "alert_description": "Consumer group order-processor lag on topic orders.created exceeded 50,000 messages. Current lag: 127,000.",
+      "alert_severity": "high",
+      "holmes_analysis": "Consumer group order-processor has 3 consumers but topic has 12 partitions. Consumer throughput dropped from 5000/s to 800/s at 15:30 UTC. GC pauses averaging 2.5s on order-processor pods. Heap usage at 95%.",
+      "holmes_tool_calls": [
+        {"tool": "datadog_query_metrics", "result": "kafka.consumer_lag=127000, consumer.throughput=800/s"},
+        {"tool": "datadog_query_logs", "result": "GC pause 2.5s, heap usage 95%"}
+      ],
+      "holmes_sources": ["datadog_metrics", "datadog_logs"]
+    },
+    "output": {
+      "root_cause": "Kafka consumer lag is caused by GC pauses (2.5s average) on order-processor pods due to heap usage at 95%. Consumer throughput dropped from 5000/s to 800/s as a result.",
+      "confidence": 0.7,
+      "evidence": [
+        "GC pauses averaging 2.5s on order-processor pods",
+        "Heap usage at 95%",
+        "Consumer throughput dropped from 5000/s to 800/s",
+        "Consumer lag at 127,000 messages"
+      ],
+      "remediation_steps": [
+        "Increase heap size for order-processor pods",
+        "Scale order-processor consumer group to match partition count (12)",
+        "Investigate memory allocation patterns in order processing"
+      ],
+      "affected_services": ["order-processor"],
+      "timeline": "15:30 UTC throughput drop, 16:20 UTC lag exceeded threshold"
+    },
+    "expected": {
+      "root_cause_keywords": ["consumer", "lag", "GC"],
+      "min_confidence": 0.5
+    }
+  }
+]
