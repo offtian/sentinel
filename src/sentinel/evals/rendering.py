@@ -30,9 +30,7 @@ def _get_table_row(
         str(report_case.inputs),
     ]
     if report_has_assertions:
-        row.append(
-            reporting.get_assertions_as_str(report_case.assertions)
-        )
+        row.append(reporting.get_assertions_as_str(report_case.assertions))
     row.append(reporting.get_task_duration_as_str(duration=report_case.task_duration))
     return row
 
@@ -46,9 +44,7 @@ def render_report_as_rich_table(*, report: reporting.EvaluationReport) -> rich_t
         ("Inputs", ""),
     ]
     if report.has_assertions:
-        headers_and_footers.append(
-            ("Assertions", f"{report.average_assertion_success_rate:.2f}%")
-        )
+        headers_and_footers.append(("Assertions", f"{report.average_assertion_success_rate:.2f}%"))
     headers_and_footers.append(
         ("Duration", f"{report.average_duration:.2f}s"),
     )

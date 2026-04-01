@@ -57,7 +57,9 @@ class InvestigationReply(BaseModel):
     confidence: confidence_entities.ConfidenceScore | None = None
     findings_summary: str = ""
     sources_queried: list[str] | None = None
-    approval_status: str | None = None  # "pending", "approved", "rejected", or None (no approval needed)
+    approval_status: str | None = (
+        None  # "pending", "approved", "rejected", or None (no approval needed)
+    )
 
 
 class SupportReply(BaseModel):

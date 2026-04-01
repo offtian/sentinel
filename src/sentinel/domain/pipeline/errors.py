@@ -26,6 +26,4 @@ class PipelineNodeFailed(Exception):
 
     def __init__(self, *, node_error: NodeError) -> None:
         self.node_error = node_error
-        super().__init__(
-            f"Pipeline node '{node_error.node_name}' failed: {node_error.message}"
-        )
+        super().__init__(f"Pipeline node '{node_error.node_name}' failed: {node_error.message}")

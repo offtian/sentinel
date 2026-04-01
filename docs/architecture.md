@@ -22,8 +22,14 @@ Sentinel is an AI-powered automation platform with two core capabilities:
 interfaces/    → FastAPI routers, Pydantic Graph pipelines, webhook handlers, PydanticAI agents
     ↓
 application/   → Use cases and orchestration (investigate, triage, review_ticket, search_docs)
+  supervisor/  → Quality-gate orchestration (supervise_sre_investigation, supervise_support_review)
     ↓
 domain/        → Business entities, search abstractions, vendor adapters, confidence scoring
+  pipeline/    → Pipeline error types (NodeError, PipelineNodeFailed)
+  approval/    → ApprovalRequest, ApprovalDecision entities
+  supervisor/  → QualityVerdict, SupervisorDecision, quality gate evaluation functions
+    ↓
+evals/         → Evaluation framework (pydantic_evals): cases/, evaluators/, runner, reporting, rendering
     ↓
 data/          → SQLModel database models, Alembic migrations
     ↓
@@ -43,15 +49,18 @@ The SRE investigation pipeline is implemented as a Pydantic Graph with the follo
 ```
 ClassifyAlert
   │  PydanticAI agent classifies severity, service, category
+  │  (error → NodeError with context, pipeline continues gracefully)
   ↓
 InvestigateWithHolmes
   │  HolmesGPT adapter queries observability systems (Datadog, K8s, Prometheus)
+  │  (error → PipelineNodeFailed wrapping NodeError)
   ↓
 AnalyseRootCause
   │  PydanticAI agent synthesises findings into root cause + remediation
   ↓
 DetermineConfidence
-  │  Calculate confidence score from analysis confidence
+  │  Calculate confidence score; if below threshold → approval gate
+  │  (requires human approval via POST .../approve or .../reject)
   ↓
 PublishFindings
   │  Posts to Slack, adds PagerDuty incident note, persists to database
@@ -60,9 +69,12 @@ End(InvestigationReply)
 ```
 
 ### Entry Points
-- `POST /api/sre/webhooks/pagerduty` - PagerDuty V3 webhook receiver
-- `POST /api/sre/webhooks/datadog` - Datadog webhook receiver
+- `POST /api/sre/webhooks/pagerduty` - PagerDuty V3 webhook receiver (dedup via `_handle_webhook()`)
+- `POST /api/sre/webhooks/datadog` - Datadog webhook receiver (dedup via `_handle_webhook()`)
 - `POST /api/sre/investigate` - Manual investigation trigger
+- `POST /api/sre/investigations/{id}/approve` - Approve a pending investigation
+- `POST /api/sre/investigations/{id}/reject` - Reject a pending investigation
+- `GET /api/sre/investigations/{id}/approval-status` - Check approval status
 
 ### PublishFindings Integrations
 
@@ -90,6 +102,7 @@ The support review pipeline follows the same Pydantic Graph pattern:
 ```
 ClassifyTicket
   │  PydanticAI agent classifies category, urgency, extracts key questions + search queries
+  │  (error → NodeError with context)
   ↓
 SearchDocumentation
   │  Parallel search across Notion, Confluence, S3, and past tickets
@@ -98,7 +111,7 @@ DraftResponse
   │  PydanticAI agent synthesises documentation into response suggestion
   ↓
 DetermineConfidence
-  │  Calculate confidence score
+  │  Calculate confidence score; approval gate for low-confidence results
   ↓
 End(SupportReply)
 ```
@@ -174,6 +187,7 @@ Key settings groups:
 - **SRE config** - PagerDuty API key, HolmesGPT toggle
 - **Support config** - Jira/Confluence URLs and tokens
 - **Feature flags** - `SRE_AUTO_INVESTIGATE`, `SUPPORT_AUTO_DRAFT`
+- **Approval** - `REQUIRE_APPROVAL_BELOW_CONFIDENCE` (default 0.7), `APPROVAL_TIMEOUT_SECONDS` (default 0)
 - **Slack** - Bot token, app token, channel IDs
 
 ## Database
@@ -234,13 +248,16 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 
 ## Test Count
 
-116 unit tests covering:
+295+ tests covering:
 
-- Domain entities and operations (SRE, Support, Confidence, Search)
-- Webhook parsers (PagerDuty, Datadog)
+- Domain entities and operations (SRE, Support, Confidence, Search, Pipeline errors, Approval, Supervisor)
+- Webhook parsers (PagerDuty, Datadog) with dedup handling
 - Vendor adapters (Datadog, PagerDuty, Jira, Confluence)
 - DirectToolsetAdapter (14 tests)
 - Persistence layer (database session management)
-- API routers (support feedback endpoints)
+- API routers (support feedback, SRE approval endpoints)
 - API app lifecycle
 - Slack message formatting
+- Pipeline node error handling tests
+- Approval gate and supervisor quality gate tests
+- Evaluation framework (pydantic_evals based)

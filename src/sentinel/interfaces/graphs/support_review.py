@@ -131,7 +131,7 @@ class SearchDocumentation(BaseNode[State, Dependencies, common.SupportReply]):
                 doc_results = doc_task.result()
             if ticket_task:
                 ticket_results = ticket_task.result()
-        except BaseException as exc:
+        except Exception as exc:
             logs.log_exception(
                 exc,
                 params={"ticket_key": ctx.state.ticket.key, "node": "SearchDocumentation"},

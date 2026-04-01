@@ -385,7 +385,7 @@ class PublishFindings(BaseNode[State, Dependencies, common.InvestigationReply]):
         if publish_tasks:
             results = await asyncio.gather(*publish_tasks, return_exceptions=True)
             for i, result in enumerate(results):
-                if isinstance(result, BaseException):
+                if isinstance(result, Exception):
                     logs.log_exception(
                         result,
                         params={

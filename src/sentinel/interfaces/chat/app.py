@@ -260,8 +260,8 @@ def _render_trace(traces: list[common.AgentTrace]) -> None:
                         f"{usage.input_tokens} in / {usage.output_tokens} out" if usage else ""
                     )
                     st.caption(f"Model: `{model_label}` | Tokens: {token_info}")
-                    for part in message.parts:
-                        _render_response_part(part)
+                    for response_part in message.parts:
+                        _render_response_part(response_part)
 
 
 def _format_support(reply: common.SupportReply) -> str:

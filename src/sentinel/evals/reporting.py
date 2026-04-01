@@ -87,6 +87,4 @@ def get_task_duration_as_str(*, duration: float) -> str:
     """
     Format the task duration as a string with two decimal places.
     """
-    if duration is not None:
-        return f"{duration:.2f}s"
-    return "N/A"
+    return f"{duration:.2f}s"

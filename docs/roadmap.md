@@ -1,6 +1,6 @@
 # Sentinel Roadmap
 
-## Current Status: Phase 2 Complete (AI SRE Polish + Deployment Scaffolding)
+## Current Status: Phase 4 In Progress (Polish + E2E)
 
 ### Phase 1: Bootstrap + AI SRE Core - COMPLETE
 
@@ -90,74 +90,7 @@
 
 ---
 
-## Phase 3: AI Support Agent Core - NOT STARTED
-
-### Implemented
-
-1. **Document Search Implementations**
-   - `NotionSearcher` implementing `BaseDocumentSearcher` — query via Bedrock KB or S3
-   - `ConfluenceSearcher` implementing `BaseDocumentSearcher` — query via the Confluence vendor adapter
-   - `S3DocumentSearcher` implementing `BaseDocumentSearcher` — direct S3 retrieval
-   - `JiraPastTicketSearcher` implementing `BasePastTicketSearcher` — JQL for resolved tickets via the Jira vendor adapter
-
-2. **PagerDuty Vendor Adapter** (`domain/vendor_adapters/pagerduty.py`)
-   - Wraps `pdpyras` for incident notes, details, and status updates
-   - `format_investigation_note()` generates markdown for PagerDuty notes
-   - Graceful no-op when not configured
-
-3. **Jira Vendor Adapter** (`domain/vendor_adapters/jira.py`)
-   - Wraps `jira` SDK for issue CRUD, JQL search, internal comments, transitions
-   - `format_suggestion_comment()` generates Jira wiki markup for response suggestions
-   - Internal comments use Service Desk Team role visibility
-
-4. **Confluence Vendor Adapter** (`domain/vendor_adapters/confluence.py`)
-   - Wraps `atlassian-python-api` for CQL search and page content retrieval
-   - `_html_to_plain_text()` converts Confluence storage format HTML to plain text
-
-5. **Database Persistence Layer**
-   - `data/database.py` - Async engine/session factory management with lazy-initialised singletons
-   - `application/sre/persist.py` - Save and query investigation records
-   - `application/support/persist.py` - Save and query ticket review records
-   - FastAPI lifespan manages DB connection lifecycle (init on startup, close on shutdown)
-
-6. **Pipeline Wiring**
-   - `PublishFindings` node now posts to Slack, adds PagerDuty incident notes, and persists to database
-   - Persistence injected as `PersistInvestigationFn` callback via `Dependencies` dataclass
-   - PagerDuty write-back via `PagerDutyClient.add_incident_note()`
-
-7. **Helm Chart** (`helm/sentinel/`)
-   - Multi-deployment pattern (api + worker from same image)
-   - Pre-install/upgrade migration job (alembic)
-   - 9 template files + values.yaml
-
-8. **CI/CD Pipeline** (`.circleci/config.yml`)
-   - 4-job pipeline: mypy → test-and-lint → publish-image → package-chart
-   - PostgreSQL sidecar for integration tests
-   - Uses `krakentech/ktl-services-deployment-orb`
-
-9. **Unit Tests** - 68 total (39 new)
-   - Vendor adapter tests: Datadog (7), PagerDuty (7), Jira (10), Confluence (11)
-   - Database session management tests (3)
-   - API app lifecycle test (1)
-
-10. **Code Quality** - All passing
-    - ruff check + format
-    - mypy strict mode
-    - import-linter (3 contracts)
-
-### Not Yet Implemented (Phase 2 gaps)
-
-1. **HolmesGPT SDK Integration** — Still a placeholder adapter due to upstream pydantic-ai dependency conflict. The `BaseHolmesAdapter` ABC and `MockHolmesAdapter` are in place; `HolmesGPTAdapter` needs the actual SDK wired in once the conflict is resolved.
-
-2. **Custom Toolsets** — Alternative to HolmesGPT: implement `DatadogToolset`, `KubernetesToolset`, `PrometheusToolset` as `BaseToolset` implementations that the adapter orchestrates. These would use the vendor adapters we've already built.
-
-3. **Integration Tests** — Only unit tests written so far. End-to-end tests (webhook → pipeline → database) with mock LLM responses (PydanticAI test mode) are needed.
-
-4. **Infrastructure Setup** — ECR repositories, IAM role, KMS key, ACM certificate, and `ktl-services-deployment` application directory need to be created in OctoCloud/ktl-services-deployment repos.
-
----
-
-## Phase 3: AI Support Agent Core - NOT STARTED
+## Phase 3: AI Support Agent Core - COMPLETE
 
 ### Must Implement
 
@@ -191,9 +124,41 @@
 
 ---
 
-## Phase 4: Polish + E2E - NOT STARTED
+## Phase 4: Polish + E2E - IN PROGRESS
 
-### Must Implement
+### Implemented
+
+1. **Evaluation Framework** (`src/sentinel/evals/`)
+   - Rewritten using `pydantic_evals` library
+   - `cases/` — Test case definitions with base case class
+   - `evaluators/` — Keyword coverage and structural evaluators
+   - `runner.py` — Eval runner orchestration
+   - `reporting.py` — Report generation
+   - `rendering.py` — Output rendering
+
+2. **Pipeline Error Handling** (`domain/pipeline/errors.py`)
+   - `NodeError` — Structured error for individual pipeline node failures
+   - `PipelineNodeFailed` — Wraps NodeError with pipeline context
+   - All SRE and Support pipeline nodes now catch and wrap errors consistently
+
+3. **Approval Gate**
+   - `domain/approval/entities.py` — `ApprovalRequest`, `ApprovalDecision` entities
+   - `DetermineConfidence` node enforces approval for low-confidence results
+   - Settings: `require_approval_below_confidence` (default 0.7), `approval_timeout_seconds` (default 0)
+   - API endpoints: `POST .../approve`, `POST .../reject`, `GET .../approval-status`
+
+4. **Supervisor Layer**
+   - `domain/supervisor/entities.py` — `QualityVerdict`, `SupervisorDecision`, `SupervisedResult`
+   - `domain/supervisor/quality_gate.py` — `evaluate_sre_quality()`, `evaluate_support_quality()`
+   - `application/supervisor/orchestrator.py` — `supervise_sre_investigation()`, `supervise_support_review()`
+
+5. **Webhook Deduplication**
+   - Shared `_handle_webhook()` handler in SRE router for PagerDuty and Datadog webhooks
+
+6. **CI Pipeline** (`.circleci/config.yml`)
+   - Updated to include eval framework tests
+
+### Not Yet Implemented
 
 1. **Feedback Loop for Support Suggestions**
    - Track whether suggestions are accepted, rejected, or modified
@@ -206,23 +171,18 @@
    - Extract resolution summaries
    - Rank by recency and relevance
 
-3. **Evaluation Framework** (`tests/evals/`)
-   - Adapt evaluation patterns for both pipelines
-   - Metrics: accuracy of classification, quality of root cause analysis, quality of response drafts
-   - Run against golden test cases
-
-4. **Confidence Scoring Improvements**
+3. **Confidence Scoring Improvements**
    - SRE: Factor in number of data sources queried, data freshness, correlation strength
    - Support: Factor in source count, source authority (docs vs Slack), recency, grounding score
 
-5. **Production Deployment**
+4. **Production Deployment**
    - Deploy to test cluster
    - Configure PagerDuty webhook subscription
    - Configure Jira webhook subscription
    - Set up Datadog monitors for Sentinel itself
    - Production deployment with CD enabled
 
-6. **Operational Runbook** (`docs/runbook.md`)
+5. **Operational Runbook** (`docs/runbook.md`)
    - How to deploy, scale, troubleshoot
    - How to add new alert sources
    - How to add new documentation sources

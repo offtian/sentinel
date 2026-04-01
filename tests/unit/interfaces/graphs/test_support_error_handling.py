@@ -31,14 +31,15 @@ class TestClassifyTicketErrorHandling:
 
         # Then the reply indicates failure instead of crashing
         assert result.ticket_id == ticket.id
-        assert "failed" in result.suggested_response.lower() or "error" in result.suggested_response.lower()
+        assert (
+            "failed" in result.suggested_response.lower()
+            or "error" in result.suggested_response.lower()
+        )
 
 
 class TestSearchDocumentationErrorHandling:
     @pytest.mark.asyncio
-    async def test_continues_when_search_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_continues_when_search_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Given a working classifier
         async def fake_classify(*, user_prompt, model, deps):
             return FakeAgentResult(
@@ -55,7 +56,9 @@ class TestSearchDocumentationErrorHandling:
 
         # And a document searcher that raises
         class FailingSearcher(searcher.BaseDocumentSearcher):
-            async def search(self, *, query: str, limit: int) -> list[searcher.DocumentSearchResult]:
+            async def search(
+                self, *, query: str, limit: int
+            ) -> list[searcher.DocumentSearchResult]:
                 raise ConnectionError("Search service down")
 
         ticket = make_ticket()

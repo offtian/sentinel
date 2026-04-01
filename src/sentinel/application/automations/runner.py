@@ -75,8 +75,7 @@ async def run_automation(
     handler = _REGISTRY.get(automation_name)
     if handler is None:
         raise UnknownAutomationError(
-            f"Unknown automation: {automation_name!r}. "
-            f"Available: {', '.join(sorted(_REGISTRY))}"
+            f"Unknown automation: {automation_name!r}. Available: {', '.join(sorted(_REGISTRY))}"
         )
 
     logs.log_event(

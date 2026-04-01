@@ -8,7 +8,7 @@ non-empty text, non-empty lists, exact match, and numeric comparisons.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Literal
+from typing import Any, Literal, assert_never
 
 from pydantic_evals import evaluators
 from pydantic_evals.evaluators import evaluator
@@ -111,8 +111,7 @@ class StructuralCheck(evaluators.Evaluator):
             expected = _resolve_field(payload=payload, field_path=self.expected_field_path or "")
             passed, reason = _check_gte(actual=actual, expected=expected)
         else:
-            passed = False
-            reason = f"Unknown check type: {self.check_type}"
+            assert_never(self.check_type)
 
         evaluation_name = self.get_default_evaluation_name()
         return {

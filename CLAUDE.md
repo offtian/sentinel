@@ -16,10 +16,15 @@ Clean architecture with enforced layer boundaries (import-linter):
 ```
 interfaces/    → API routers, Pydantic Graph pipelines, webhook handlers, Slack handlers
 application/   → Use cases, persistence orchestration, async job enqueue/dequeue
+  supervisor/  → Quality-gate orchestration (supervise_sre_investigation, supervise_support_review)
 domain/        → Business entities, search abstractions (ABCs), vendor adapter interfaces
+  pipeline/    → Pipeline error types (NodeError, PipelineNodeFailed)
+  approval/    → ApprovalRequest, ApprovalDecision entities
+  supervisor/  → QualityVerdict, SupervisorDecision, quality gate functions
 data/          → SQLModel database models, Alembic migrations
 vendors/       → External SDK wrappers (Slack, PagerDuty, Jira)
 plugins/       → Jinja2 prompt templates for PydanticAI agents
+evals/         → Evaluation framework (pydantic_evals): cases/, evaluators/, runner, reporting, rendering
 ```
 
 Lower layers cannot import from higher layers. Enforced by import-linter contracts in `pyproject.toml`.
@@ -34,7 +39,9 @@ Lower layers cannot import from higher layers. Enforced by import-linter contrac
 
 Two-layer pattern:
 - `settings.py` — Pydantic `BaseSettings` reading environment variables, singleton via `get_settings()`
-- `_config.py` — Wires vendor adapters and builders from settings, singleton via `get_config()`
+- `config.py` — Wires vendor adapters and builders from settings, singleton via `get_config()`
+
+Key approval settings: `require_approval_below_confidence` (float, default 0.7), `approval_timeout_seconds` (int, default 0).
 
 Environment variables defined in `.env.default`. Copy to `.env` for local overrides.
 
@@ -42,8 +49,11 @@ Environment variables defined in `.env.default`. Copy to `.env` for local overri
 
 Each pipeline is a `pydantic_graph.Graph` with typed dataclass nodes inheriting `BaseNode[State, Dependencies, Reply]`. Dependencies (vendor adapters, searchers) are injected at graph instantiation. Agent definitions live in `interfaces/graphs/agents/` with system prompts as Jinja2 templates in `plugins/prompts/`.
 
+All pipeline nodes have structured error handling via `NodeError` / `PipelineNodeFailed` (from `domain/pipeline/errors.py`). The `DetermineConfidence` node enforces an approval gate: investigations below `require_approval_below_confidence` require human approval before publishing. Webhook endpoints use a shared `_handle_webhook()` handler for deduplication.
+
 **SRE Investigation:** `ClassifyAlert → InvestigateWithHolmes → AnalyseRootCause → DetermineConfidence → PublishFindings`
 Entry: `POST /api/sre/webhooks/pagerduty` or `POST /api/sre/investigate`
+Approval: `POST .../approve`, `POST .../reject`, `GET .../approval-status`
 
 **Support Review:** `ClassifyTicket → SearchDocumentation → DraftResponse → DetermineConfidence`
 Entry: `POST /api/support/webhooks/jira` or `POST /api/support/review`
@@ -91,11 +101,11 @@ uv run pytest tests/unit/path/test_file.py::TestClass # Single test class
 
 ## Testing
 
-- `tests/unit/` — Fast isolated tests, no DB or network. Mirrors `src/` structure.
+- `tests/unit/` — Fast isolated tests, no DB or network. Mirrors `src/` structure. Includes error handling tests for pipeline nodes and approval gate tests.
 - `tests/integration/` — Tests with database and vendor mocking
-- `tests/functional/` — E2E pipeline tests with mocked LLM agents
+- `tests/functional/` — E2E pipeline tests with mocked LLM agents and eval framework tests
 
-Test data factories in `tests/factories/__init__.py` (`make_alert()`, `make_ticket()`, `make_investigation()`, etc.). Functional tests use fixtures that monkeypatch PydanticAI agents (`patch_alert_classifier`, `patch_root_cause_analyser`, etc.) — see `tests/functional/conftest.py`.
+295+ tests total. Test data factories in `tests/factories/__init__.py` (`make_alert()`, `make_ticket()`, `make_investigation()`, etc.). Functional tests use fixtures that monkeypatch PydanticAI agents (`patch_alert_classifier`, `patch_root_cause_analyser`, etc.) — see `tests/functional/conftest.py`.
 
 ## Conventions
 

@@ -28,11 +28,15 @@ Both pipelines are built as [Pydantic Graph](https://ai.pydantic.dev/pydantic-gr
 ClassifyAlert → InvestigateWithHolmes → AnalyseRootCause → DetermineConfidence → PublishFindings
 ```
 
+Each node has structured error handling via `NodeError` / `PipelineNodeFailed`. The `DetermineConfidence` node enforces an approval gate for low-confidence results (configurable via `require_approval_below_confidence`).
+
 ### Support Review Pipeline
 
 ```
 ClassifyTicket → SearchDocumentation → DraftResponse → DetermineConfidence
 ```
+
+Error handling and approval gating follow the same pattern as the SRE pipeline.
 
 ## Quick Start
 
@@ -56,18 +60,25 @@ The API starts at `http://localhost:8000`. Health check at `GET /health`.
 
 ### SRE
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/sre/webhooks/pagerduty` | PagerDuty V3 webhook receiver |
-| POST | `/api/sre/webhooks/datadog` | Datadog webhook receiver |
-| POST | `/api/sre/investigate` | Manual investigation trigger |
+
+| Method | Path                                                  | Description                   |
+| ------ | ----------------------------------------------------- | ----------------------------- |
+| POST   | `/api/sre/webhooks/pagerduty`                         | PagerDuty V3 webhook receiver |
+| POST   | `/api/sre/webhooks/datadog`                           | Datadog webhook receiver      |
+| POST   | `/api/sre/investigate`                                | Manual investigation trigger  |
+| POST   | `/api/sre/investigations/{id}/approve`                | Approve a pending investigation |
+| POST   | `/api/sre/investigations/{id}/reject`                 | Reject a pending investigation  |
+| GET    | `/api/sre/investigations/{id}/approval-status`        | Check approval status           |
+
 
 ### Support
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/support/webhooks/jira` | Jira Service Desk webhook receiver |
-| POST | `/api/support/review` | Manual ticket review trigger |
+
+| Method | Path                         | Description                        |
+| ------ | ---------------------------- | ---------------------------------- |
+| POST   | `/api/support/webhooks/jira` | Jira Service Desk webhook receiver |
+| POST   | `/api/support/review`        | Manual ticket review trigger       |
+
 
 ## Development
 
@@ -92,16 +103,20 @@ All configuration via environment variables. See [.env.default](.env.default) fo
 
 Key settings:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `AI_GATEWAY_URL` | LiteLLM gateway URL | `http://litellm.litellm.svc.cluster.local/` |
-| `ALERT_CLASSIFIER_LLM` | Model for alert classification | `openai/gpt-4.1-mini` |
-| `ROOT_CAUSE_LLM` | Model for root cause analysis | `openai/gpt-4.1` |
-| `TICKET_REVIEWER_LLM` | Model for ticket classification | `openai/gpt-4.1-mini` |
-| `RESPONSE_DRAFTER_LLM` | Model for response drafting | `openai/gpt-4.1` |
-| `SRE_AUTO_INVESTIGATE` | Auto-investigate incoming alerts | `true` |
-| `SUPPORT_AUTO_DRAFT` | Auto-draft responses for new tickets | `true` |
-| `HOLMESGPT_ENABLED` | Enable HolmesGPT investigation engine | `true` |
+
+| Variable               | Description                           | Default                                     |
+| ---------------------- | ------------------------------------- | ------------------------------------------- |
+| `AI_GATEWAY_URL`       | LiteLLM gateway URL                   | `http://litellm.litellm.svc.cluster.local/` |
+| `ALERT_CLASSIFIER_LLM` | Model for alert classification        | `openai/gpt-4.1-mini`                       |
+| `ROOT_CAUSE_LLM`       | Model for root cause analysis         | `openai/gpt-4.1`                            |
+| `TICKET_REVIEWER_LLM`  | Model for ticket classification       | `openai/gpt-4.1-mini`                       |
+| `RESPONSE_DRAFTER_LLM` | Model for response drafting           | `openai/gpt-4.1`                            |
+| `SRE_AUTO_INVESTIGATE` | Auto-investigate incoming alerts      | `true`                                      |
+| `SUPPORT_AUTO_DRAFT`   | Auto-draft responses for new tickets  | `true`                                      |
+| `HOLMESGPT_ENABLED`    | Enable HolmesGPT investigation engine | `true`                                      |
+| `REQUIRE_APPROVAL_BELOW_CONFIDENCE` | Confidence threshold requiring human approval | `0.7`                |
+| `APPROVAL_TIMEOUT_SECONDS` | Timeout for pending approvals (0 = no timeout) | `0`                        |
+
 
 ## Tech Stack
 
@@ -115,19 +130,33 @@ Key settings:
 
 ```
 src/sentinel/
-├── _config.py                        # Centralised configuration
+├── config.py                        # Centralised configuration
 ├── interfaces/
 │   ├── api/                          # FastAPI app and routers
 │   ├── graphs/                       # Pydantic Graph pipelines
-│   │   ├── sre_investigation.py      # SRE pipeline (5 nodes)
-│   │   ├── support_review.py         # Support pipeline (4 nodes)
+│   │   ├── sre_investigation.py      # SRE pipeline (5 nodes, error handling)
+│   │   ├── support_review.py         # Support pipeline (4 nodes, error handling)
 │   │   └── agents/                   # PydanticAI agent definitions
 │   └── webhooks/                     # Webhook payload parsers
+├── application/
+│   ├── sre/                          # SRE use cases, persistence
+│   ├── support/                      # Support use cases, persistence
+│   └── supervisor/                   # Supervisor orchestrator
+│       └── orchestrator.py           # supervise_sre_investigation(), supervise_support_review()
 ├── domain/
 │   ├── sre/                          # Alert, Investigation, HolmesAdapter
 │   ├── support/                      # Ticket, ResponseSuggestion
 │   ├── confidence/                   # Confidence scoring
-│   └── search/                       # Search abstractions (ABC)
+│   ├── search/                       # Search abstractions and implementations
+│   ├── pipeline/                     # NodeError, PipelineNodeFailed
+│   ├── approval/                     # ApprovalRequest, ApprovalDecision
+│   └── supervisor/                   # QualityVerdict, SupervisorDecision, quality gates
+├── evals/                            # Evaluation framework (pydantic_evals)
+│   ├── cases/                        # Test case definitions
+│   ├── evaluators/                   # Keyword coverage, structural evaluators
+│   ├── runner.py                     # Eval runner
+│   ├── reporting.py                  # Report generation
+│   └── rendering.py                  # Output rendering
 ├── data/                             # SQLModel tables, Alembic migrations
 └── vendors/                          # Slack SDK wrapper
 ```
