@@ -15,6 +15,14 @@ from sentinel.domain.confidence import entities as confidence_entities
 PersistInvestigationFn = Callable[["InvestigationReply"], Awaitable[None]]
 PersistTicketReviewFn = Callable[["SupportReply"], Awaitable[None]]
 
+# Callback for requesting human approval before publishing.
+# Args: investigation_id, alert_id, alert_title, root_cause, remediation, confidence_label, findings_summary
+# Returns: Slack message timestamp (str) or None if skipped.
+RequestApprovalFn = Callable[
+    [str, str, str, str | None, str | None, str | None, str],
+    Awaitable[str | None],
+]
+
 
 @dataclasses.dataclass
 class AgentTrace:
@@ -49,6 +57,7 @@ class InvestigationReply(BaseModel):
     confidence: confidence_entities.ConfidenceScore | None = None
     findings_summary: str = ""
     sources_queried: list[str] | None = None
+    approval_status: str | None = None  # "pending", "approved", "rejected", or None (no approval needed)
 
 
 class SupportReply(BaseModel):
