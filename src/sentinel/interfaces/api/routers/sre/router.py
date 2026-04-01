@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -46,12 +47,14 @@ async def _enqueue_alert(
     )
 
 
-@router.post("/webhooks/pagerduty")
-async def handle_pagerduty_webhook(
+async def _handle_webhook(
+    *,
     payload: dict[str, Any],
+    parse_fn: Callable[[dict[str, Any]], sre_entities.Alert | None],
+    source: str,
 ) -> fastapi.responses.JSONResponse:
-    """Receive PagerDuty V3 webhook events and enqueue for async investigation."""
-    alert = pagerduty.parse_pagerduty_webhook(payload)
+    """Shared handler for all alert-source webhooks (PagerDuty, Datadog, etc.)."""
+    alert = parse_fn(payload)
     if alert is None:
         return fastapi.responses.JSONResponse(
             status_code=200,
@@ -59,7 +62,7 @@ async def handle_pagerduty_webhook(
         )
 
     logs.log_event(
-        "pagerduty_alert_received",
+        f"{source}_alert_received",
         params={"alert_id": alert.id, "title": alert.title},
     )
 
@@ -69,7 +72,19 @@ async def handle_pagerduty_webhook(
             content={"status": "received", "alert_id": alert.id, "auto_investigate": False},
         )
 
-    return await _enqueue_alert(alert, requested_by="webhook:pagerduty")
+    return await _enqueue_alert(alert, requested_by=f"webhook:{source}")
+
+
+@router.post("/webhooks/pagerduty")
+async def handle_pagerduty_webhook(
+    payload: dict[str, Any],
+) -> fastapi.responses.JSONResponse:
+    """Receive PagerDuty V3 webhook events and enqueue for async investigation."""
+    return await _handle_webhook(
+        payload=payload,
+        parse_fn=pagerduty.parse_pagerduty_webhook,
+        source="pagerduty",
+    )
 
 
 @router.post("/webhooks/datadog")
@@ -77,25 +92,11 @@ async def handle_datadog_webhook(
     payload: dict[str, Any],
 ) -> fastapi.responses.JSONResponse:
     """Receive Datadog webhook events and enqueue for async investigation."""
-    alert = pagerduty.parse_datadog_webhook(payload)
-    if alert is None:
-        return fastapi.responses.JSONResponse(
-            status_code=200,
-            content={"status": "skipped", "reason": "Event type not actionable"},
-        )
-
-    logs.log_event(
-        "datadog_alert_received",
-        params={"alert_id": alert.id, "title": alert.title},
+    return await _handle_webhook(
+        payload=payload,
+        parse_fn=pagerduty.parse_datadog_webhook,
+        source="datadog",
     )
-
-    if not get_settings().sre_auto_investigate:
-        return fastapi.responses.JSONResponse(
-            status_code=200,
-            content={"status": "received", "alert_id": alert.id, "auto_investigate": False},
-        )
-
-    return await _enqueue_alert(alert, requested_by="webhook:datadog")
 
 
 @router.post("/investigate")
