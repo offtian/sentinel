@@ -39,6 +39,12 @@ class SRESettings(BaseSettings):
     sre_auto_investigate: bool = True
     sre_slack_channel: str = ""
 
+    # Approval gate: investigations below this confidence threshold require human approval.
+    # Set to 0.0 to disable (all findings auto-publish).
+    require_approval_below_confidence: float = 0.7
+    # Seconds before a pending approval auto-approves (0 = never auto-approve).
+    approval_timeout_seconds: int = 0
+
 
 class SupportSettings(BaseSettings):
     """Support-specific vendor and feature settings."""

@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import fastapi
+from pydantic import BaseModel
 
 from sentinel.application.jobs import enqueue
 from sentinel.application.sre import persist as sre_persist
@@ -169,5 +170,144 @@ async def get_investigation(
             "started_at": record.started_at.isoformat() if record.started_at else None,
             "completed_at": record.completed_at.isoformat() if record.completed_at else None,
             "created_at": record.created_at.isoformat(),
+        },
+    )
+
+
+# ── Approval Gate ────────────────────────────────────────────────────────────
+
+# In-memory store for pending approvals.
+# Production: replace with database-backed store via Alembic migration.
+_pending_approvals: dict[str, dict[str, Any]] = {}
+
+
+class ApprovalAction(BaseModel):
+    reviewer: str
+
+
+def store_pending_approval(
+    *,
+    investigation_id: str,
+    approval_data: dict[str, Any],
+) -> None:
+    """Store a pending approval for later retrieval by approve/reject endpoints."""
+    _pending_approvals[investigation_id] = {
+        **approval_data,
+        "status": "pending",
+        "requested_at": datetime.now(tz=UTC).isoformat(),
+    }
+
+
+def get_pending_approval(investigation_id: str) -> dict[str, Any] | None:
+    """Return pending approval data, or None if not found."""
+    return _pending_approvals.get(investigation_id)
+
+
+def remove_pending_approval(investigation_id: str) -> None:
+    """Remove a resolved approval from the pending store."""
+    _pending_approvals.pop(investigation_id, None)
+
+
+@router.post("/investigations/{investigation_id}/approve")
+async def approve_investigation(
+    investigation_id: str,
+    action: ApprovalAction,
+) -> fastapi.responses.JSONResponse:
+    """
+    Approve an investigation for publishing to external channels.
+
+    Called by Slack interactive message handler or directly by an engineer.
+    """
+    pending = get_pending_approval(investigation_id)
+    if not pending:
+        return fastapi.responses.JSONResponse(
+            status_code=404,
+            content={
+                "error": "No pending approval found",
+                "investigation_id": investigation_id,
+            },
+        )
+
+    logs.log_event(
+        "investigation.approved",
+        params={
+            "investigation_id": investigation_id,
+            "reviewer": action.reviewer,
+        },
+    )
+
+    remove_pending_approval(investigation_id)
+
+    return fastapi.responses.JSONResponse(
+        status_code=200,
+        content={
+            "investigation_id": investigation_id,
+            "status": "approved",
+            "reviewer": action.reviewer,
+            "approved_at": datetime.now(tz=UTC).isoformat(),
+        },
+    )
+
+
+@router.post("/investigations/{investigation_id}/reject")
+async def reject_investigation(
+    investigation_id: str,
+    action: ApprovalAction,
+) -> fastapi.responses.JSONResponse:
+    """
+    Reject an investigation -- findings will NOT be published.
+
+    Called by Slack interactive message handler or directly by an engineer.
+    """
+    pending = get_pending_approval(investigation_id)
+    if not pending:
+        return fastapi.responses.JSONResponse(
+            status_code=404,
+            content={
+                "error": "No pending approval found",
+                "investigation_id": investigation_id,
+            },
+        )
+
+    logs.log_event(
+        "investigation.rejected",
+        params={
+            "investigation_id": investigation_id,
+            "reviewer": action.reviewer,
+        },
+    )
+
+    remove_pending_approval(investigation_id)
+
+    return fastapi.responses.JSONResponse(
+        status_code=200,
+        content={
+            "investigation_id": investigation_id,
+            "status": "rejected",
+            "reviewer": action.reviewer,
+            "rejected_at": datetime.now(tz=UTC).isoformat(),
+        },
+    )
+
+
+@router.get("/investigations/{investigation_id}/approval-status")
+async def get_approval_status(investigation_id: str) -> fastapi.responses.JSONResponse:
+    """Check the current approval status of an investigation."""
+    pending = get_pending_approval(investigation_id)
+    if not pending:
+        return fastapi.responses.JSONResponse(
+            status_code=404,
+            content={
+                "error": "No pending approval found",
+                "investigation_id": investigation_id,
+            },
+        )
+
+    return fastapi.responses.JSONResponse(
+        status_code=200,
+        content={
+            "investigation_id": investigation_id,
+            "status": pending["status"],
+            "requested_at": pending["requested_at"],
         },
     )
