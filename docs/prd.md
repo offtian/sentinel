@@ -150,7 +150,7 @@ Acceptance criteria:
 - [x] Immutable `ApprovalRequest` domain entity with approve/reject/auto-approve transitions
 - [x] Append-only audit log with SHA-256 input hashes for regulatory traceability
 - [x] Supervisor graph wrapping both pipelines with rule-based quality gate before publishing
-- [ ] Tier 2 component evaluations: per-agent quality scoring with golden datasets
+- [x] Tier 2 component evaluations: per-agent quality scoring with golden datasets
 
 ---
 
@@ -226,7 +226,7 @@ AgentGateway becomes relevant when:
 | Datadog APM distributed tracing | ddtrace dependency + Datadog agent in cluster | Phase B |
 | MCP tool integration | FastMCP design + first MCP server to integrate with | Phase C |
 | Supervisor graph + quality gate | Done — `domain/supervisor/quality_gate.py`, `application/supervisor/orchestrator.py` | Current sprint |
-| Tier 2 component evals | In progress | Current sprint |
+| Tier 2 component evals | Done — `evals/framework.py`, 3 agent evaluators, 15 golden cases | Current sprint |
 
 ---
 
