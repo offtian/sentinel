@@ -7,6 +7,7 @@ import fastapi
 
 from sentinel import bootstrap
 from sentinel.data import database
+from sentinel.interfaces.api.routers.automations.router import router as automations_router
 from sentinel.interfaces.api.routers.jobs.router import router as jobs_router
 from sentinel.interfaces.api.routers.sre.router import router as sre_router
 from sentinel.interfaces.api.routers.support.router import router as support_router
@@ -40,6 +41,7 @@ app = fastapi.FastAPI(
 app.include_router(sre_router, prefix="/api")
 app.include_router(support_router, prefix="/api")
 app.include_router(jobs_router, prefix="/api")
+app.include_router(automations_router, prefix="/api")
 
 
 @app.get("/health")

@@ -26,7 +26,7 @@ async def trigger_automation(
     Expects:
     {
         "automation_name": "repo_health_check",
-        "params": {"repos": ["sentinel", "alfredo"]}
+        "params": {"repos": ["sentinel"]}
     }
     """
     automation_name = payload.get("automation_name", "")
