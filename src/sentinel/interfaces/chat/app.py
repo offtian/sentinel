@@ -115,6 +115,11 @@ async def _classify_intent(
         model=utils.get_model_with_gateway(_selected_model("intent_router")),
         deps=intent_router.Dependencies(message=text),
     )
+    if trace_collector:
+        trace_collector.record(
+            agent_name="Intent Router",
+            messages=result.all_messages(),
+        )
     return result.output
 
 
@@ -127,6 +132,7 @@ async def _run_sre(
     text: str,
     *,
     on_status: Callable[[str], None],
+    trace_collector: common.TraceCollector | None = None,
 ) -> common.InvestigationReply:
     status_client = StreamlitStatusUpdateClient(on_status=on_status)
 
@@ -150,6 +156,7 @@ async def _run_sre(
         classifier_model=_selected_model("classifier"),
         analyser_model=_selected_model("analyser"),
         post_to_slack=False,
+        trace_collector=trace_collector,
     )
 
 
@@ -157,6 +164,7 @@ async def _run_support(
     text: str,
     *,
     on_status: Callable[[str], None],
+    trace_collector: common.TraceCollector | None = None,
 ) -> common.SupportReply:
     status_client = StreamlitStatusUpdateClient(on_status=on_status)
 
@@ -178,6 +186,9 @@ async def _run_support(
         document_searcher=search_factory.build_document_searcher(),
         ticket_searcher=search_factory.build_ticket_searcher(),
         status_update_client=status_client,
+        reviewer_model=_selected_model("reviewer"),
+        drafter_model=_selected_model("drafter"),
+        trace_collector=trace_collector,
     )
 
 
@@ -201,6 +212,56 @@ def _format_investigation(reply: common.InvestigationReply) -> str:
     if reply.findings_summary:
         parts.append(f"\n**Findings:**\n{reply.findings_summary}")
     return "\n".join(parts)
+
+
+def _render_request_part(part: Any) -> None:
+    """Render a single request-side message part."""
+    if part.part_kind == "system-prompt":
+        st.markdown("**System Prompt**")
+        st.code(part.content, language="text")
+    elif part.part_kind == "user-prompt":
+        content = part.content if isinstance(part.content, str) else str(part.content)
+        st.markdown("**User Prompt**")
+        st.code(content, language="text")
+    elif part.part_kind == "tool-return":
+        st.markdown(f"**Tool Return** (`{part.tool_name}`)")
+        st.code(str(part.content), language="json")
+    elif part.part_kind == "retry-prompt":
+        st.markdown("**Retry Prompt**")
+        st.warning(str(part.content))
+
+
+def _render_response_part(part: Any) -> None:
+    """Render a single response-side message part."""
+    if part.part_kind == "thinking":
+        st.markdown("**Thinking**")
+        st.code(part.content, language="text")
+    elif part.part_kind == "text":
+        st.markdown("**Response**")
+        st.code(part.content, language="text")
+    elif part.part_kind == "tool-call":
+        args = part.args if isinstance(part.args, str) else json.dumps(part.args, indent=2)
+        st.markdown(f"**Tool Call** (`{part.tool_name}`)")
+        st.code(args, language="json")
+
+
+def _render_trace(traces: list[common.AgentTrace]) -> None:
+    """Render agent traces as expandable sections in the Streamlit chat."""
+    for trace in traces:
+        with st.expander(f"Agent: {trace.agent_name}", expanded=False):
+            for message in trace.messages:
+                if message.kind == "request":
+                    for part in message.parts:
+                        _render_request_part(part)
+                elif message.kind == "response":
+                    model_label = message.model_name or "unknown"
+                    usage = message.usage
+                    token_info = (
+                        f"{usage.input_tokens} in / {usage.output_tokens} out" if usage else ""
+                    )
+                    st.caption(f"Model: `{model_label}` | Tokens: {token_info}")
+                    for part in message.parts:
+                        _render_response_part(part)
 
 
 def _format_support(reply: common.SupportReply) -> str:
@@ -429,6 +490,8 @@ def _render() -> None:
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
+            if msg.get("traces") and st.session_state.get("show_traces", False):
+                _render_trace(msg["traces"])
 
     # User input — check for prefilled scenario or manual entry
     user_input = st.chat_input("Describe an incident or ask a support question...")
@@ -451,23 +514,33 @@ def _render() -> None:
             status_placeholder.info(f"⏳ {message}")
 
         status_placeholder.info("⏳ Classifying intent...")
+        collector = common.TraceCollector()
 
         try:
-            classification = _run_async(_classify_intent(user_input))
+            classification = _run_async(_classify_intent(user_input, trace_collector=collector))
             is_sre = classification.intent == intent_router.Intent.SRE
             route_label = "SRE Investigation" if is_sre else "Support Review"
             status_placeholder.info(f"⏳ Routed to **{route_label}** — {classification.rationale}")
 
             if is_sre:
-                reply = _run_async(_run_sre(user_input, on_status=_on_status))
+                reply = _run_async(
+                    _run_sre(user_input, on_status=_on_status, trace_collector=collector)
+                )
                 formatted = _format_investigation(reply)
             else:
-                reply = _run_async(_run_support(user_input, on_status=_on_status))
+                reply = _run_async(
+                    _run_support(user_input, on_status=_on_status, trace_collector=collector)
+                )
                 formatted = _format_support(reply)
 
             status_placeholder.empty()
             st.markdown(formatted)
-            st.session_state.messages.append({"role": "assistant", "content": formatted})
+            st.session_state.messages.append(
+                {"role": "assistant", "content": formatted, "traces": collector.traces}
+            )
+
+            if collector.traces and st.session_state.get("show_traces", False):
+                _render_trace(collector.traces)
 
         except Exception as exc:
             status_placeholder.empty()

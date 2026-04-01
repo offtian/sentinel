@@ -22,6 +22,7 @@ class Dependencies:
     document_searcher: searcher.BaseDocumentSearcher | None = None
     ticket_searcher: searcher.BasePastTicketSearcher | None = None
     persist_fn: common.PersistTicketReviewFn | None = None
+    trace_collector: common.TraceCollector | None = None
 
 
 @dataclasses.dataclass
@@ -46,6 +47,12 @@ class ClassifyTicket(BaseNode[State, Dependencies, common.SupportReply]):
                 ticket_labels=ctx.state.ticket.labels,
             ),
         )
+
+        if ctx.deps.trace_collector:
+            ctx.deps.trace_collector.record(
+                agent_name="Ticket Reviewer",
+                messages=result.all_messages(),
+            )
 
         logs.log_event(
             "ticket_classified",
@@ -156,6 +163,12 @@ class DraftResponse(BaseNode[State, Dependencies, common.SupportReply]):
             ),
         )
 
+        if ctx.deps.trace_collector:
+            ctx.deps.trace_collector.record(
+                agent_name="Response Drafter",
+                messages=result.all_messages(),
+            )
+
         logs.log_event(
             "response_drafted",
             params={
@@ -222,6 +235,7 @@ async def review_ticket(
     reviewer_model: str = "",
     drafter_model: str = "",
     persist_fn: common.PersistTicketReviewFn | None = None,
+    trace_collector: common.TraceCollector | None = None,
 ) -> common.SupportReply:
     """
     Run the full support ticket review pipeline.
@@ -236,6 +250,7 @@ async def review_ticket(
         document_searcher=document_searcher,
         ticket_searcher=ticket_searcher,
         persist_fn=persist_fn,
+        trace_collector=trace_collector,
     )
 
     review_graph = Graph(

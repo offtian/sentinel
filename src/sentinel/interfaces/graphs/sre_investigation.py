@@ -27,6 +27,7 @@ class Dependencies:
     pagerduty_client: PagerDutyClient | None = None
     post_to_slack: bool = True
     persist_fn: common.PersistInvestigationFn | None = None
+    trace_collector: common.TraceCollector | None = None
 
 
 @dataclasses.dataclass
@@ -53,6 +54,12 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
                 alert_source=ctx.state.alert.source,
             ),
         )
+
+        if ctx.deps.trace_collector:
+            ctx.deps.trace_collector.record(
+                agent_name="Alert Classifier",
+                messages=result.all_messages(),
+            )
 
         logs.log_event(
             "alert_classified",
@@ -132,6 +139,12 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
                 holmes_sources=self.holmes_sources,
             ),
         )
+
+        if ctx.deps.trace_collector:
+            ctx.deps.trace_collector.record(
+                agent_name="Root Cause Analyser",
+                messages=result.all_messages(),
+            )
 
         logs.log_event(
             "root_cause_analysed",
@@ -279,6 +292,7 @@ async def investigate_alert(
     pagerduty_client: PagerDutyClient | None = None,
     post_to_slack: bool = True,
     persist_fn: common.PersistInvestigationFn | None = None,
+    trace_collector: common.TraceCollector | None = None,
 ) -> common.InvestigationReply:
     """
     Run the full SRE investigation pipeline for an alert.
@@ -294,6 +308,7 @@ async def investigate_alert(
         pagerduty_client=pagerduty_client,
         post_to_slack=post_to_slack,
         persist_fn=persist_fn,
+        trace_collector=trace_collector,
     )
 
     investigation_graph = Graph(

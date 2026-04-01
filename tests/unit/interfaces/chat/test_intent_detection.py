@@ -1,5 +1,3 @@
-
-
 from sentinel.interfaces.graphs.agents import intent_router
 
 

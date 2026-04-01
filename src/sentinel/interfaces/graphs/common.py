@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import abc
+import dataclasses
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from pydantic import BaseModel
+from pydantic_ai.messages import ModelMessage
 
 from sentinel.domain.confidence import entities as confidence_entities
 
@@ -12,6 +14,30 @@ from sentinel.domain.confidence import entities as confidence_entities
 # Callable types for optional persistence hooks injected into pipeline dependencies.
 PersistInvestigationFn = Callable[["InvestigationReply"], Awaitable[None]]
 PersistTicketReviewFn = Callable[["SupportReply"], Awaitable[None]]
+
+
+@dataclasses.dataclass
+class AgentTrace:
+    """Captured message history from a single agent run."""
+
+    agent_name: str
+    messages: list[ModelMessage]
+
+
+class TraceCollector:
+    """
+    Accumulate agent traces across graph nodes.
+
+    Graph nodes append traces after each ``agent.run()`` call.
+    The chat UI reads ``traces`` after the graph completes.
+    """
+
+    def __init__(self) -> None:
+        self.traces: list[AgentTrace] = []
+
+    def record(self, *, agent_name: str, messages: list[ModelMessage]) -> None:
+        """Record a single agent invocation's message history."""
+        self.traces.append(AgentTrace(agent_name=agent_name, messages=messages))
 
 
 class InvestigationReply(BaseModel):
