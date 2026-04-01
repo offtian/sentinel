@@ -45,9 +45,10 @@ Reduce mean time to investigate (MTTI) for production alerts and mean time to fi
 
 1. **Automated remediation** — Sentinel investigates and suggests, but does not execute fixes or auto-respond to customers
 2. **Custom Kubernetes operators** — Integration with kagent/AgentGateway is deferred to a future phase pending evaluation
-3. **Scheduled maintenance agents** — Toby's vision of recurring agentic jobs (e.g. repo maintenance every Thursday at 5pm) is noted as a future capability, not MVP
-4. **Multi-tenant / multi-team** — V1 targets a single team's alerts and tickets
-5. **Fine-tuned models** — V1 uses general-purpose LLMs via LiteLLM; fine-tuning is a future optimisation
+3. **Multi-tenant / multi-team** — V1 targets a single team's alerts and tickets
+4. **Fine-tuned models** — V1 uses general-purpose LLMs via LiteLLM; fine-tuning is a future optimisation
+
+---
 
 ## Requirements
 
@@ -57,6 +58,8 @@ Grouped into the following areas of focus:
 2. AI Support Agent — Ticket Review Pipeline
 3. Infrastructure & Scalability
 4. Observability & Feedback Loop
+5. Scheduled Automations
+6. Hedge Fund Compliance & Quality Gating
 
 ### 1. AI SRE — Alert Investigation Pipeline
 
@@ -68,7 +71,7 @@ Acceptance criteria:
 - [x] Alert classifier determines severity, affected service, category, and urgency
 - [x] Observability integration queries logs, metrics, and traces — implemented via `DirectToolsetAdapter` with pluggable backends: `DatadogClient` (production) or `GrafanaClient` querying Prometheus/Loki/Tempo (local dev, open-source alternative)
 - [x] Root cause analyser synthesises findings into a structured summary with evidence, timeline, and remediation steps
-- [x] Confidence score (low/medium/high) is calculated and displayed
+- [x] Confidence score (low/medium/high) is calculated via multi-factor scoring (`ConfidenceScore.from_factors`) weighing source count (30%), relevance (50%), and recency (20%)
 - [x] Results are posted to a configurable Slack channel with formatted blocks
 - [x] Results are added as a note on the PagerDuty incident
 - [ ] Investigation completes within 2 minutes of alert receipt — not yet benchmarked in production
@@ -85,6 +88,7 @@ Acceptance criteria:
 - [x] Response drafter produces a professional response with source attribution and confidence score
 - [x] Results are posted to a configurable Slack channel
 - [x] Feedback API allows accepting/rejecting/modifying suggestions (`POST /api/support/reviews/{id}/feedback`)
+- [x] Feedback stats endpoint tracks acceptance rates over time (`GET /api/support/stats`)
 - [ ] Review completes within 3 minutes of ticket creation — not yet benchmarked in production
 
 ### 3. Infrastructure & Scalability
@@ -95,11 +99,14 @@ Acceptance criteria:
 
 - [x] PostgreSQL-backed job queue with `SELECT ... FOR UPDATE SKIP LOCKED` for safe multi-replica processing
 - [x] Background worker with configurable poll interval, job timeout (300s default), and max retries (3)
+- [x] Worker `--run-once` mode for Kubernetes CronJob execution (claims one job, executes, exits)
+- [x] Three job types: `SRE_INVESTIGATION`, `SUPPORT_REVIEW`, `SCHEDULED_AUTOMATION`
 - [x] Stale job recovery for workers that crash mid-investigation
 - [x] Helm chart with separate API and Worker deployments, HPA, PDB, and network policies
 - [x] Graceful shutdown on SIGTERM/SIGINT with 330s termination grace period
 - [x] Docker image based on Python 3.13-slim with non-root user
 - [x] Alembic database migrations run as a Helm pre-upgrade job
+- [x] CI/CD pipeline (`.github/workflows/ci.yml`) with lint, unit tests, integration tests (PostgreSQL), and Docker build
 
 ### 4. Observability & Feedback Loop
 
@@ -111,7 +118,77 @@ Acceptance criteria:
 - [ ] Datadog APM integration for distributed tracing across the pipeline
 - [x] Sentry integration for exception tracking
 - [x] Audit trail of all investigations and reviews persisted to the database
-- [x] Confidence score trends are trackable to measure accuracy improvement over time — multi-factor scoring (`from_factors`) with source count, relevance, and recency weights; feedback stats endpoint (`GET /api/support/stats`) tracks acceptance rates
+- [x] Multi-factor confidence scoring (`ConfidenceScore.from_factors`) with source count, relevance, and recency weights
+- [x] Feedback stats endpoint (`GET /api/support/stats`) returns acceptance/rejection rates for tracking accuracy improvement
+- [x] Evaluation framework with golden test datasets (5 SRE + 5 support cases) and automated quality rubrics (`make test-evals`)
+
+### 5. Scheduled Automations
+
+As a **platform engineer**, I want to **run recurring agentic tasks on a schedule**, so that I can **automate operational workflows like repository health checks without a separate runtime**.
+
+Acceptance criteria:
+
+- [x] `SCHEDULED_AUTOMATION` job type in the job queue
+- [x] Automation registry pattern (`application/automations/runner.py`) with named automations
+- [x] `POST /api/automations/trigger` to manually trigger an automation
+- [x] `GET /api/automations/available` to list registered automations
+- [x] First automation: `repo_health_check` (placeholder — needs GitHub API integration)
+- [x] Worker `--run-once` mode enables CronJob-based scheduling
+- [ ] MCP tool integration (FastMCP) for external tool communication
+
+### 6. Hedge Fund Compliance & Quality Gating
+
+As a **risk officer**, I want **human approval gates and quality checks on all automated outputs**, so that **no investigation finding or response suggestion reaches external systems without oversight**.
+
+Acceptance criteria:
+
+- [x] Graceful error handling in all pipeline nodes — critical nodes fail cleanly, degradable nodes continue with partial results
+- [x] `PublishFindings` uses `gather(return_exceptions=True)` so one failed channel does not block others
+- [x] Human approval gate: low-confidence investigations require Slack approve/reject before publishing to PagerDuty
+- [x] Approval API endpoints: `POST /approve`, `POST /reject`, `GET /approval-status` on investigations
+- [x] Configurable confidence threshold (`require_approval_below_confidence`, default 0.7)
+- [x] Immutable `ApprovalRequest` domain entity with approve/reject/auto-approve transitions
+- [x] Append-only audit log with SHA-256 input hashes for regulatory traceability
+- [ ] Supervisor graph wrapping both pipelines with rule-based quality gate before publishing
+- [ ] Tier 2 component evaluations: per-agent quality scoring with golden datasets
+
+---
+
+## Completion Status
+
+### Resolved — Originally Out of Scope
+
+The following items were originally listed as out of scope but have since been delivered:
+
+| Item | Resolution | Delivered In |
+|------|------------|--------------|
+| Scheduled maintenance agents | `SCHEDULED_AUTOMATION` job type, automation registry, `--run-once` worker mode, `POST /api/automations/trigger` API, Helm CronJob template | Phase C |
+
+### Resolved — Open Questions
+
+| Question | Resolution |
+|----------|------------|
+| Where should scheduled agentic jobs live? | Sentinel worker with `--run-once` mode, triggered by K8s CronJobs. No additional runtime needed. |
+| How do we build a feedback loop so investigations keep getting better? | Multi-factor confidence scoring + feedback stats API + evaluation framework with golden datasets |
+
+### Open Questions
+
+| Question | Status |
+|----------|--------|
+| Should we adopt AgentGateway for standardised agent-to-tool communication? | Deferred to Phase D framework evaluation |
+
+### Remaining Gaps
+
+| Gap | Blocked By | Target |
+|-----|------------|--------|
+| Investigation < 2min benchmark | Production deployment (separate repo) | Post-deploy |
+| Review < 3min benchmark | Production deployment (separate repo) | Post-deploy |
+| Datadog APM distributed tracing | ddtrace dependency + Datadog agent in cluster | Phase B |
+| MCP tool integration | FastMCP design + first MCP server to integrate with | Phase C |
+| Supervisor graph + quality gate | In progress | Current sprint |
+| Tier 2 component evals | In progress | Current sprint |
+
+---
 
 ## High complexity features
 
@@ -119,6 +196,8 @@ Acceptance criteria:
 - **LiteLLM gateway routing** — All LLM calls route through a LiteLLM proxy, mapping model names to backend providers (Ollama for local dev, cloud providers for production). Configuration management across environments is non-trivial
 - **Multi-source documentation search** — Parallel search across Confluence, Jira, and potentially S3/Notion requires careful timeout handling and result ranking
 - **Job queue consistency** — Ensuring exactly-once processing with idempotency keys across multiple worker replicas under failure conditions
+- **Multi-factor confidence scoring** — `ConfidenceScore.from_factors()` independently weighs source count, relevance, and recency with configurable weights
+- **Human approval gate** — Confidence-gated publishing with Slack interactive messages (approve/reject buttons) for hedge fund compliance
 - **Kubernetes-native agent management** — Future evaluation of kagent and AgentGateway for deploying, scaling, and observing agents as first-class Kubernetes resources
 
 ## Technical Stuff
@@ -128,20 +207,34 @@ Acceptance criteria:
 **Architecture:** Clean layered architecture enforced by import-linter:
 
 - `interfaces/` → API routers, Pydantic Graph pipelines, webhook handlers, Slack bot
-- `application/` → Use cases, job orchestration, persistence
+- `application/` → Use cases, job orchestration, persistence, automation runner
 - `domain/` → Business entities, search abstractions, vendor adapters
 - `data/` → SQLModel models, Alembic migrations
 - `vendors/` → External SDK wrappers
 
 **Pipelines are Pydantic Graph DAGs:**
 
-- SRE: ClassifyAlert → InvestigateWithHolmes → AnalyseRootCause → DetermineConfidence → PublishFindings
+- SRE: ClassifyAlert → InvestigateWithHolmes → AnalyseRootCause → DetermineConfidence → [ApprovalGate] → PublishFindings
 - Support: ClassifyTicket → SearchDocumentation → DraftResponse → DetermineConfidence
+
+**API surface:**
+
+- `POST /api/sre/webhooks/pagerduty` — PagerDuty webhook receiver
+- `POST /api/sre/webhooks/datadog` — Datadog webhook receiver
+- `POST /api/sre/investigate` — Manual investigation trigger
+- `GET /api/sre/investigations/{id}` — Fetch investigation result
+- `POST /api/sre/investigations/{id}/approve` — Approve investigation for publishing
+- `POST /api/sre/investigations/{id}/reject` — Reject investigation
+- `GET /api/sre/investigations/{id}/approval-status` — Check approval status
+- `POST /api/support/webhooks/jira` — Jira webhook receiver
+- `POST /api/support/review` — Manual review trigger
+- `GET /api/support/reviews/{id}` — Fetch review result
+- `POST /api/support/reviews/{id}/feedback` — Submit review feedback
+- `GET /api/support/stats` — Feedback acceptance rates
+- `POST /api/automations/trigger` — Trigger a scheduled automation
+- `GET /api/automations/available` — List registered automations
+- `GET /api/jobs/{id}` — Check job status
 
 **Serving suggestion:** Kubernetes via Helm chart with separate API deployment (user-facing, 2 replicas) and Worker deployment (background processing, 2 replicas). PostgreSQL for state. LiteLLM sidecar or shared gateway for LLM routing.
 
-**Open questions from Toby:**
-
-1. Where should scheduled agentic jobs live? Custom CronJob with Python + Agents SDK, or an OSS framework like kagent?
-2. How do we build a feedback loop so investigations "keep getting better over time"?
-3. Should we adopt AgentGateway for standardised agent-to-tool communication?
+**Test suite:** 220+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.
