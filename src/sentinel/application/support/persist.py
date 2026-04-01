@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -70,6 +71,25 @@ async def get_reviews_for_ticket(
         .order_by(col(models.TicketReviewRecord.created_at).desc())
     )
     return list(result.scalars().all())
+
+
+async def get_review_stats(
+    session: AsyncSession,
+) -> dict[str, int]:
+    """
+    Return counts of ticket reviews grouped by status.
+
+    Useful for tracking acceptance rates over time.
+    """
+    result = await session.execute(
+        select(
+            models.TicketReviewRecord.status,
+            func.count(col(models.TicketReviewRecord.id)),
+        ).group_by(models.TicketReviewRecord.status)
+    )
+    rows = result.all()
+    db_counts: dict[str, int] = {str(row[0]): int(row[1]) for row in rows}
+    return {status.value: db_counts.get(status.value, 0) for status in ReviewStatus}
 
 
 async def update_review_status(

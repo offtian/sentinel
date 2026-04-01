@@ -158,6 +158,32 @@ async def get_review(
     )
 
 
+@router.get("/stats", dependencies=[fastapi.Depends(require_database)])
+async def get_support_stats() -> fastapi.responses.JSONResponse:
+    """
+    Return acceptance/rejection rates for support review suggestions.
+
+    Provides counts of reviews grouped by status (drafted, accepted, rejected, modified).
+    """
+    async with database.get_session() as session:
+        counts = await support_persist.get_review_stats(session)
+
+    total = sum(counts.values())
+    reviewed = total - counts.get("drafted", 0)
+
+    return fastapi.responses.JSONResponse(
+        status_code=200,
+        content={
+            "total_reviews": total,
+            "total_reviewed": reviewed,
+            "counts": counts,
+            "acceptance_rate": (
+                round(counts.get("accepted", 0) / reviewed, 3) if reviewed > 0 else None
+            ),
+        },
+    )
+
+
 @router.post(
     "/reviews/{review_id}/feedback",
     dependencies=[fastapi.Depends(require_database)],
