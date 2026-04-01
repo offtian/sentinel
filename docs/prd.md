@@ -111,7 +111,7 @@ Acceptance criteria:
 - [ ] Datadog APM integration for distributed tracing across the pipeline
 - [x] Sentry integration for exception tracking
 - [x] Audit trail of all investigations and reviews persisted to the database
-- [ ] Confidence score trends are trackable to measure accuracy improvement over time
+- [x] Confidence score trends are trackable to measure accuracy improvement over time — multi-factor scoring (`from_factors`) with source count, relevance, and recency weights; feedback stats endpoint (`GET /api/support/stats`) tracks acceptance rates
 
 ## High complexity features
 

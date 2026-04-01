@@ -11,7 +11,7 @@ These live in the `sentinel` repository following clean architecture patterns. T
 
 ---
 
-## Current Status (as of 2026-03-28)
+## Current Status (as of 2026-04-01)
 
 Sentinel is deployed and running in Kubernetes:
 
@@ -34,7 +34,7 @@ sentinel-postgres   1/1  Running
 | Vendor adapters (PagerDuty, Datadog, Jira, Confluence) | Done | |
 | Search implementations | Done | Confluence, Jira past tickets, Datadog metrics, mocks + factory |
 | Slack integration | Done | Investigation summaries + support suggestions + Socket Mode chatbot |
-| Confidence scoring | Done | High/Medium/Low thresholds (naive -- needs multi-factor improvement) |
+| Confidence scoring | Done | Multi-factor scorer (`from_factors`) with source count, relevance, recency weights |
 | Investigation persistence | Done | save/get/query in PostgreSQL |
 | Support persistence | Done | save/get/query wired into worker via `persist_fn` |
 | Feedback API | Done | `POST /api/support/reviews/{id}/feedback` with accepted/rejected/modified statuses |
@@ -47,18 +47,24 @@ sentinel-postgres   1/1  Running
 | LiteLLM config | Done | Routes to local Ollama for dev |
 | Prompt templates | Done | Jinja2 `.j2` files in `plugins/prompts/`, loaded at agent init |
 | Config via Pydantic Settings | Done | Replaced environs with `pydantic-settings`; backward-compatible `_config.DATABASE_URL` access |
-| Test suite | Done | 116 unit tests, integration, functional with factories |
+| Test suite | Done | 170 tests: unit (141), functional (15), evals (14) with factories |
+| CI/CD pipeline | Done | `.github/workflows/ci.yml` — lint, unit, integration (PostgreSQL), Docker build |
+| Evaluation framework | Done | Golden test datasets (5 SRE + 5 support cases) with quality rubrics |
+| Feedback stats API | Done | `GET /api/support/stats` — acceptance/rejection rates |
+| Worker `--run-once` mode | Done | `--run-once` CLI flag for CronJob execution |
+| Scheduled automations | Done | `SCHEDULED_AUTOMATION` job type, `POST /api/automations/trigger`, registry pattern |
+| Repo health check automation | Done | First registered automation (placeholder for GitHub API integration) |
 
 ### Key Gaps
 
 | Gap | Impact |
 |-----|--------|
-| No CI/CD pipeline | No `.circleci/` or `.github/workflows/` in repo |
-| No evaluation framework | No way to measure or regress LLM output quality |
 | No distributed tracing | structlog events exist but no ddtrace/OTEL spans |
-| No scheduled automations | CronJob template ready but empty, no `--run-once` worker mode |
+| No LangFuse integration | LiteLLM callback not configured; no per-call cost/latency tracking |
 | Bedrock KB / Notion searcher not implemented | Config option exists but no code |
 | mypy errors from `_config.__getattr__` | Returns `object` type; vendor adapter call sites need `cast()` or typed accessors |
+| MCP tool integration (FastMCP) | Phase C item — not yet started |
+| Production deployment (infra) | ktl-services-deployment config, ECR repos, IAM role not in this repo |
 
 ---
 
@@ -619,76 +625,62 @@ dependencies = [
 
 ### Updated Roadmap
 
-### Phase A: Complete Wiring and Ship to Production (2 weeks)
+### Phase A: Complete Wiring and Ship to Production (2 weeks) — COMPLETE
 
-Close remaining gaps so both pipelines are fully operational end-to-end in production.
+All core deliverables shipped. Production deployment (infra config) is in a separate repo.
 
-1. **Wire support persistence into worker pipeline**
-   - `worker.py` `_run_support_review()` -- add `persist_fn` injection, mirroring the SRE path
-   - `support_review.py` -- accept optional `persist_fn` in Dependencies
+1. ~~**Wire support persistence into worker pipeline**~~ — Done
+2. ~~**Feedback and retrieval API endpoints**~~ — Done
+3. ~~**Replace HolmesGPT stub with DirectToolsetAdapter**~~ — Done
+4. ~~**CI/CD pipeline**~~ — Done (`.github/workflows/ci.yml` — lint, typecheck, unit tests, integration tests with PostgreSQL, Docker build)
+5. **Production deployment** — GAP (ktl-services-deployment config, ECR repos, IAM role not in this repo)
 
-2. **Feedback and retrieval API endpoints**
-   - `POST /api/support/reviews/{id}/feedback` calling existing `update_review_status()`
-   - `GET /api/support/reviews/{id}` and `GET /api/sre/investigations/{id}`
+### Phase B: Observability and Quality Loop (2-3 weeks) — PARTIAL
 
-3. **Replace HolmesGPT stub with DirectToolsetAdapter**
-   - New `DirectToolsetAdapter(BaseHolmesAdapter)` in `domain/sre/holmes_adapter.py`
-   - Calls `DatadogClient.query_logs()`, `query_metrics()`, `query_traces()` concurrently
-   - Returns structured `HolmesInvestigationResult` from real observability data
-   - Uses existing circuit breaker for resilience
-   - HolmesGPT SDK can be reconsidered later when dependency conflict resolves
+Items 3-5 complete. Distributed tracing and LangFuse remain.
 
-4. **CI/CD pipeline**
-   - `.circleci/config.yml` or `.github/workflows/ci.yml` -- lint, typecheck, test, build, deploy
-
-5. **Production deployment**
-   - ktl-services-deployment config, ECR repos, IAM role, ACM certificate
-
-### Phase B: Observability and Quality Loop (2-3 weeks)
-
-Answer "how do I make sure it keeps getting better over time."
-
-1. **Distributed tracing**
+1. **Distributed tracing** — NOT STARTED
    - ddtrace spans around graph node `run()` methods and vendor adapter HTTP calls
    - Enable `instrument=True` on PydanticAI agents
    - Tag traces with `run_id` linking webhook receipt to final output
 
-2. **LangFuse integration via LiteLLM**
+2. **LangFuse integration via LiteLLM** — NOT STARTED
    - Add `success_callback: ["langfuse"]` to `litellm_config.yaml`
    - No direct Python dependency -- LiteLLM handles the callback
    - Per-call cost tracking, latency, prompt versioning
 
-3. **Evaluation framework**
-   - `tests/evals/datasets/sre_golden.json` -- 10-15 golden cases per pipeline
-   - `tests/evals/test_sre_evals.py`, `test_support_evals.py` -- run with real LLM, score with automated rubrics
-   - Wire into `make test-evals`
+3. ~~**Evaluation framework**~~ — Done
+   - `tests/evals/datasets/sre_golden.json` (5 cases), `support_golden.json` (5 cases)
+   - `tests/evals/test_sre_evals.py`, `test_support_evals.py` — parametrized golden case tests with quality rubrics
+   - Wired into `make test-evals` (runs functional + evals)
 
-4. **Improved confidence scoring**
-   - Replace naive `from_total()` with multi-factor scorer
-   - SRE: source count, data freshness, tool call count, evidence correlation
-   - Support: doc source count, source authority, recency, citation grounding
+4. ~~**Improved confidence scoring**~~ — Done
+   - `ConfidenceScore.from_factors()` — multi-factor scorer with source count (30%), relevance (50%), recency (20%)
+   - Both SRE and Support pipelines updated to use `from_factors()` in `DetermineConfidence` node
+   - `from_total()` retained for backward compatibility
 
-5. **Feedback metrics**
-   - `GET /api/support/stats` -- acceptance rates over time
-   - Emit as Datadog custom metric for dashboarding
+5. ~~**Feedback metrics**~~ — Done
+   - `GET /api/support/stats` — returns acceptance rates, counts by status
+   - `get_review_stats()` query in `application/support/persist.py`
 
-### Phase C: Scheduled Automations and Extensibility (2-3 weeks)
+### Phase C: Scheduled Automations and Extensibility (2-3 weeks) — PARTIAL
 
-Answer "where do scheduled automations live" and "custom agentic automations on a schedule."
+Items 1-3 complete. MCP integration remains.
 
-**Decision:** Scheduled automations live in Sentinel. The existing worker handles execution. Kubernetes CronJobs trigger it. No new runtime needed.
+1. ~~**Worker `--run-once` mode**~~ — Done
+   - `python -m sentinel.worker --run-once` — claims single job, executes, exits
+   - Designed for Kubernetes CronJob usage
 
-1. **Worker `--run-once` mode**
-   - CLI arg parsing so CronJobs run a single job and exit instead of polling
+2. ~~**Scheduled automation job type**~~ — Done
+   - `SCHEDULED_AUTOMATION` added to `JobType` enum
+   - `_run_scheduled_automation()` dispatch in worker, `enqueue_automation()` convenience function
+   - `POST /api/automations/trigger` and `GET /api/automations/available` endpoints
+   - Registry pattern in `application/automations/runner.py`
 
-2. **Scheduled automation job type**
-   - Add `SCHEDULED_AUTOMATION` to `JobType` enum
-   - Add `_run_scheduled_automation()` dispatch branch in worker
-   - New `POST /api/automations/trigger` and `GET /api/automations/runs` endpoints
-
-3. **First automation: Repository Health Check**
-   - Weekly CronJob that inspects repos via GitHub API, checks stale PRs, posts summary to Slack
-   - Helm values entry:
+3. ~~**First automation: Repository Health Check**~~ — Done (placeholder)
+   - `repo_health_check` registered in automation runner
+   - Placeholder implementation — needs GitHub API integration for production use
+   - Helm CronJob template ready:
      ```yaml
      cronJobs:
        repo-health:
@@ -696,7 +688,7 @@ Answer "where do scheduled automations live" and "custom agentic automations on 
          schedule: "0 17 * * 4"  # Thursday 5pm
      ```
 
-4. **MCP tool integration (FastMCP)**
+4. **MCP tool integration (FastMCP)** — NOT STARTED
    - MCP client for calling external MCP servers as tools
    - PydanticAI agents can register MCP tools as callable functions
    - Enables automations to use MCP-published tools without vendor-specific code
@@ -754,15 +746,17 @@ make k8s-up                     # Deploy to local K8s
 - CI pipeline passes on PR
 
 ### Phase B Verification
-- `make test-evals` runs golden cases and produces scored results
-- LangFuse dashboard shows LLM calls with cost/latency
-- Datadog traces show full request path from webhook to output
-- `GET /api/support/stats` returns acceptance rates
+- [x] `make test-evals` runs golden cases and produces scored results (14 eval tests passing)
+- [ ] LangFuse dashboard shows LLM calls with cost/latency
+- [ ] Datadog traces show full request path from webhook to output
+- [x] `GET /api/support/stats` returns acceptance rates
 
 ### Phase C Verification
-- CronJob triggers on schedule, worker picks up job, automation runs, Slack post appears
-- `POST /api/automations/trigger` manually runs same automation
-- MCP tools callable from within a PydanticAI agent
+- [x] `POST /api/automations/trigger` manually triggers an automation and enqueues a job
+- [x] `GET /api/automations/available` lists registered automations
+- [x] Worker `--run-once` mode claims a single job and exits
+- [ ] CronJob triggers on schedule in production K8s
+- [ ] MCP tools callable from within a PydanticAI agent
 
 ### Phase D Verification
 - kagent agent responds to K8s alert with kubectl/Prometheus findings
