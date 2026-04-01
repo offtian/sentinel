@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from sentinel.domain.sre import holmes_adapter
 from sentinel.interfaces.graphs import sre_investigation
+from tests import factories
 from tests.factories import make_alert
 
 
@@ -11,7 +11,7 @@ from tests.factories import make_alert
 class TestApprovalGate:
     @pytest.mark.asyncio
     async def test_low_confidence_triggers_approval_request(
-        self, mock_holmes: holmes_adapter.MockHolmesAdapter
+        self, mock_holmes: factories.MockHolmesAdapter
     ) -> None:
         # Given a configured approval threshold of 0.8
         approval_calls: list[tuple[object, ...]] = []
@@ -43,7 +43,7 @@ class TestApprovalGate:
 
     @pytest.mark.asyncio
     async def test_high_confidence_skips_approval(
-        self, mock_holmes: holmes_adapter.MockHolmesAdapter
+        self, mock_holmes: factories.MockHolmesAdapter
     ) -> None:
         # Given a low approval threshold of 0.3
         approval_calls: list[tuple[object, ...]] = []
@@ -72,7 +72,7 @@ class TestApprovalGate:
 
     @pytest.mark.asyncio
     async def test_no_approval_fn_skips_gate(
-        self, mock_holmes: holmes_adapter.MockHolmesAdapter
+        self, mock_holmes: factories.MockHolmesAdapter
     ) -> None:
         # Given a threshold but no approval function
         alert = make_alert()
@@ -94,7 +94,7 @@ class TestApprovalGate:
 
     @pytest.mark.asyncio
     async def test_zero_threshold_disables_approval(
-        self, mock_holmes: holmes_adapter.MockHolmesAdapter
+        self, mock_holmes: factories.MockHolmesAdapter
     ) -> None:
         # Given threshold of 0.0 (disabled) with an approval function
         approval_calls: list[tuple[object, ...]] = []

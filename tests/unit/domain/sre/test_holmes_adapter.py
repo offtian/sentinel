@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import pytest
 
 from sentinel.domain.sre import entities, holmes_adapter
+from tests import factories
 
 
 @pytest.fixture
@@ -22,7 +23,7 @@ def sample_alert():
 
 class TestMockHolmesAdapter:
     async def test_default_mock_result(self, sample_alert):
-        adapter = holmes_adapter.MockHolmesAdapter()
+        adapter = factories.MockHolmesAdapter()
         result = await adapter.investigate(alert=sample_alert)
 
         assert result.analysis == "Mock investigation: no issues found."
@@ -35,7 +36,7 @@ class TestMockHolmesAdapter:
             tool_calls=[{"tool": "custom_tool", "result": "custom result"}],
             sources_queried=["custom_source"],
         )
-        adapter = holmes_adapter.MockHolmesAdapter(result=custom_result)
+        adapter = factories.MockHolmesAdapter(result=custom_result)
         result = await adapter.investigate(alert=sample_alert)
 
         assert result.analysis == "Custom analysis"

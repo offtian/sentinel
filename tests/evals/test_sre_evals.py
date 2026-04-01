@@ -20,6 +20,7 @@ from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre import holmes_adapter
 from sentinel.interfaces.graphs import sre_investigation
 from sentinel.settings import PROMPTS_DIR
+from tests import factories
 
 
 DATASETS_DIR = Path(__file__).parent / "datasets"
@@ -37,12 +38,12 @@ def _build_alert(case: dict[str, Any]) -> sre_entities.Alert:
     return sre_entities.Alert.model_validate(case["alert"])
 
 
-def _build_holmes(case: dict[str, Any]) -> holmes_adapter.MockHolmesAdapter:
-    return holmes_adapter.MockHolmesAdapter(
+def _build_holmes(case: dict[str, Any]) -> factories.MockHolmesAdapter:
+    return factories.MockHolmesAdapter(
         result=holmes_adapter.HolmesInvestigationResult(
             analysis=case["holmes_analysis"],
-            tool_calls=case["holmes_tool_calls"],
-            sources_queried=case["holmes_sources"],
+            tool_calls=case["holmes_tool_calls"],  # type: ignore[assignment]
+            sources_queried=case["holmes_sources"],  # type: ignore[assignment]
         )
     )
 

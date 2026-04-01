@@ -6,6 +6,7 @@ from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre import holmes_adapter
 from sentinel.interfaces.graphs import common, sre_investigation
 from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser
+from tests import factories
 from tests.factories import make_alert
 from tests.functional.conftest import FakeAgentResult
 
@@ -26,7 +27,7 @@ class TestClassifyAlertErrorHandling:
         # When the full pipeline is run
         result = await sre_investigation.investigate_alert(
             alert=alert,
-            holmes=holmes_adapter.MockHolmesAdapter(),
+            holmes=factories.MockHolmesAdapter(),
             classifier_model="test-model",
             analyser_model="test-model",
             post_to_slack=False,
@@ -125,7 +126,7 @@ class TestAnalyseRootCauseErrorHandling:
         # When the pipeline runs
         result = await sre_investigation.investigate_alert(
             alert=alert,
-            holmes=holmes_adapter.MockHolmesAdapter(),
+            holmes=factories.MockHolmesAdapter(),
             classifier_model="test-model",
             analyser_model="test-model",
             post_to_slack=False,
@@ -188,7 +189,7 @@ class TestPublishFindingsErrorHandling:
         # When the pipeline runs with Slack failing
         result = await sre_investigation.investigate_alert(
             alert=alert,
-            holmes=holmes_adapter.MockHolmesAdapter(),
+            holmes=factories.MockHolmesAdapter(),
             classifier_model="test-model",
             analyser_model="test-model",
             post_to_slack=True,

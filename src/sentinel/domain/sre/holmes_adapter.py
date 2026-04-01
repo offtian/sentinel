@@ -333,24 +333,3 @@ def _build_analysis(
         sections.append("No data sources returned results. Manual investigation needed.")
 
     return "\n".join(sections)
-
-
-class MockHolmesAdapter(BaseHolmesAdapter):
-    """Mock adapter for testing."""
-
-    def __init__(self, *, result: HolmesInvestigationResult | None = None) -> None:
-        self._result = result or HolmesInvestigationResult(
-            analysis="Mock investigation: no issues found.",
-            tool_calls=[
-                {"tool": "datadog_query_logs", "result": "No errors in last 30 minutes"},
-                {"tool": "kubernetes_get_pods", "result": "All pods healthy"},
-            ],
-            sources_queried=["datadog_logs", "kubernetes"],
-        )
-
-    async def investigate(
-        self,
-        *,
-        alert: entities.Alert,
-    ) -> HolmesInvestigationResult:
-        return self._result

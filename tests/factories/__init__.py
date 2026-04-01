@@ -5,6 +5,7 @@ from typing import Any
 
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.sre import entities as sre_entities
+from sentinel.domain.sre import holmes_adapter
 from sentinel.domain.support import entities as support_entities
 
 
@@ -129,3 +130,24 @@ def make_confidence_score(
     total: float = 0.8,
 ) -> confidence_entities.ConfidenceScore:
     return confidence_entities.ConfidenceScore.from_total(total)
+
+
+class MockHolmesAdapter(holmes_adapter.BaseHolmesAdapter):
+    """Mock adapter for testing."""
+
+    def __init__(self, *, result: holmes_adapter.HolmesInvestigationResult | None = None) -> None:
+        self._result = result or holmes_adapter.HolmesInvestigationResult(
+            analysis="Mock investigation: no issues found.",
+            tool_calls=[
+                {"tool": "datadog_query_logs", "result": "No errors in last 30 minutes"},
+                {"tool": "kubernetes_get_pods", "result": "All pods healthy"},
+            ],
+            sources_queried=["datadog_logs", "kubernetes"],
+        )
+
+    async def investigate(
+        self,
+        *,
+        alert: sre_entities.Alert,
+    ) -> holmes_adapter.HolmesInvestigationResult:
+        return self._result

@@ -12,6 +12,7 @@ from sentinel.interfaces.graphs.agents import (
     root_cause_analyser,
     ticket_reviewer,
 )
+from tests import factories
 
 
 @dataclass(frozen=True)
@@ -20,8 +21,8 @@ class FakeAgentResult[T]:
 
 
 @pytest.fixture
-def mock_holmes() -> holmes_adapter.MockHolmesAdapter:
-    return holmes_adapter.MockHolmesAdapter(
+def mock_holmes() -> factories.MockHolmesAdapter:
+    return factories.MockHolmesAdapter(
         result=holmes_adapter.HolmesInvestigationResult(
             analysis=(
                 "Datadog logs show a 5x spike in 5xx errors starting at 14:32 UTC. "

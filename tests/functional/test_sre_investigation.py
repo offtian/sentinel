@@ -7,7 +7,9 @@ import pytest
 
 from sentinel.domain.sre import holmes_adapter
 from sentinel.interfaces.graphs import sre_investigation
-from tests.factories import make_alert
+from sentinel.interfaces.graphs.agents import root_cause_analyser
+from tests import factories
+from tests.functional.conftest import FakeAgentResult
 
 
 async def _noop_slack(**kwargs: object) -> None:
@@ -125,7 +127,7 @@ class TestSreInvestigationPipeline:
 
     async def test_pipeline_writes_pagerduty_note_for_pd_alerts(self, mock_holmes):
         # Given a PagerDuty-sourced alert and a PagerDuty client
-        alert = make_alert(source="pagerduty", alert_id="PD-INCIDENT-1")
+        alert = factories.make_alert(source="pagerduty", alert_id="PD-INCIDENT-1")
         pd_notes: list[dict] = []
 
         class FakePagerDutyClient:
@@ -166,7 +168,7 @@ class TestSreInvestigationPipeline:
 class TestSrePipelineWithLowConfidence:
     async def test_low_confidence_holmes_produces_low_label(self, sample_alert, monkeypatch):
         # Given Holmes returns minimal findings
-        sparse_holmes = holmes_adapter.MockHolmesAdapter(
+        sparse_holmes = factories.MockHolmesAdapter(
             result=holmes_adapter.HolmesInvestigationResult(
                 analysis="Insufficient data to determine root cause.",
                 tool_calls=[],
@@ -175,8 +177,6 @@ class TestSrePipelineWithLowConfidence:
         )
 
         # And the root cause analyser reports low confidence
-        from sentinel.interfaces.graphs.agents import root_cause_analyser
-        from tests.functional.conftest import FakeAgentResult
 
         async def low_confidence_run(*, user_prompt, model, deps):
             return FakeAgentResult(
