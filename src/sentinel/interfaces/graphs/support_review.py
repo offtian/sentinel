@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from collections.abc import Sequence
 
+from pydantic_ai.toolsets import AbstractToolset
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
 from sentinel.domain.confidence import entities as confidence_entities
@@ -23,6 +25,9 @@ class Dependencies:
     ticket_searcher: searcher.BasePastTicketSearcher | None = None
     persist_fn: common.PersistTicketReviewFn | None = None
     trace_collector: common.TraceCollector | None = None
+    # Toolsets injected at agent.run() time.  Built by config.py.
+    reviewer_toolsets: Sequence[AbstractToolset[object]] = ()
+    drafter_toolsets: Sequence[AbstractToolset[object]] = ()
 
 
 @dataclasses.dataclass
@@ -49,6 +54,7 @@ class ClassifyTicket(BaseNode[State, Dependencies, common.SupportReply]):
                     ticket_priority=ctx.state.ticket.priority,
                     ticket_labels=ctx.state.ticket.labels,
                 ),
+                toolsets=list(ctx.deps.reviewer_toolsets) or None,
             )
         except Exception as exc:
             logs.log_exception(
@@ -183,6 +189,7 @@ class DraftResponse(BaseNode[State, Dependencies, common.SupportReply]):
                     document_search_results=self.document_results,
                     ticket_search_results=self.ticket_results,
                 ),
+                toolsets=list(ctx.deps.drafter_toolsets) or None,
             )
         except Exception as exc:
             logs.log_exception(
@@ -279,6 +286,8 @@ async def review_ticket(
     drafter_model: str = "",
     persist_fn: common.PersistTicketReviewFn | None = None,
     trace_collector: common.TraceCollector | None = None,
+    reviewer_toolsets: Sequence[AbstractToolset[object]] = (),
+    drafter_toolsets: Sequence[AbstractToolset[object]] = (),
 ) -> common.SupportReply:
     """
     Run the full support ticket review pipeline.
@@ -294,6 +303,8 @@ async def review_ticket(
         ticket_searcher=ticket_searcher,
         persist_fn=persist_fn,
         trace_collector=trace_collector,
+        reviewer_toolsets=reviewer_toolsets,
+        drafter_toolsets=drafter_toolsets,
     )
 
     review_graph = Graph(

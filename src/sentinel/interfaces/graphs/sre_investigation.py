@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Sequence
 from datetime import UTC, datetime
 
+from pydantic_ai.toolsets import AbstractToolset
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
 from sentinel.domain.confidence import entities as confidence_entities
@@ -30,6 +31,8 @@ class Dependencies:
     trace_collector: common.TraceCollector | None = None
     require_approval_below: float = 0.0  # 0 = never require approval
     request_approval_fn: common.RequestApprovalFn | None = None
+    # Toolsets injected at agent.run() time.  Built by config.py.
+    analyser_toolsets: Sequence[AbstractToolset[object]] = ()
 
 
 @dataclasses.dataclass
@@ -164,6 +167,7 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
                     holmes_tool_calls=self.holmes_tool_calls,
                     holmes_sources=self.holmes_sources,
                 ),
+                toolsets=list(ctx.deps.analyser_toolsets) or None,
             )
         except Exception as exc:
             logs.log_exception(
@@ -416,6 +420,7 @@ async def investigate_alert(
     trace_collector: common.TraceCollector | None = None,
     require_approval_below: float = 0.0,
     request_approval_fn: common.RequestApprovalFn | None = None,
+    analyser_toolsets: Sequence[AbstractToolset[object]] = (),
 ) -> common.InvestigationReply:
     """
     Run the full SRE investigation pipeline for an alert.
@@ -434,6 +439,7 @@ async def investigate_alert(
         trace_collector=trace_collector,
         require_approval_below=require_approval_below,
         request_approval_fn=request_approval_fn,
+        analyser_toolsets=analyser_toolsets,
     )
 
     investigation_graph = Graph(

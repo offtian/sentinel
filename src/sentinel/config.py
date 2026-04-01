@@ -18,6 +18,7 @@ Usage::
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
+from pydantic_ai.toolsets import FunctionToolset
 
 from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
 from sentinel.domain.search import factory as search_factory
@@ -31,6 +32,8 @@ from sentinel.domain.vendor_adapters.observability import (
     GrafanaClient,
 )
 from sentinel.domain.vendor_adapters.pagerduty import PagerDutyClient
+from sentinel.plugins.toolsets import documentation as doc_toolsets
+from sentinel.plugins.toolsets import observability as obs_toolsets
 from sentinel.settings import Settings, get_settings
 from sentinel.utils import logs
 
@@ -166,6 +169,43 @@ class Configuration(BaseModel):
     def build_metrics_searcher(self) -> searcher.BaseMetricsSearcher | None:
         """Build a metrics searcher if Datadog is configured."""
         return search_factory.build_metrics_searcher()
+
+    # -- Toolset builders (injected at agent.run() time) ----------------------
+
+    def build_observability_toolset(self, *, service_name: str = "") -> FunctionToolset[object]:
+        """
+        Build a read-only observability toolset for SRE investigation agents.
+
+        Tools include log search, metric queries, and error trace lookup.
+        Each tool no-ops when the observability client is unconfigured.
+
+        :param service_name: Default service for queries (from the alert).
+        """
+        return obs_toolsets.build_observability_toolset(
+            observability_client=self.observability_client,
+            service_name=service_name,
+        )
+
+    def build_support_search_toolset(self) -> FunctionToolset[object]:
+        """
+        Build a read-only search toolset for the response drafter agent.
+
+        Tools include documentation search and past-ticket resolution lookup.
+        """
+        return doc_toolsets.build_support_search_toolset(
+            document_searcher=self.build_document_searcher(),
+            ticket_searcher=self.build_ticket_searcher(),
+        )
+
+    def build_ticket_triage_toolset(self) -> FunctionToolset[object]:
+        """
+        Build a read-only toolset for the ticket reviewer agent.
+
+        Tools include duplicate/similar ticket detection.
+        """
+        return doc_toolsets.build_ticket_triage_toolset(
+            ticket_searcher=self.build_ticket_searcher(),
+        )
 
 
 _config: Configuration | None = None
