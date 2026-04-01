@@ -28,6 +28,8 @@ class Dependencies:
     post_to_slack: bool = True
     persist_fn: common.PersistInvestigationFn | None = None
     trace_collector: common.TraceCollector | None = None
+    require_approval_below: float = 0.0  # 0 = never require approval
+    request_approval_fn: common.RequestApprovalFn | None = None
 
 
 @dataclasses.dataclass
@@ -45,15 +47,27 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
     ) -> InvestigateWithHolmes | End[common.InvestigationReply]:
         await ctx.deps.status_update_client.update_status("Classifying alert...")
 
-        result = await alert_classifier.agent.run(
-            user_prompt=f"Alert: {ctx.state.alert.title}\n\n{ctx.state.alert.description}",
-            model=utils.get_model_with_gateway(ctx.deps.classifier_model),
-            deps=alert_classifier.Dependencies(
-                alert_title=ctx.state.alert.title,
-                alert_description=ctx.state.alert.description,
-                alert_source=ctx.state.alert.source,
-            ),
-        )
+        try:
+            result = await alert_classifier.agent.run(
+                user_prompt=f"Alert: {ctx.state.alert.title}\n\n{ctx.state.alert.description}",
+                model=utils.get_model_with_gateway(ctx.deps.classifier_model),
+                deps=alert_classifier.Dependencies(
+                    alert_title=ctx.state.alert.title,
+                    alert_description=ctx.state.alert.description,
+                    alert_source=ctx.state.alert.source,
+                ),
+            )
+        except Exception as exc:
+            logs.log_exception(
+                exc,
+                params={"alert_id": ctx.state.alert.id, "node": "ClassifyAlert"},
+            )
+            return End(
+                common.InvestigationReply(
+                    alert_id=ctx.state.alert.id,
+                    root_cause=f"Classification failed: {type(exc).__name__} — {exc}",
+                )
+            )
 
         if ctx.deps.trace_collector:
             ctx.deps.trace_collector.record(
@@ -98,7 +112,18 @@ class InvestigateWithHolmes(BaseNode[State, Dependencies, common.InvestigationRe
             "Investigating with observability tools..."
         )
 
-        holmes_result = await ctx.deps.holmes.investigate(alert=ctx.state.alert)
+        try:
+            holmes_result = await ctx.deps.holmes.investigate(alert=ctx.state.alert)
+        except Exception as exc:
+            logs.log_exception(
+                exc,
+                params={"alert_id": ctx.state.alert.id, "node": "InvestigateWithHolmes"},
+            )
+            return AnalyseRootCause(
+                holmes_analysis="Observability investigation unavailable — proceeding with alert context only.",
+                holmes_tool_calls=[],
+                holmes_sources=[],
+            )
 
         logs.log_event(
             "holmes_investigation_completed",
@@ -127,18 +152,32 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
     async def run(self, ctx: GraphRunContext[State, Dependencies]) -> DetermineConfidence:
         await ctx.deps.status_update_client.update_status("Analysing root cause...")
 
-        result = await root_cause_analyser.agent.run(
-            user_prompt=f"Analyse this alert: {ctx.state.alert.title}",
-            model=utils.get_model_with_gateway(ctx.deps.analyser_model),
-            deps=root_cause_analyser.Dependencies(
-                alert_title=ctx.state.alert.title,
-                alert_description=ctx.state.alert.description,
-                alert_severity=ctx.state.alert.severity.value,
-                holmes_analysis=self.holmes_analysis,
-                holmes_tool_calls=self.holmes_tool_calls,
-                holmes_sources=self.holmes_sources,
-            ),
-        )
+        try:
+            result = await root_cause_analyser.agent.run(
+                user_prompt=f"Analyse this alert: {ctx.state.alert.title}",
+                model=utils.get_model_with_gateway(ctx.deps.analyser_model),
+                deps=root_cause_analyser.Dependencies(
+                    alert_title=ctx.state.alert.title,
+                    alert_description=ctx.state.alert.description,
+                    alert_severity=ctx.state.alert.severity.value,
+                    holmes_analysis=self.holmes_analysis,
+                    holmes_tool_calls=self.holmes_tool_calls,
+                    holmes_sources=self.holmes_sources,
+                ),
+            )
+        except Exception as exc:
+            logs.log_exception(
+                exc,
+                params={"alert_id": ctx.state.alert.id, "node": "AnalyseRootCause"},
+            )
+            if ctx.state.investigation:
+                ctx.state.investigation = ctx.state.investigation.model_copy(
+                    update={
+                        "root_cause": "Root cause analysis unavailable — LLM error. Manual investigation required.",
+                        "remediation": "Please investigate this alert manually.",
+                    }
+                )
+            return DetermineConfidence(raw_confidence=0.0)
 
         if ctx.deps.trace_collector:
             ctx.deps.trace_collector.record(
@@ -186,20 +225,84 @@ class DetermineConfidence(BaseNode[State, Dependencies, common.InvestigationRepl
 
     raw_confidence: float = 0.0
 
-    async def run(self, ctx: GraphRunContext[State, Dependencies]) -> PublishFindings:
-        findings_count = (
-            len(ctx.state.investigation.findings) if ctx.state.investigation else 0
-        )
-        confidence = confidence_entities.ConfidenceScore.from_factors(
-            source_count=findings_count,
-            max_expected_sources=5,
-            relevance=self.raw_confidence,
-            recency=0.8,
-        )
+    async def run(
+        self, ctx: GraphRunContext[State, Dependencies]
+    ) -> PublishFindings | End[common.InvestigationReply]:
+        try:
+            findings_count = (
+                len(ctx.state.investigation.findings) if ctx.state.investigation else 0
+            )
+            confidence = confidence_entities.ConfidenceScore.from_factors(
+                source_count=findings_count,
+                max_expected_sources=5,
+                relevance=self.raw_confidence,
+                recency=0.8,
+            )
+        except Exception as exc:
+            logs.log_exception(
+                exc,
+                params={"alert_id": ctx.state.alert.id, "node": "DetermineConfidence"},
+            )
+            confidence = confidence_entities.ConfidenceScore.from_total(0.0)
 
         if ctx.state.investigation:
             ctx.state.investigation = ctx.state.investigation.model_copy(
                 update={"confidence_score": confidence.total}
+            )
+
+        # Gate: if confidence is below threshold and approval function is configured,
+        # post approval request to Slack instead of publishing directly.
+        if (
+            ctx.deps.require_approval_below > 0
+            and confidence.total < ctx.deps.require_approval_below
+            and ctx.deps.request_approval_fn
+        ):
+            investigation_id = (
+                str(ctx.state.investigation.id) if ctx.state.investigation else "unknown"
+            )
+            findings_summary = ""
+            if ctx.state.investigation and ctx.state.investigation.findings:
+                findings_summary = "\n".join(
+                    f"- [{f.source}] {f.summary}" for f in ctx.state.investigation.findings
+                )
+
+            await ctx.deps.request_approval_fn(
+                investigation_id,
+                ctx.state.alert.id,
+                ctx.state.alert.title,
+                ctx.state.investigation.root_cause if ctx.state.investigation else None,
+                ctx.state.investigation.remediation if ctx.state.investigation else None,
+                confidence.label.value if confidence else None,
+                findings_summary,
+            )
+
+            logs.log_event(
+                "approval_required",
+                params={
+                    "alert_id": ctx.state.alert.id,
+                    "confidence": confidence.total,
+                    "threshold": ctx.deps.require_approval_below,
+                },
+            )
+
+            return End(
+                common.InvestigationReply(
+                    alert_id=ctx.state.alert.id,
+                    root_cause=(
+                        ctx.state.investigation.root_cause if ctx.state.investigation else None
+                    ),
+                    remediation=(
+                        ctx.state.investigation.remediation if ctx.state.investigation else None
+                    ),
+                    confidence=confidence,
+                    findings_summary=findings_summary,
+                    sources_queried=(
+                        [f.source for f in ctx.state.investigation.findings]
+                        if ctx.state.investigation
+                        else []
+                    ),
+                    approval_status="pending",
+                )
             )
 
         return PublishFindings(confidence=confidence)
@@ -276,7 +379,17 @@ class PublishFindings(BaseNode[State, Dependencies, common.InvestigationReply]):
             publish_tasks.append(ctx.deps.persist_fn(reply))
 
         if publish_tasks:
-            await asyncio.gather(*publish_tasks)
+            results = await asyncio.gather(*publish_tasks, return_exceptions=True)
+            for i, result in enumerate(results):
+                if isinstance(result, BaseException):
+                    logs.log_exception(
+                        result,
+                        params={
+                            "alert_id": ctx.state.alert.id,
+                            "node": "PublishFindings",
+                            "publish_channel_index": i,
+                        },
+                    )
 
         logs.log_event(
             "investigation_completed",
@@ -301,6 +414,8 @@ async def investigate_alert(
     post_to_slack: bool = True,
     persist_fn: common.PersistInvestigationFn | None = None,
     trace_collector: common.TraceCollector | None = None,
+    require_approval_below: float = 0.0,
+    request_approval_fn: common.RequestApprovalFn | None = None,
 ) -> common.InvestigationReply:
     """
     Run the full SRE investigation pipeline for an alert.
@@ -317,6 +432,8 @@ async def investigate_alert(
         post_to_slack=post_to_slack,
         persist_fn=persist_fn,
         trace_collector=trace_collector,
+        require_approval_below=require_approval_below,
+        request_approval_fn=request_approval_fn,
     )
 
     investigation_graph = Graph(
