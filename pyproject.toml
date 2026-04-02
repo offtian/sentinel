@@ -43,6 +43,7 @@ dependencies = [
     "tenacity",
     "invoke",
     "attrs",
+    "fastmcp>=2.0",
     # Vendors
     "pdpyras",
     "datadog-api-client",
