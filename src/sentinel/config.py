@@ -24,6 +24,7 @@ from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
 from sentinel.domain.search import factory as search_factory
 from sentinel.domain.search import searcher
 from sentinel.domain.sre import holmes_adapter
+from sentinel.domain.sre import investigation
 from sentinel.domain.vendor_adapters.confluence import ConfluenceClient
 from sentinel.domain.vendor_adapters.jira import JiraClient
 from sentinel.domain.vendor_adapters.observability import (
@@ -155,6 +156,36 @@ class Configuration(BaseModel):
                 circuit_breaker=self.observability_circuit_breaker,
             )
         return holmes_adapter.HolmesAdapter(enabled=False)
+
+    def build_k8s_investigation_adapter(
+        self,
+    ) -> investigation.K8sInvestigationAdapter | None:
+        """
+        Build the K8s investigation adapter based on configuration.
+
+        Returns None when K8s investigation is disabled.
+
+        :returns: A K8sInvestigationAdapter or None.
+        """
+        backend = self.settings.k8s_investigation_backend
+        if not backend:
+            return None
+
+        if backend in ("native", "both"):
+            from sentinel.domain.sre import k8s_native_agent
+            from sentinel.interfaces.graphs.agents import k8s_runner
+
+            return k8s_native_agent.NativeK8sAgent(
+                k8s_client=None,  # Wire real K8s client when kubernetes lib is integrated
+                model_name=_normalise_model_name(self.settings.k8s_investigator_llm),
+                agent_runner=k8s_runner.run_k8s_agent,
+            )
+
+        return None  # kagent adapter wired in Task 11
+
+    @property
+    def k8s_investigator_model(self) -> str:
+        return _normalise_model_name(self.settings.k8s_investigator_llm)
 
     # -- Support pipeline helpers --------------------------------------------
 

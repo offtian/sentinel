@@ -45,6 +45,22 @@ class SRESettings(BaseSettings):
     # Seconds before a pending approval auto-approves (0 = never auto-approve).
     approval_timeout_seconds: int = 0
 
+    # K8s investigation agent
+    k8s_investigation_backend: str = ""  # "native", "kagent", "both", or "" (disabled)
+    k8s_investigator_llm: str = "ollama/qwen3:8b"
+    k8s_cluster_name: str = ""
+    k8s_default_namespace: str = ""
+
+    # Kagent
+    kagent_investigation_timeout_seconds: int = 120
+    kagent_namespace: str = "kagent-system"
+
+    # MCP
+    mcp_servers: str = ""  # JSON list: [{"name": "...", "url": "..."}, ...]
+    k8s_mcp_server_url: str = ""
+    mcp_server_port: int = 8811
+    mcp_server_api_key: str = ""
+
 
 class SupportSettings(BaseSettings):
     """Support-specific vendor and feature settings."""
