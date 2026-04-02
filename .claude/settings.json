@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/check-plan.sh",
+            "timeout": 5,
+            "statusMessage": "Checking for plan file..."
+          }
+        ]
+      }
+    ]
+  }
+}
