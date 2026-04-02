@@ -153,3 +153,31 @@ networkPolicy:
   # Grafana namespace for observability queries (Prometheus/Loki/Tempo via Grafana API)
   grafanaNamespace: ""
   extraEgress: []
+
+# -- K8s investigation agent configuration
+k8sAgent:
+  enabled: false
+  backend: "native"  # "native", "kagent", or "both" (comparison mode)
+  rbac:
+    create: true
+    namespaces: []  # Empty = cluster-wide, or restrict to specific namespaces
+
+# -- Kagent operator integration
+kagent:
+  enabled: false
+  namespace: "kagent-system"
+  investigationTimeout: 120
+
+# -- MCP server deployment (exposes Sentinel tools to external agents)
+mcpServer:
+  enabled: false
+  transport: "streamable-http"
+  port: 8811
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
