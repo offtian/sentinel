@@ -48,9 +48,15 @@ class TestParseMcpServerConfigs:
 
     def test_parses_stdio_server_config(self) -> None:
         # Given a JSON config with a stdio server
-        config = json.dumps([
-            {"name": "kubectl-mcp", "command": "kubectl-mcp-server", "args": ["--namespace", "default"]}
-        ])
+        config = json.dumps(
+            [
+                {
+                    "name": "kubectl-mcp",
+                    "command": "kubectl-mcp-server",
+                    "args": ["--namespace", "default"],
+                }
+            ]
+        )
 
         # When parsing
         result = mcp_toolsets.parse_mcp_server_configs(config_json=config)
@@ -64,10 +70,12 @@ class TestParseMcpServerConfigs:
 
     def test_parses_multiple_servers(self) -> None:
         # Given a JSON config with multiple servers
-        config = json.dumps([
-            {"name": "obs", "url": "http://localhost:9000"},
-            {"name": "k8s", "command": "kubectl-mcp", "args": []},
-        ])
+        config = json.dumps(
+            [
+                {"name": "obs", "url": "http://localhost:9000"},
+                {"name": "k8s", "command": "kubectl-mcp", "args": []},
+            ]
+        )
 
         # When parsing
         result = mcp_toolsets.parse_mcp_server_configs(config_json=config)

@@ -5,6 +5,7 @@ Analyses Kubernetes cluster state to diagnose production incidents.
 Uses K8s tools (pod status, deployment status, events, logs) injected
 at runtime via toolsets.
 """
+
 from __future__ import annotations
 
 import dataclasses

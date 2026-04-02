@@ -5,6 +5,7 @@ Delegates Kubernetes investigation to a kagent operator running
 in the cluster.  Creates a kagent CRD, polls for completion,
 and maps the results to Sentinel's InvestigationResult.
 """
+
 from __future__ import annotations
 
 import time
@@ -13,6 +14,7 @@ from typing import Any
 
 from sentinel.domain.sre import entities, investigation
 from sentinel.utils import logs
+
 
 logger = logs.get_logger()
 

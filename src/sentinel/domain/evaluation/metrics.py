@@ -1,6 +1,7 @@
 """
 Pipeline-agnostic evaluation metrics for comparing investigation backends.
 """
+
 from __future__ import annotations
 
 import attrs

@@ -8,6 +8,7 @@ The actual agent execution is injected via ``agent_runner`` to respect
 layer boundaries — the domain layer cannot import from interfaces or
 plugins.  The default runner is wired in ``config.py``.
 """
+
 from __future__ import annotations
 
 import time

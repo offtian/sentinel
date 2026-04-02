@@ -19,7 +19,10 @@ async def query_logs(
     Search recent logs for a service.
     """
     return await obs_tools.query_recent_logs(
-        client=obs_client, service=service, query=query, minutes_back=minutes_back,
+        client=obs_client,
+        service=service,
+        query=query,
+        minutes_back=minutes_back,
     )
 
 
@@ -34,7 +37,10 @@ async def query_metrics(
     Fetch metric time series for a service.
     """
     return await obs_tools.query_metrics(
-        client=obs_client, service=service, metric_name=metric_name, minutes_back=minutes_back,
+        client=obs_client,
+        service=service,
+        metric_name=metric_name,
+        minutes_back=minutes_back,
     )
 
 
@@ -48,5 +54,7 @@ async def query_error_traces(
     Search distributed traces for error spans.
     """
     return await obs_tools.query_error_traces(
-        client=obs_client, service=service, minutes_back=minutes_back,
+        client=obs_client,
+        service=service,
+        minutes_back=minutes_back,
     )

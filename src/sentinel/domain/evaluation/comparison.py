@@ -1,6 +1,7 @@
 """
 Side-by-side comparison of two investigation backends.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping

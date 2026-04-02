@@ -5,6 +5,7 @@ Lives in the interfaces layer so it can import the agent definition
 and plugin toolsets.  Injected into ``NativeK8sAgent`` via the
 ``agent_runner`` parameter at configuration time.
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence

@@ -19,15 +19,18 @@ Sentinel is an AI-powered automation platform with two core capabilities:
 ## Layer Architecture
 
 ```
-interfaces/    → FastAPI routers, Pydantic Graph pipelines, webhook handlers, PydanticAI agents
+interfaces/    → FastAPI routers, Pydantic Graph pipelines, webhook handlers, PydanticAI agents, MCP server
+  mcp/         → FastMCP server exposing Sentinel tools to external agents
     ↓
 application/   → Use cases and orchestration (investigate, triage, review_ticket, search_docs)
   supervisor/  → Quality-gate orchestration (supervise_sre_investigation, supervise_support_review)
     ↓
 domain/        → Business entities, search abstractions, vendor adapters, confidence scoring
+  sre/         → Alert, Investigation, BaseInvestigationAdapter hierarchy, K8s adapters
   pipeline/    → Pipeline error types (NodeError, PipelineNodeFailed)
   approval/    → ApprovalRequest, ApprovalDecision entities
   supervisor/  → QualityVerdict, SupervisorDecision, quality gate evaluation functions
+  evaluation/  → Pipeline-agnostic EvaluationMetrics, ComparisonResult for adapter comparison
     ↓
 evals/         → Evaluation framework (pydantic_evals): cases/, evaluators/, runner, reporting, rendering
     ↓
@@ -86,16 +89,32 @@ The `PublishFindings` node is wired to three output channels via the `Dependenci
 2. **PagerDuty** - Calls `PagerDutyClient.add_incident_note()` with markdown-formatted investigation note (skipped if client not configured)
 3. **Database** - Calls an injected `PersistInvestigationFn` callback that saves an `InvestigationRecord` via the application persistence layer
 
-### HolmesGPT Integration (Hybrid Approach)
+### Investigation Adapter Hierarchy
 
-HolmesGPT has a dependency conflict with pydantic-ai>=1.0.7 (pinned mcp versions). Our approach:
+All investigation backends implement `BaseInvestigationAdapter` (defined in `domain/sre/investigation.py`), which provides a unified contract with typed audit trail:
 
-1. **Adapter pattern** (`domain/sre/holmes_adapter.py`) defines `BaseHolmesAdapter` ABC
-2. **Production adapter** wraps HolmesGPT's toolsets for data gathering
-3. **Mock adapter** (`tests/factories/`) provides test fixtures without SDK dependency
-4. **Our pipeline** handles orchestration, analysis, confidence scoring, and output formatting
+```
+BaseInvestigationAdapter (ABC)           domain/sre/investigation.py
+├── BaseHolmesAdapter                    domain/sre/holmes_adapter.py
+│   ├── HolmesAdapter (stub)
+│   └── DirectToolsetAdapter             Queries Datadog/Grafana directly
+└── K8sInvestigationAdapter (ABC)        domain/sre/investigation.py
+    ├── NativeK8sAgent                   domain/sre/k8s_native_agent.py
+    └── KagentAdapter                    domain/sre/kagent_adapter.py
+```
 
-When the upstream dependency conflict is resolved, the production adapter will import HolmesGPT's `ToolExecutor`, `DatadogToolset`, `KubernetesToolset`, and `PrometheusToolset` directly.
+- **DirectToolsetAdapter** — queries observability backends directly (resolves HolmesGPT pydantic-ai dependency conflict)
+- **NativeK8sAgent** — PydanticAI agent with kubernetes Python client tools (pods, deployments, events, logs)
+- **KagentAdapter** — delegates to kagent K8s operator via CRD creation/polling (skeleton, pending operator deployment)
+
+All adapters return `InvestigationResult` with an `audit_trail` (typed envelope + freeform payload) for hedge fund compliance traceability. Config-driven backend selection via `K8S_INVESTIGATION_BACKEND` (native/kagent/both).
+
+### MCP Integration
+
+Sentinel integrates with MCP (Model Context Protocol) in both directions:
+
+- **MCP Server** (`interfaces/mcp/server.py`) — FastMCP server exposing observability, documentation, and investigation tools to external agents
+- **MCP Client** (`plugins/toolsets/mcp.py`) — consumes external MCP servers (e.g., kubectl MCP server) as PydanticAI toolsets, configured via `MCP_SERVERS` env var
 
 ## AI Support Pipeline
 
@@ -167,6 +186,7 @@ The `GrafanaClient` queries Prometheus (metrics), Loki (logs), and Tempo (traces
 |-------|---------|---------------|
 | `alert_classifier` | Classify alert severity, service, category | GPT-4.1-mini |
 | `root_cause_analyser` | Synthesise findings into root cause + remediation | GPT-4.1 |
+| `k8s_investigator` | Diagnose K8s incidents using cluster state tools | GPT-4.1 |
 | `ticket_reviewer` | Classify ticket, extract questions, generate search queries | GPT-4.1-mini |
 | `response_drafter` | Draft customer response from documentation | GPT-4.1 |
 
@@ -179,7 +199,7 @@ All agents route through a LiteLLM gateway for model management, cost tracking, 
 Two modules:
 
 - **`settings.py`** — Pydantic `Settings` class with env var overrides, `get_settings()` singleton
-- **`config.py`** — Application-level `Configuration` class with `load_vendors()`, `build_holmes_adapter()`, `build_document_searcher()`, LLM model name properties
+- **`config.py`** — Application-level `Configuration` class with `load_vendors()`, `build_holmes_adapter()`, `build_k8s_investigation_adapter()`, `build_document_searcher()`, LLM model name properties
 
 Key settings groups:
 
@@ -190,6 +210,8 @@ Key settings groups:
 - **Support config** - Jira/Confluence URLs and tokens
 - **Feature flags** - `SRE_AUTO_INVESTIGATE`, `SUPPORT_AUTO_DRAFT`
 - **Approval** - `REQUIRE_APPROVAL_BELOW_CONFIDENCE` (default 0.7), `APPROVAL_TIMEOUT_SECONDS` (default 0)
+- **K8s agent** - `K8S_INVESTIGATION_BACKEND` (native/kagent/both/disabled), `K8S_INVESTIGATOR_LLM`, cluster/namespace config
+- **MCP** - `MCP_SERVERS` (JSON list of HTTP/stdio server configs), `K8S_MCP_SERVER_URL`, `MCP_SERVER_PORT`
 - **Slack** - Bot token, app token, channel IDs
 
 ## Database
@@ -226,7 +248,9 @@ Located in `helm/sentinel/`. Multi-deployment chart supporting:
 
 - **api** deployment - FastAPI server (webhook receivers + API endpoints)
 - **worker** deployment - Background task processor (optional, configurable via `values.yaml`)
+- **mcp-server** deployment - FastMCP server exposing tools (optional, `mcpServer.enabled`)
 - **migration-job** - Pre-install/upgrade Helm hook running `alembic upgrade head`
+- **ClusterRole/ClusterRoleBinding** - Read-only K8s API access for investigation agent (optional, `k8sAgent.enabled`)
 - **HPA** - Per-deployment horizontal pod autoscaler (configurable min/max replicas, CPU target)
 - **PDB** - Pod disruption budget (`minAvailable: 1`)
 - **Ingress** - AWS ALB with optional Zscaler security group
@@ -250,7 +274,7 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 
 ## Test Count
 
-295+ tests covering:
+320+ tests covering:
 
 - Domain entities and operations (SRE, Support, Confidence, Search, Pipeline errors, Approval, Supervisor)
 - Webhook parsers (PagerDuty, Datadog) with dedup handling

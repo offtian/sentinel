@@ -3,9 +3,7 @@ from __future__ import annotations
 from sentinel.domain.evaluation import comparison, metrics
 
 
-def _make_metrics(
-    *, precision: float = 0.8, latency: int = 500
-) -> metrics.EvaluationMetrics:
+def _make_metrics(*, precision: float = 0.8, latency: int = 500) -> metrics.EvaluationMetrics:
     return metrics.EvaluationMetrics(
         factual_precision=precision,
         factual_recall=0.7,

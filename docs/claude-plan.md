@@ -36,9 +36,17 @@ sentinel/
 │   │   │   └── agents/              # PydanticAI agent definitions
 │   │   │       ├── alert_classifier.py
 │   │   │       ├── root_cause_analyser.py
+│   │   │       ├── k8s_investigator.py  # K8s investigation agent
+│   │   │       ├── k8s_runner.py        # Agent runner (layer bridge for DI)
 │   │   │       ├── ticket_reviewer.py
 │   │   │       ├── response_drafter.py
 │   │   │       └── utils.py          # LiteLLM gateway helper
+│   │   ├── mcp/                      # MCP server (FastMCP)
+│   │   │   ├── server.py             # FastMCP app definition
+│   │   │   └── tools/                # MCP tool wrappers
+│   │   │       ├── observability.py
+│   │   │       ├── documentation.py
+│   │   │       └── investigation.py
 │   │   └── webhooks/                 # PagerDuty/Datadog webhook handlers
 │   │       ├── pagerduty.py
 │   │       └── datadog.py
@@ -58,7 +66,10 @@ sentinel/
 │   ├── domain/                       # Layer 3: Business logic
 │   │   ├── sre/
 │   │   │   ├── entities.py           # Alert, Investigation, RootCause, Remediation
-│   │   │   ├── holmes_adapter.py     # BaseHolmesAdapter ABC + DirectToolsetAdapter
+│   │   │   ├── investigation.py      # BaseInvestigationAdapter, K8sInvestigationAdapter ABCs, AuditEntry, InvestigationResult
+│   │   │   ├── holmes_adapter.py     # BaseHolmesAdapter (extends BaseInvestigationAdapter) + DirectToolsetAdapter
+│   │   │   ├── k8s_native_agent.py   # NativeK8sAgent — PydanticAI agent + K8s tools
+│   │   │   ├── kagent_adapter.py     # KagentAdapter — delegates to kagent CRDs
 │   │   │   └── operations.py         # Investigation lifecycle management
 │   │   ├── support/
 │   │   │   ├── entities.py           # Ticket, ResponseSuggestion, DocSource
@@ -74,8 +85,12 @@ sentinel/
 │   │   │   └── entities.py           # ApprovalRequest, ApprovalDecision
 │   │   ├── supervisor/               # Quality gate evaluation
 │   │   │   └── quality_gate.py       # evaluate_sre_quality(), evaluate_support_quality()
+│   │   ├── evaluation/               # Pipeline-agnostic evaluation metrics
+│   │   │   ├── metrics.py            # EvaluationMetrics (12 dimensions)
+│   │   │   └── comparison.py         # ComparisonResult for adapter A/B testing
 │   │   ├── tools/                    # Domain tool definitions
 │   │   │   ├── documentation.py      # Documentation search tool functions
+│   │   │   ├── kubernetes.py         # K8s query tool functions (pods, deployments, events, logs)
 │   │   │   └── observability.py      # Observability query tool functions
 │   │   └── vendor_adapters/          # Vendor-specific implementations
 │   │       ├── pagerduty.py          # PagerDuty API client
@@ -95,6 +110,8 @@ sentinel/
 │   ├── plugins/                      # Plugin adapters (toolsets, prompts)
 │   │   ├── toolsets/                 # PydanticAI toolset wrappers
 │   │   │   ├── documentation.py      # Documentation toolset for agents
+│   │   │   ├── kubernetes.py         # K8s toolset for investigation agents
+│   │   │   ├── mcp.py                # MCP client toolset builder
 │   │   │   └── observability.py      # Observability toolset for agents
 │   │   └── prompts/                  # Jinja2 agent system prompt templates
 │   │
@@ -187,7 +204,7 @@ HolmesGPT SDK has a dependency conflict with pydantic-ai>=1.0.7. Rather than wai
 | agentgateway | Defer until multiple MCP backends or agent runtimes need centralised routing |
 | Claude Agent SDK / OpenAI Agent SDK | Evaluate -- may complement PydanticAI for specific workflows |
 | LangGraph / LangChain | Evaluate -- compare with Pydantic Graph for complex branching |
-| FastMCP | Adopt for tool integration |
+| FastMCP | **Adopted** -- MCP server at `interfaces/mcp/`, MCP client at `plugins/toolsets/mcp.py` |
 
 ### Quality Over Time
 
@@ -334,4 +351,11 @@ make k8s-up                     # Deploy to local K8s
 | Quality gate | `src/sentinel/domain/supervisor/quality_gate.py` |
 | Supervisor orchestrator | `src/sentinel/application/supervisor/orchestrator.py` |
 | Approval entities | `src/sentinel/domain/approval/entities.py` |
+| Investigation adapter hierarchy | `src/sentinel/domain/sre/investigation.py` |
+| K8s native agent | `src/sentinel/domain/sre/k8s_native_agent.py` |
+| Kagent adapter | `src/sentinel/domain/sre/kagent_adapter.py` |
+| K8s tools | `src/sentinel/domain/tools/kubernetes.py` |
+| MCP server | `src/sentinel/interfaces/mcp/server.py` |
+| MCP client builder | `src/sentinel/plugins/toolsets/mcp.py` |
+| Evaluation metrics | `src/sentinel/domain/evaluation/metrics.py` |
 | Helm chart | `helm/sentinel/values.yaml` |

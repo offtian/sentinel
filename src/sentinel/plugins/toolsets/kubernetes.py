@@ -32,9 +32,7 @@ def build_kubernetes_toolset(
     toolset: FunctionToolset[Any] = FunctionToolset()
 
     @toolset.tool
-    async def get_pod_status(
-        ctx: RunContext[Any], pod_name: str, ns: str = namespace
-    ) -> str:
+    async def get_pod_status(ctx: RunContext[Any], pod_name: str, ns: str = namespace) -> str:
         """
         Get the current status of a Kubernetes pod.
         Returns phase, restart count, and conditions.
@@ -44,9 +42,7 @@ def build_kubernetes_toolset(
             pod_name: Name of the pod to check.
             ns: Kubernetes namespace. Defaults to the alerted namespace.
         """
-        return await k8s_tools.get_pod_status(
-            client=k8s_client, namespace=ns, pod_name=pod_name
-        )
+        return await k8s_tools.get_pod_status(client=k8s_client, namespace=ns, pod_name=pod_name)
 
     @toolset.tool
     async def get_deployment_status(

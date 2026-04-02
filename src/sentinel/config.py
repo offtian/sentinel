@@ -23,8 +23,7 @@ from pydantic_ai.toolsets import FunctionToolset
 from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
 from sentinel.domain.search import factory as search_factory
 from sentinel.domain.search import searcher
-from sentinel.domain.sre import holmes_adapter
-from sentinel.domain.sre import investigation
+from sentinel.domain.sre import holmes_adapter, investigation
 from sentinel.domain.vendor_adapters.confluence import ConfluenceClient
 from sentinel.domain.vendor_adapters.jira import JiraClient
 from sentinel.domain.vendor_adapters.observability import (

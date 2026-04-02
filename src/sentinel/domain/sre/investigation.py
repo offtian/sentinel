@@ -104,5 +104,3 @@ class K8sInvestigationAdapter(BaseInvestigationAdapter):
     Adds K8s-specific context (cluster, namespace) to the base contract.
     Concrete implementations: NativeK8sAgent, KagentAdapter.
     """
-
-    pass

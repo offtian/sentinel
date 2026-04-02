@@ -28,9 +28,7 @@ class K8sClient(Protocol):
     @property
     def is_configured(self) -> bool: ...
 
-    async def get_pod_status(
-        self, *, namespace: str, pod_name: str
-    ) -> dict[str, Any]: ...
+    async def get_pod_status(self, *, namespace: str, pod_name: str) -> dict[str, Any]: ...
 
     async def get_deployment_status(
         self, *, namespace: str, deployment_name: str

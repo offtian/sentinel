@@ -80,10 +80,12 @@ class TestNativeK8sAgent:
             agent_runner=mock_runner,
         )
         alert = factories.make_alert(
-            title="Pod CrashLoopBackOff", service="payments-service",
+            title="Pod CrashLoopBackOff",
+            service="payments-service",
         )
         context = investigation.InvestigationContext(
-            cluster_name="prod-eu-west-1", namespace="payments",
+            cluster_name="prod-eu-west-1",
+            namespace="payments",
         )
 
         # When investigating
@@ -165,7 +167,8 @@ class TestNativeK8sAgent:
         )
         alert = factories.make_alert()
         context = investigation.InvestigationContext(
-            cluster_name="staging", namespace="api",
+            cluster_name="staging",
+            namespace="api",
         )
 
         # When investigating

@@ -20,7 +20,10 @@ class TestMcpObservabilityTools:
 
         # When calling the MCP tool function
         result = await mcp_obs_tools.query_logs(
-            obs_client=mock_client, service="api-service", query="error", minutes_back=30,
+            obs_client=mock_client,
+            service="api-service",
+            query="error",
+            minutes_back=30,
         )
 
         # Then it returns a formatted result
@@ -31,7 +34,10 @@ class TestMcpObservabilityTools:
         # Given no observability client
         # When calling the MCP tool function
         result = await mcp_obs_tools.query_logs(
-            obs_client=None, service="api-service", query="error", minutes_back=30,
+            obs_client=None,
+            service="api-service",
+            query="error",
+            minutes_back=30,
         )
 
         # Then a fallback message is returned
@@ -44,7 +50,9 @@ class TestMcpInvestigationTools:
         # Given valid alert info
         # When triggering an investigation
         result = await inv_tools.trigger_investigation(
-            alert_source="pagerduty", alert_id="P123", description="test",
+            alert_source="pagerduty",
+            alert_id="P123",
+            description="test",
         )
 
         # Then a confirmation message is returned

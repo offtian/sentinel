@@ -8,8 +8,7 @@ from typing import Any
 import attrs
 
 from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
-from sentinel.domain.sre import entities
-from sentinel.domain.sre import investigation
+from sentinel.domain.sre import entities, investigation
 from sentinel.domain.vendor_adapters.observability import BaseObservabilityClient
 from sentinel.utils import logs
 
@@ -35,7 +34,7 @@ class BaseHolmesAdapter(investigation.BaseInvestigationAdapter):
     """
 
     @abc.abstractmethod
-    async def investigate(
+    async def investigate(  # type: ignore[override]
         self,
         *,
         alert: entities.Alert,
@@ -70,7 +69,7 @@ class HolmesAdapter(BaseHolmesAdapter):
     def is_configured(self) -> bool:
         return self._enabled
 
-    async def investigate(
+    async def investigate(  # type: ignore[override]
         self,
         *,
         alert: entities.Alert,
@@ -133,7 +132,7 @@ class DirectToolsetAdapter(BaseHolmesAdapter):
     def is_configured(self) -> bool:
         return self._obs_client is not None and self._obs_client.is_configured
 
-    async def investigate(
+    async def investigate(  # type: ignore[override]
         self,
         *,
         alert: entities.Alert,

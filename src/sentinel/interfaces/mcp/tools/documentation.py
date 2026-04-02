@@ -18,5 +18,7 @@ async def search_documentation(
     Search documentation across Confluence, Notion, and S3.
     """
     return await doc_tools.search_documentation(
-        client=document_searcher, query=query, limit=max_results,
+        client=document_searcher,
+        query=query,
+        limit=max_results,
     )

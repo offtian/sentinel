@@ -4,6 +4,7 @@ MCP client toolset builder for PydanticAI agents.
 Parses ``MCP_SERVERS`` config and returns PydanticAI-compatible
 MCP toolsets that can be injected at ``agent.run(toolsets=[...])``.
 """
+
 from __future__ import annotations
 
 import json
@@ -12,6 +13,7 @@ from typing import Any
 import attrs
 
 from sentinel.utils import logs
+
 
 logger = logs.get_logger()
 

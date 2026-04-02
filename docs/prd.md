@@ -134,7 +134,7 @@ Acceptance criteria:
 - [x] `GET /api/automations/available` to list registered automations
 - [x] First automation: `repo_health_check` (placeholder — needs GitHub API integration)
 - [x] Worker `--run-once` mode enables CronJob-based scheduling
-- [ ] MCP tool integration (FastMCP) for external tool communication
+- [x] MCP tool integration (FastMCP) for external tool communication — FastMCP server exposing observability, documentation, and investigation tools; MCP client builder for consuming external MCP servers via PydanticAI
 
 ### 6. Hedge Fund Compliance & Quality Gating
 
@@ -224,7 +224,6 @@ AgentGateway becomes relevant when:
 | Investigation < 2min benchmark | Production deployment (separate repo) | Post-deploy |
 | Review < 3min benchmark | Production deployment (separate repo) | Post-deploy |
 | Datadog APM distributed tracing | ddtrace dependency + Datadog agent in cluster | Phase B |
-| MCP tool integration | FastMCP design + first MCP server to integrate with | Phase C |
 
 ---
 
