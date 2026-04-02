@@ -128,6 +128,18 @@ async def _classify_intent(
 # ---------------------------------------------------------------------------
 
 
+def _build_k8s_adapter() -> Any:
+    """Build a K8s investigation adapter when a K8s backend is selected."""
+    from sentinel.domain.sre import k8s_native_agent
+    from sentinel.interfaces.graphs.agents import k8s_runner
+
+    return k8s_native_agent.NativeK8sAgent(
+        k8s_client=None,  # No real cluster — agent will return unconfigured result
+        model_name=_selected_model("analyser"),
+        agent_runner=k8s_runner.run_k8s_agent,
+    )
+
+
 async def _run_sre(
     text: str,
     *,
@@ -149,7 +161,15 @@ async def _run_sre(
         raw_payload={"chat_text": text},
     )
 
-    return await sre_investigation.investigate_alert(
+    backend = st.session_state.get("k8s_backend", "Disabled")
+
+    # Run K8s investigation adapter alongside Holmes when selected
+    k8s_result = None
+    if backend in ("Native K8s", "Kagent", "Both (comparison)"):
+        k8s_adapter = _build_k8s_adapter()
+        k8s_result = await k8s_adapter.investigate(alert=alert)
+
+    reply = await sre_investigation.investigate_alert(
         alert=alert,
         holmes=holmes_adapter.HolmesAdapter(enabled=get_settings().holmesgpt_enabled),
         status_update_client=status_client,
@@ -158,6 +178,30 @@ async def _run_sre(
         post_to_slack=False,
         trace_collector=trace_collector,
     )
+
+    # Stash K8s result for the UI to render alongside Holmes result
+    if k8s_result is not None:
+        st.session_state["last_k8s_result"] = {
+            "adapter_name": k8s_result.adapter_name,
+            "findings": [f.summary for f in k8s_result.findings],
+            "sources_queried": list(k8s_result.sources_queried),
+            "duration_ms": k8s_result.duration_ms,
+            "audit_trail": [
+                {
+                    "timestamp": str(e.timestamp),
+                    "adapter_name": e.adapter_name,
+                    "action": e.action,
+                    "tool_name": e.tool_name,
+                    "status": e.status,
+                    "duration_ms": e.duration_ms,
+                    "error_code": e.error_code,
+                    "payload": dict(e.payload),
+                }
+                for e in k8s_result.audit_trail
+            ],
+        }
+
+    return reply
 
 
 async def _run_support(
@@ -586,42 +630,34 @@ def _render_sidebar() -> None:
         )
 
 
-def _render() -> None:
-    st.set_page_config(page_title="Sentinel Chat", page_icon="🛡️", layout="wide")
-
-    st.title("🛡️ Sentinel Chat")
-    st.caption(
-        "Local testing interface — same pipelines as the Slack bot.  "
-        "An LLM intent router classifies your message and routes to the "
-        "SRE investigation or support review pipeline."
-    )
-
-    _render_sidebar()
-
-    # Chat history
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-            if msg.get("traces") and st.session_state.get("show_traces", False):
-                _render_trace(msg["traces"])
-
-    # User input — check for prefilled scenario or manual entry
-    user_input = st.chat_input("Describe an incident or ask a support question...")
-    prefill = st.session_state.pop("prefill", None)
-    if prefill:
-        user_input = prefill
-    if not user_input:
+def _render_k8s_result() -> None:
+    """Show K8s investigation result if a K8s backend was active."""
+    k8s_result = st.session_state.pop("last_k8s_result", None)
+    if not k8s_result:
         return
 
-    # Display user message
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user"):
-        st.markdown(user_input)
+    with st.expander(
+        f"K8s Investigation ({k8s_result['adapter_name']}) — "
+        f"{k8s_result['duration_ms']}ms",
+        expanded=True,
+    ):
+        if k8s_result["findings"]:
+            st.markdown("**Findings:**")
+            for finding in k8s_result["findings"]:
+                st.markdown(f"- {finding}")
+        else:
+            st.info(
+                "No findings (K8s client not configured"
+                " — connect a cluster to get real results)"
+            )
+        if k8s_result["sources_queried"]:
+            st.caption(f"Sources: {', '.join(k8s_result['sources_queried'])}")
+        if k8s_result["audit_trail"]:
+            _render_audit_trail(k8s_result["audit_trail"])
 
-    # Run pipeline with live status
+
+def _handle_user_input(user_input: str) -> None:
+    """Classify intent, run the appropriate pipeline, and render results."""
     with st.chat_message("assistant"):
         status_placeholder = st.empty()
 
@@ -650,6 +686,8 @@ def _render() -> None:
 
             status_placeholder.empty()
             st.markdown(formatted)
+            _render_k8s_result()
+
             st.session_state.messages.append(
                 {"role": "assistant", "content": formatted, "traces": collector.traces}
             )
@@ -662,6 +700,41 @@ def _render() -> None:
             error_msg = f"**Error:** {exc}"
             st.error(error_msg)
             st.session_state.messages.append({"role": "assistant", "content": error_msg})
+
+
+def _render() -> None:
+    st.set_page_config(page_title="Sentinel Chat", page_icon="🛡️", layout="wide")
+
+    st.title("🛡️ Sentinel Chat")
+    st.caption(
+        "Local testing interface — same pipelines as the Slack bot.  "
+        "An LLM intent router classifies your message and routes to the "
+        "SRE investigation or support review pipeline."
+    )
+
+    _render_sidebar()
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            if msg.get("traces") and st.session_state.get("show_traces", False):
+                _render_trace(msg["traces"])
+
+    user_input = st.chat_input("Describe an incident or ask a support question...")
+    prefill = st.session_state.pop("prefill", None)
+    if prefill:
+        user_input = prefill
+    if not user_input:
+        return
+
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
+
+    _handle_user_input(user_input)
 
 
 bootstrap.initialise()
