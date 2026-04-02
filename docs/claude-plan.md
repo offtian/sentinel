@@ -9,7 +9,7 @@ The team needs two AI-powered automation capabilities:
 
 These live in the `sentinel` repository following clean architecture patterns. The AI SRE uses a **hybrid approach** with a DirectToolsetAdapter that queries observability backends directly (replacing the HolmesGPT SDK due to a pydantic-ai dependency conflict).
 
-> **Status tracking lives in `docs/prd.md`** (acceptance criteria checkboxes).
+> Status tracking lives in @prd.md (acceptance criteria checkboxes).
 > This file contains operational context for AI sessions — architecture decisions, gotchas, and reference material.
 
 ---
