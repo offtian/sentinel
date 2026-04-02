@@ -58,7 +58,7 @@ sentinel/
 │   ├── domain/                       # Layer 3: Business logic
 │   │   ├── sre/
 │   │   │   ├── entities.py           # Alert, Investigation, RootCause, Remediation
-│   │   │   ├── holmes_adapter.py     # HolmesGPT SDK wrapper + DirectToolsetAdapter
+│   │   │   ├── holmes_adapter.py     # BaseHolmesAdapter ABC + DirectToolsetAdapter
 │   │   │   └── operations.py         # Investigation lifecycle management
 │   │   ├── support/
 │   │   │   ├── entities.py           # Ticket, ResponseSuggestion, DocSource
@@ -67,12 +67,16 @@ sentinel/
 │   │   │   └── entities.py           # ConfidenceScore.from_factors(), from_total()
 │   │   ├── search/                   # Shared search abstractions
 │   │   │   └── searcher.py           # BaseDocumentSearcher, BaseMetricsSearcher
-│   │   ├── pipeline/                 # Pipeline error types
-│   │   │   └── errors.py             # NodeError, PipelineNodeFailed
+│   │   ├── pipeline/                 # Pipeline error and state types
+│   │   │   ├── errors.py             # NodeError, PipelineNodeFailed
+│   │   │   └── types.py              # PipelineState, GraphRunResult, shared graph types
 │   │   ├── approval/                 # Human approval gate
 │   │   │   └── entities.py           # ApprovalRequest, ApprovalDecision
 │   │   ├── supervisor/               # Quality gate evaluation
 │   │   │   └── quality_gate.py       # evaluate_sre_quality(), evaluate_support_quality()
+│   │   ├── tools/                    # Domain tool definitions
+│   │   │   ├── documentation.py      # Documentation search tool functions
+│   │   │   └── observability.py      # Observability query tool functions
 │   │   └── vendor_adapters/          # Vendor-specific implementations
 │   │       ├── pagerduty.py          # PagerDuty API client
 │   │       ├── datadog_client.py     # Datadog API (logs, metrics, traces)
@@ -87,6 +91,12 @@ sentinel/
 │   │   ├── runner.py                 # Eval runner entry point
 │   │   ├── reporting.py              # EvaluationReport with assertion/score averages
 │   │   └── rendering.py              # Rich console table output
+│   │
+│   ├── plugins/                      # Plugin adapters (toolsets, prompts)
+│   │   ├── toolsets/                 # PydanticAI toolset wrappers
+│   │   │   ├── documentation.py      # Documentation toolset for agents
+│   │   │   └── observability.py      # Observability toolset for agents
+│   │   └── prompts/                  # Jinja2 agent system prompt templates
 │   │
 │   ├── data/                         # Layer 4: Persistence
 │   │   ├── models.py                 # SQLModel table definitions
@@ -123,6 +133,7 @@ sentinel/
 ```toml
 [tool.importlinter]
 root_package = "sentinel"
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "Top level layers"
@@ -131,14 +142,18 @@ exhaustive = true
 containers = ["sentinel"]
 layers = [
     "main",
+    "worker",
+    "config",
     "interfaces",
     "application",
+    "evals",
+    "plugins",
     "domain",
     "data",
     "vendors",
-    "utils",
     "bootstrap",
-    "_config",
+    "utils",
+    "settings",
     "version",
 ]
 ```

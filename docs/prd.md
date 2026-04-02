@@ -225,8 +225,6 @@ AgentGateway becomes relevant when:
 | Review < 3min benchmark | Production deployment (separate repo) | Post-deploy |
 | Datadog APM distributed tracing | ddtrace dependency + Datadog agent in cluster | Phase B |
 | MCP tool integration | FastMCP design + first MCP server to integrate with | Phase C |
-| Supervisor graph + quality gate | Done — `domain/supervisor/quality_gate.py`, `application/supervisor/orchestrator.py` | Current sprint |
-| Tier 2 component evals | Done — `evals/framework.py`, 3 agent evaluators, 15 golden cases | Current sprint |
 
 ---
 

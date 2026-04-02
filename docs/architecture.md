@@ -31,6 +31,8 @@ domain/        → Business entities, search abstractions, vendor adapters, conf
     ↓
 evals/         → Evaluation framework (pydantic_evals): cases/, evaluators/, runner, reporting, rendering
     ↓
+plugins/       → Plugin adapters: toolsets (PydanticAI tool wrappers), prompts (Jinja2 templates)
+    ↓
 data/          → SQLModel database models, Alembic migrations
     ↓
 vendors/       → External SDK wrappers (Slack, PagerDuty, Jira, Datadog)
@@ -90,7 +92,7 @@ HolmesGPT has a dependency conflict with pydantic-ai>=1.0.7 (pinned mcp versions
 
 1. **Adapter pattern** (`domain/sre/holmes_adapter.py`) defines `BaseHolmesAdapter` ABC
 2. **Production adapter** wraps HolmesGPT's toolsets for data gathering
-3. **Mock adapter** provides test fixtures without SDK dependency
+3. **Mock adapter** (`tests/factories/`) provides test fixtures without SDK dependency
 4. **Our pipeline** handles orchestration, analysis, confidence scoring, and output formatting
 
 When the upstream dependency conflict is resolved, the production adapter will import HolmesGPT's `ToolExecutor`, `DatadogToolset`, `KubernetesToolset`, and `PrometheusToolset` directly.
