@@ -40,6 +40,13 @@ uv run pytest tests/unit/path/test_file.py::TestClass # Single test class
 - Factories in `tests/factories/__init__.py`: `make_alert()`, `make_ticket()`, `make_investigation()`, `make_finding()`, `make_doc_source()`, `make_response_suggestion()`, `make_confidence_score()`
 - Functional tests monkeypatch PydanticAI agents — see `tests/functional/conftest.py`
 
+## Auto-Commit
+
+After completing a fix, feature, or refactor — commit automatically without asking:
+1. Stage only the relevant changed files (no `git add -A`)
+2. Write a conventional commit message (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, etc.)
+3. If the work spans multiple logical changes, create separate atomic commits for each
+
 ## Documentation Workflow
 
 ### Source of truth
