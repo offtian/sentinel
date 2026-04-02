@@ -1,5 +1,9 @@
 # Sentinel Multi-Agent Architecture Review
 
+> **FROZEN DOCUMENT** — This review is a point-in-time snapshot from 2026-04-01.
+> It is preserved for historical context. Do not update the resolution table.
+> Current implementation status is tracked in `docs/prd.md` (acceptance criteria).
+
 **Reviewer**: Staff MLE, Platform Engineering
 **Date**: 2026-04-01
 **Scope**: Architecture evaluation, gap analysis, eval framework design

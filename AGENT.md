@@ -108,7 +108,4 @@ def test_returns_high_when_severity_is_critical(self):
 
 ## Git
 
-- Imperative mood: "Add feature" not "Added feature"
-- Each commit does ONE thing — don't mix refactoring with functional changes
-- Keep PRs small and focused
-- Link to the Asana ticket in the PR description
+See global rules in `~/.claude/rules/` for commit message format and PR workflow.
