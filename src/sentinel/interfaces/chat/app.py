@@ -404,10 +404,121 @@ _SUPPORT_SCENARIOS: tuple[dict[str, str], ...] = (
     },
 )
 
+_K8S_SCENARIOS: tuple[dict[str, str], ...] = (
+    {
+        "label": "Node NotReady",
+        "prompt": (
+            "ALERT: Node NotReady — kubelet heartbeat timeout\n\n"
+            "Node worker-3 in the prod-eu-west-1 cluster has been in "
+            "NotReady state for 5 minutes. Kubelet heartbeat has stopped. "
+            "12 pods were running on this node including critical payment "
+            "processing workloads. No recent maintenance was scheduled."
+        ),
+    },
+    {
+        "label": "Deployment rollout stuck",
+        "prompt": (
+            "WARNING: Deployment rollout stuck — new ReplicaSet not progressing\n\n"
+            "The orders-service deployment in namespace 'production' has been "
+            "stuck in a rollout for 15 minutes. The new ReplicaSet has 0/3 ready "
+            "replicas. Old pods are still running. The rollout was triggered by "
+            "a config change to increase memory limits."
+        ),
+    },
+    {
+        "label": "PVC pending — no PersistentVolume",
+        "prompt": (
+            "ALERT: PersistentVolumeClaim pending in production\n\n"
+            "PVC 'data-postgres-0' in namespace 'databases' has been in Pending "
+            "state for 10 minutes. No PersistentVolume is available that matches "
+            "the claim's storage class 'gp3-encrypted'. The StatefulSet postgres "
+            "is stuck waiting for the volume."
+        ),
+    },
+    {
+        "label": "HPA unable to scale",
+        "prompt": (
+            "WARNING: HorizontalPodAutoscaler unable to calculate metrics\n\n"
+            "HPA for api-gateway in namespace 'production' reports "
+            "'FailedGetResourceMetric' — unable to get CPU utilisation. "
+            "The metrics-server pod in kube-system is in CrashLoopBackOff. "
+            "Current load is 3x normal but replicas are stuck at 2."
+        ),
+    },
+    {
+        "label": "Ingress returning 404",
+        "prompt": (
+            "CRITICAL: Ingress returning 404 for all routes\n\n"
+            "The main ingress 'api-ingress' in namespace 'production' started "
+            "returning 404 for all paths 20 minutes ago. The backend services "
+            "are healthy. A recent change updated the service selector labels "
+            "as part of a Helm chart upgrade."
+        ),
+    },
+    {
+        "label": "Readiness probe failing after config change",
+        "prompt": (
+            "WARNING: Pods failing readiness probes after ConfigMap update\n\n"
+            "All 5 pods of user-service in namespace 'production' are failing "
+            "readiness probes since a ConfigMap update 10 minutes ago. The pods "
+            "are Running but 0/5 Ready. Traffic has stopped routing to them. "
+            "The ConfigMap change updated the database connection string."
+        ),
+    },
+)
+
+
+# ---------------------------------------------------------------------------
+# Audit trail rendering
+# ---------------------------------------------------------------------------
+
+
+def _render_audit_trail(audit_trail: list[dict[str, Any]]) -> None:
+    """Render investigation audit trail as a timeline."""
+    if not audit_trail:
+        return
+
+    with st.expander("Audit Trail", expanded=False):
+        for entry in audit_trail:
+            status = entry.get("status", "unknown")
+            status_icon = {"success": "\u2705", "error": "\u274c", "timeout": "\u26a0\ufe0f"}.get(
+                status, "\u2753"
+            )
+            tool = entry.get("tool_name") or entry.get("action", "unknown")
+            duration = entry.get("duration_ms", 0)
+
+            st.markdown(
+                f"{status_icon} **{tool}** — {duration}ms — `{entry.get('adapter_name', '')}`"
+            )
+            if entry.get("error_code"):
+                st.error(f"Error: {entry['error_code']}")
+            if entry.get("payload"):
+                with st.expander(f"Payload: {tool}", expanded=False):
+                    st.json(entry["payload"])
+
 
 # ---------------------------------------------------------------------------
 # Streamlit UI
 # ---------------------------------------------------------------------------
+
+
+def _set_prefill(prompt: str) -> None:
+    """Button callback that sets the prefill without interrupting widget state."""
+    st.session_state["prefill"] = prompt
+
+
+def _render_scenario_buttons(
+    title: str, scenarios: tuple[dict[str, str], ...], prefix: str
+) -> None:
+    """Render scenario buttons for a category."""
+    st.subheader(title)
+    for scenario in scenarios:
+        st.button(
+            scenario["label"],
+            key=f"{prefix}-{scenario['label']}",
+            on_click=_set_prefill,
+            args=(scenario["prompt"],),
+        )
 
 
 def _render_sidebar() -> None:
@@ -416,17 +527,19 @@ def _render_sidebar() -> None:
         st.header("Example Scenarios")
         st.caption("Click a scenario to populate the chat input.")
 
-        st.subheader("SRE Investigation")
-        for scenario in _SRE_SCENARIOS:
-            if st.button(scenario["label"], key=f"sre-{scenario['label']}"):
-                st.session_state["prefill"] = scenario["prompt"]
-                st.rerun()
+        _render_scenario_buttons("SRE Investigation", _SRE_SCENARIOS, "sre")
+        _render_scenario_buttons("Support Review", _SUPPORT_SCENARIOS, "support")
+        _render_scenario_buttons("K8s Investigation", _K8S_SCENARIOS, "k8s")
 
-        st.subheader("Support Review")
-        for scenario in _SUPPORT_SCENARIOS:
-            if st.button(scenario["label"], key=f"support-{scenario['label']}"):
-                st.session_state["prefill"] = scenario["prompt"]
-                st.rerun()
+        st.divider()
+        st.header("Investigation Backend")
+        if "k8s_backend" not in st.session_state:
+            st.session_state["k8s_backend"] = "Disabled"
+        st.selectbox(
+            "K8s Backend",
+            options=["Disabled", "Native K8s", "Kagent", "Both (comparison)"],
+            key="k8s_backend",
+        )
 
         st.divider()
         st.header("Model Selection")
@@ -457,7 +570,9 @@ def _render_sidebar() -> None:
 
         st.divider()
         st.header("Debug")
-        st.toggle("Show agent traces", key="show_traces", value=False)
+        if "show_traces" not in st.session_state:
+            st.session_state["show_traces"] = False
+        st.toggle("Show agent traces", key="show_traces")
 
         st.divider()
         st.caption(f"Gateway: `{settings.ai_gateway_url}`")
