@@ -48,7 +48,7 @@ def mock_holmes() -> factories.MockHolmesAdapter:
 def patch_alert_classifier(monkeypatch: pytest.MonkeyPatch) -> None:
     """Deterministic alert classification — always returns infrastructure/high."""
 
-    async def fake_run(*, user_prompt, model, deps):
+    async def fake_run(*, user_prompt, model, deps, **kwargs):
         return FakeAgentResult(
             alert_classifier.AlertClassification(
                 severity="high",
@@ -66,7 +66,7 @@ def patch_alert_classifier(monkeypatch: pytest.MonkeyPatch) -> None:
 def patch_root_cause_analyser(monkeypatch: pytest.MonkeyPatch) -> None:
     """Deterministic root cause analysis with high confidence."""
 
-    async def fake_run(*, user_prompt, model, deps):
+    async def fake_run(*, user_prompt, model, deps, **kwargs):
         return FakeAgentResult(
             root_cause_analyser.RootCauseAnalysis(
                 root_cause="Memory leak in request handler caused OOMKill",
@@ -91,7 +91,7 @@ def patch_root_cause_analyser(monkeypatch: pytest.MonkeyPatch) -> None:
 def patch_ticket_reviewer(monkeypatch: pytest.MonkeyPatch) -> None:
     """Deterministic ticket classification."""
 
-    async def fake_run(*, user_prompt, model, deps):
+    async def fake_run(*, user_prompt, model, deps, **kwargs):
         return FakeAgentResult(
             ticket_reviewer.TicketClassification(
                 category="account",
@@ -109,7 +109,7 @@ def patch_ticket_reviewer(monkeypatch: pytest.MonkeyPatch) -> None:
 def patch_response_drafter(monkeypatch: pytest.MonkeyPatch) -> None:
     """Deterministic response drafting."""
 
-    async def fake_run(*, user_prompt, model, deps):
+    async def fake_run(*, user_prompt, model, deps, **kwargs):
         return FakeAgentResult(
             response_drafter.DraftedResponse(
                 response=(

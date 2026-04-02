@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from sentinel.domain.pipeline import types as pipeline_types
 from sentinel.domain.supervisor import entities
-from sentinel.interfaces.graphs import common
 
 
 # Phrases that indicate a generic/fallback response rather than real analysis.
@@ -29,7 +29,7 @@ _GENERIC_SUPPORT_PHRASES: tuple[str, ...] = (
 )
 
 
-def evaluate_sre_quality(*, reply: common.InvestigationReply) -> entities.QualityVerdict:
+def evaluate_sre_quality(*, reply: pipeline_types.InvestigationReply) -> entities.QualityVerdict:
     """
     Evaluate quality of an SRE investigation output using deterministic rules.
 
@@ -67,7 +67,7 @@ def evaluate_sre_quality(*, reply: common.InvestigationReply) -> entities.Qualit
     )
 
 
-def evaluate_support_quality(*, reply: common.SupportReply) -> entities.QualityVerdict:
+def evaluate_support_quality(*, reply: pipeline_types.SupportReply) -> entities.QualityVerdict:
     """
     Evaluate quality of a support review output using deterministic rules.
 
@@ -170,7 +170,7 @@ def _has_actionable_steps(remediation: str) -> bool:
 
 def _compute_sre_score(
     *,
-    reply: common.InvestigationReply,
+    reply: pipeline_types.InvestigationReply,
     issue_count: int,
 ) -> float:
     """
@@ -194,7 +194,7 @@ def _compute_sre_score(
 
 def _compute_support_score(
     *,
-    reply: common.SupportReply,
+    reply: pipeline_types.SupportReply,
     issue_count: int,
 ) -> float:
     """

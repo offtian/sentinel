@@ -15,7 +15,7 @@ class TestClassifyTicketErrorHandling:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # Given a ticket reviewer agent that raises
-        async def failing_run(*, user_prompt, model, deps):
+        async def failing_run(*, user_prompt, model, deps, **kwargs):
             raise TimeoutError("LLM timeout")
 
         monkeypatch.setattr(ticket_reviewer.agent, "run", failing_run)

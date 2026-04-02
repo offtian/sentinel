@@ -17,7 +17,7 @@ class TestClassifyAlertErrorHandling:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # Given a ClassifyAlert node where the agent raises a timeout error
-        async def failing_run(*, user_prompt, model, deps):
+        async def failing_run(*, user_prompt, model, deps, **kwargs):
             raise TimeoutError("LLM request timed out")
 
         monkeypatch.setattr(alert_classifier.agent, "run", failing_run)

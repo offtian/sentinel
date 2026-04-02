@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from functools import partial
+
 import pytest
 
 from sentinel.application.supervisor import orchestrator
 from sentinel.domain.supervisor import entities as supervisor_entities
+from sentinel.interfaces.graphs import sre_investigation, support_review
 from tests import factories
 
 
@@ -17,13 +20,18 @@ class TestSuperviseSreInvestigation:
     ) -> None:
         # Given a standard alert with mocked agents that produce good output
         alert = factories.make_alert()
+        investigate = partial(
+            sre_investigation.investigate_alert,
+            alert,
+            holmes=mock_holmes,
+            post_to_slack=False,
+        )
 
         # When the supervised investigation runs
         result = await orchestrator.supervise_sre_investigation(
-            alert=alert,
-            holmes=mock_holmes,
+            investigate_fn=investigate,
+            alert_id=alert.id,
             max_retries=1,
-            post_to_slack=False,
         )
 
         # Then the decision is PUBLISH with no retries
@@ -44,19 +52,24 @@ class TestSuperviseSreInvestigation:
         # pipeline to produce a fallback reply with generic text.
         from sentinel.interfaces.graphs.agents import root_cause_analyser
 
-        async def failing_run(*, user_prompt, model, deps):
+        async def failing_run(*, user_prompt, model, deps, **kwargs):
             raise RuntimeError("LLM unavailable")
 
         monkeypatch.setattr(root_cause_analyser.agent, "run", failing_run)
 
         alert = factories.make_alert()
+        investigate = partial(
+            sre_investigation.investigate_alert,
+            alert,
+            holmes=mock_holmes,
+            post_to_slack=False,
+        )
 
         # When the supervised investigation runs with 1 retry
         result = await orchestrator.supervise_sre_investigation(
-            alert=alert,
-            holmes=mock_holmes,
+            investigate_fn=investigate,
+            alert_id=alert.id,
             max_retries=1,
-            post_to_slack=False,
         )
 
         # Then the decision is ESCALATE or REJECT (not PUBLISH)
@@ -76,19 +89,24 @@ class TestSuperviseSreInvestigation:
         # Given agents that produce degraded output
         from sentinel.interfaces.graphs.agents import root_cause_analyser
 
-        async def failing_run(*, user_prompt, model, deps):
+        async def failing_run(*, user_prompt, model, deps, **kwargs):
             raise RuntimeError("LLM unavailable")
 
         monkeypatch.setattr(root_cause_analyser.agent, "run", failing_run)
 
         alert = factories.make_alert()
+        investigate = partial(
+            sre_investigation.investigate_alert,
+            alert,
+            holmes=mock_holmes,
+            post_to_slack=False,
+        )
 
         # When the supervised investigation runs with zero retries
         result = await orchestrator.supervise_sre_investigation(
-            alert=alert,
-            holmes=mock_holmes,
+            investigate_fn=investigate,
+            alert_id=alert.id,
             max_retries=0,
-            post_to_slack=False,
         )
 
         # Then the retry_count is 0 and decision is not PUBLISH
@@ -107,12 +125,17 @@ class TestSuperviseSupportReview:
         from tests.functional.conftest import StubDocumentSearcher, StubPastTicketSearcher
 
         ticket = factories.make_ticket()
+        review = partial(
+            support_review.review_ticket,
+            ticket,
+            document_searcher=StubDocumentSearcher(),
+            ticket_searcher=StubPastTicketSearcher(),
+        )
 
         # When the supervised review runs
         result = await orchestrator.supervise_support_review(
-            ticket=ticket,
-            document_searcher=StubDocumentSearcher(),
-            ticket_searcher=StubPastTicketSearcher(),
+            review_fn=review,
+            ticket_key=ticket.key,
             max_retries=1,
         )
 
@@ -130,7 +153,7 @@ class TestSuperviseSupportReview:
         # Given agents that produce degraded output (drafter fails)
         from sentinel.interfaces.graphs.agents import response_drafter
 
-        async def failing_run(*, user_prompt, model, deps):
+        async def failing_run(*, user_prompt, model, deps, **kwargs):
             raise RuntimeError("LLM unavailable")
 
         monkeypatch.setattr(response_drafter.agent, "run", failing_run)
@@ -138,12 +161,17 @@ class TestSuperviseSupportReview:
         from tests.functional.conftest import StubDocumentSearcher, StubPastTicketSearcher
 
         ticket = factories.make_ticket()
+        review = partial(
+            support_review.review_ticket,
+            ticket,
+            document_searcher=StubDocumentSearcher(),
+            ticket_searcher=StubPastTicketSearcher(),
+        )
 
         # When the supervised review runs with 1 retry
         result = await orchestrator.supervise_support_review(
-            ticket=ticket,
-            document_searcher=StubDocumentSearcher(),
-            ticket_searcher=StubPastTicketSearcher(),
+            review_fn=review,
+            ticket_key=ticket.key,
             max_retries=1,
         )
 
@@ -163,12 +191,17 @@ class TestSuperviseSupportReview:
         from tests.functional.conftest import EmptyDocumentSearcher, EmptyPastTicketSearcher
 
         ticket = factories.make_ticket()
+        review = partial(
+            support_review.review_ticket,
+            ticket,
+            document_searcher=EmptyDocumentSearcher(),
+            ticket_searcher=EmptyPastTicketSearcher(),
+        )
 
         # When the supervised review runs
         result = await orchestrator.supervise_support_review(
-            ticket=ticket,
-            document_searcher=EmptyDocumentSearcher(),
-            ticket_searcher=EmptyPastTicketSearcher(),
+            review_fn=review,
+            ticket_key=ticket.key,
             max_retries=1,
         )
 

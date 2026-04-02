@@ -4,8 +4,8 @@ import attrs
 import pytest
 
 from sentinel.domain.confidence import entities as confidence_entities
+from sentinel.domain.pipeline import types as pipeline_types
 from sentinel.domain.supervisor import quality_gate
-from sentinel.interfaces.graphs import common
 
 
 def _make_sre_reply(
@@ -15,10 +15,10 @@ def _make_sre_reply(
     remediation: str | None = "1. Increase memory limit to 4Gi\n2. Deploy fix for handler",
     confidence: confidence_entities.ConfidenceScore | None = None,
     findings_summary: str = "- [datadog_logs] Error rate spike\n- [kubernetes] Pod OOMKilled",
-) -> common.InvestigationReply:
+) -> pipeline_types.InvestigationReply:
     if confidence is None:
         confidence = confidence_entities.ConfidenceScore.from_total(0.75)
-    return common.InvestigationReply(
+    return pipeline_types.InvestigationReply(
         alert_id=alert_id,
         root_cause=root_cause,
         remediation=remediation,
@@ -41,12 +41,12 @@ def _make_support_reply(
     sources: list[dict[str, str]] | None = None,
     confidence: confidence_entities.ConfidenceScore | None = None,
     category: str | None = "account",
-) -> common.SupportReply:
+) -> pipeline_types.SupportReply:
     if confidence is None:
         confidence = confidence_entities.ConfidenceScore.from_total(0.75)
     if sources is None:
         sources = [{"title": "Login Guide", "url": "https://docs.example.com/login"}]
-    return common.SupportReply(
+    return pipeline_types.SupportReply(
         ticket_id=ticket_id,
         ticket_key=ticket_key,
         suggested_response=suggested_response,

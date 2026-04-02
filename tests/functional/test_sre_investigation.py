@@ -178,7 +178,7 @@ class TestSrePipelineWithLowConfidence:
 
         # And the root cause analyser reports low confidence
 
-        async def low_confidence_run(*, user_prompt, model, deps):
+        async def low_confidence_run(*, user_prompt, model, deps, **kwargs):
             return FakeAgentResult(
                 root_cause_analyser.RootCauseAnalysis(
                     root_cause="Unable to determine root cause with available data",
