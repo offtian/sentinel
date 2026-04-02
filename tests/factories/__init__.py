@@ -145,9 +145,14 @@ class MockHolmesAdapter(holmes_adapter.BaseHolmesAdapter):
             sources_queried=["datadog_logs", "kubernetes"],
         )
 
+    @property
+    def is_configured(self) -> bool:
+        return True
+
     async def investigate(
         self,
         *,
         alert: sre_entities.Alert,
+        context: holmes_adapter.investigation.InvestigationContext | None = None,
     ) -> holmes_adapter.HolmesInvestigationResult:
         return self._result

@@ -9,6 +9,7 @@ import attrs
 
 from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
 from sentinel.domain.sre import entities
+from sentinel.domain.sre import investigation
 from sentinel.domain.vendor_adapters.observability import BaseObservabilityClient
 from sentinel.utils import logs
 
@@ -25,11 +26,12 @@ class HolmesInvestigationResult:
     sources_queried: list[str]
 
 
-class BaseHolmesAdapter(abc.ABC):
+class BaseHolmesAdapter(investigation.BaseInvestigationAdapter):
     """
     Abstract adapter for HolmesGPT investigation engine.
 
-    This allows swapping between the real HolmesGPT SDK and a mock for testing.
+    Extends BaseInvestigationAdapter for backward compatibility.
+    Subclasses must implement both ``investigate()`` and ``is_configured``.
     """
 
     @abc.abstractmethod
@@ -37,12 +39,13 @@ class BaseHolmesAdapter(abc.ABC):
         self,
         *,
         alert: entities.Alert,
+        context: investigation.InvestigationContext | None = None,
     ) -> HolmesInvestigationResult:
         """
         Run a HolmesGPT investigation for the given alert.
 
-        Uses HolmesGPT's toolsets (Datadog, Kubernetes, Prometheus) to gather
-        context, then returns raw findings for our pipeline to analyse.
+        :param alert: The alert to investigate.
+        :param context: Optional investigation context (ignored by Holmes adapters).
         """
 
 
@@ -63,10 +66,15 @@ class HolmesAdapter(BaseHolmesAdapter):
         self._api_key = api_key
         self._enabled = enabled
 
+    @property
+    def is_configured(self) -> bool:
+        return self._enabled
+
     async def investigate(
         self,
         *,
         alert: entities.Alert,
+        context: investigation.InvestigationContext | None = None,
     ) -> HolmesInvestigationResult:
         if not self._enabled:
             return HolmesInvestigationResult(
@@ -121,10 +129,15 @@ class DirectToolsetAdapter(BaseHolmesAdapter):
         self._circuit_breaker = circuit_breaker
         self._time_range_minutes = time_range_minutes
 
+    @property
+    def is_configured(self) -> bool:
+        return self._obs_client is not None and self._obs_client.is_configured
+
     async def investigate(
         self,
         *,
         alert: entities.Alert,
+        context: investigation.InvestigationContext | None = None,
     ) -> HolmesInvestigationResult:
         logs.log_event(
             "direct_investigation_started",
