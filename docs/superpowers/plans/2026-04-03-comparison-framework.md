@@ -46,7 +46,7 @@
 **Files:**
 - Modify: `pyproject.toml`
 
-- [ ] **Step 1: Add databases to dependencies**
+- [x] **Step 1: Add databases to dependencies**
 
 In `pyproject.toml`, add `"databases[asyncpg]"` to the `dependencies` list (after `"asyncpg"`):
 
@@ -55,12 +55,12 @@ In `pyproject.toml`, add `"databases[asyncpg]"` to the `dependencies` list (afte
     "databases[asyncpg]",
 ```
 
-- [ ] **Step 2: Install and verify**
+- [x] **Step 2: Install and verify**
 
 Run: `uv sync`
 Expected: Clean install with `databases` available.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add pyproject.toml uv.lock
@@ -75,7 +75,7 @@ git commit -m "chore: add databases dependency for async PostgreSQL access"
 - Modify: `tests/factories/__init__.py`
 - Test: Verify import works
 
-- [ ] **Step 1: Write MockKagentAdapter and factory functions**
+- [x] **Step 1: Write MockKagentAdapter and factory functions**
 
 Add these to the end of `tests/factories/__init__.py`:
 
@@ -171,12 +171,12 @@ Also add the `asyncio` import at the top of the file:
 import asyncio
 ```
 
-- [ ] **Step 2: Verify factories import cleanly**
+- [x] **Step 2: Verify factories import cleanly**
 
 Run: `python -c "from tests.factories import MockKagentAdapter, make_investigation_result, make_audit_entry; print('OK')"`
 Expected: `OK`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/factories/__init__.py
@@ -191,7 +191,7 @@ git commit -m "test: add MockKagentAdapter and investigation result factories"
 - Create: `tests/unit/domain/evaluation/test_comparison_from_results.py`
 - Modify: `src/sentinel/domain/evaluation/comparison.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/unit/domain/evaluation/test_comparison_from_results.py
@@ -308,12 +308,12 @@ class TestFromInvestigationResults:
         assert result.challenger.degradation_score == 1.0
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `just test tests/unit/domain/evaluation/test_comparison_from_results.py -v`
 Expected: FAIL with `AttributeError: type object 'ComparisonResult' has no attribute 'from_investigation_results'`
 
-- [ ] **Step 3: Implement from_investigation_results()**
+- [x] **Step 3: Implement from_investigation_results()**
 
 Replace `src/sentinel/domain/evaluation/comparison.py` entirely:
 
@@ -478,17 +478,17 @@ class ComparisonResult:
         )
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `just test tests/unit/domain/evaluation/test_comparison_from_results.py -v`
 Expected: All 5 tests PASS.
 
-- [ ] **Step 5: Run existing comparison tests to verify nothing broke**
+- [x] **Step 5: Run existing comparison tests to verify nothing broke**
 
 Run: `just test tests/unit/domain/evaluation/ -v`
 Expected: All tests PASS (existing `test_comparison.py` + new tests).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/sentinel/domain/evaluation/comparison.py tests/unit/domain/evaluation/test_comparison_from_results.py
@@ -502,7 +502,7 @@ git commit -m "feat: add ComparisonResult.from_investigation_results() factory"
 **Files:**
 - Create: `src/sentinel/data/migrations/alembic/versions/002_create_comparison_and_eval_tables.py`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```python
 # src/sentinel/data/migrations/alembic/versions/002_create_comparison_and_eval_tables.py
@@ -574,12 +574,12 @@ def downgrade() -> None:
     op.drop_table("comparison_runs")
 ```
 
-- [ ] **Step 2: Verify migration syntax**
+- [x] **Step 2: Verify migration syntax**
 
 Run: `python -c "import importlib; m = importlib.import_module('sentinel.data.migrations.alembic.versions.002_create_comparison_and_eval_tables'); print('OK')"`
 Expected: `OK`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/sentinel/data/migrations/alembic/versions/002_create_comparison_and_eval_tables.py
@@ -594,7 +594,7 @@ git commit -m "feat: add migration for comparison_runs and eval_runs tables"
 - Create: `tests/unit/data/test_comparison_persistence.py`
 - Create: `src/sentinel/data/comparison.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/unit/data/test_comparison_persistence.py
@@ -666,12 +666,12 @@ class TestPersistComparisonRun:
         assert rows[0]["baseline_adapter"] == "holmes"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `just test tests/unit/data/test_comparison_persistence.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'sentinel.data.comparison'`
 
-- [ ] **Step 3: Implement persistence module**
+- [x] **Step 3: Implement persistence module**
 
 ```python
 # src/sentinel/data/comparison.py
@@ -774,12 +774,12 @@ async def fetch_comparison_runs(
     return [dict(row._mapping) for row in rows]
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `just test tests/unit/data/test_comparison_persistence.py -v`
 Expected: All 2 tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/data/comparison.py tests/unit/data/test_comparison_persistence.py
@@ -794,7 +794,7 @@ git commit -m "feat: add comparison run persistence via databases library"
 - Create: `tests/unit/data/test_eval_runs_persistence.py`
 - Create: `src/sentinel/data/eval_runs.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/unit/data/test_eval_runs_persistence.py
@@ -860,12 +860,12 @@ class TestFetchEvalRuns:
         assert rows[0]["dataset_name"] == "k8s_investigation"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `just test tests/unit/data/test_eval_runs_persistence.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'sentinel.data.eval_runs'`
 
-- [ ] **Step 3: Implement eval runs persistence**
+- [x] **Step 3: Implement eval runs persistence**
 
 ```python
 # src/sentinel/data/eval_runs.py
@@ -960,12 +960,12 @@ async def fetch_eval_runs(
     return [dict(row._mapping) for row in rows]
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `just test tests/unit/data/test_eval_runs_persistence.py -v`
 Expected: All 2 tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/data/eval_runs.py tests/unit/data/test_eval_runs_persistence.py
@@ -980,7 +980,7 @@ git commit -m "feat: add eval run persistence via databases library"
 - Create: `tests/unit/interfaces/graphs/test_sre_comparison_mode.py`
 - Modify: `src/sentinel/interfaces/graphs/sre_investigation.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/unit/interfaces/graphs/test_sre_comparison_mode.py
@@ -1049,12 +1049,12 @@ class TestComparisonModeInPipeline:
         assert ctx.state.comparison_result is None
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `just test tests/unit/interfaces/graphs/test_sre_comparison_mode.py -v`
 Expected: FAIL with `TypeError: __init__() got an unexpected keyword argument 'challenger_adapter'`
 
-- [ ] **Step 3: Add comparison mode to the pipeline**
+- [x] **Step 3: Add comparison mode to the pipeline**
 
 In `src/sentinel/interfaces/graphs/sre_investigation.py`, make these changes:
 
@@ -1193,17 +1193,17 @@ And pass it through to `Dependencies`:
     )
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `just test tests/unit/interfaces/graphs/test_sre_comparison_mode.py -v`
 Expected: All 2 tests PASS.
 
-- [ ] **Step 5: Run existing pipeline tests**
+- [x] **Step 5: Run existing pipeline tests**
 
 Run: `just test tests/unit/interfaces/graphs/test_sre_investigation.py -v`
 Expected: All existing tests still PASS (challenger_adapter defaults to None).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/sentinel/interfaces/graphs/sre_investigation.py tests/unit/interfaces/graphs/test_sre_comparison_mode.py
@@ -1217,7 +1217,7 @@ git commit -m "feat: add comparison mode to SRE investigation pipeline"
 **Files:**
 - Create: `src/sentinel/evals/cases/k8s_investigation_cases.json`
 
-- [ ] **Step 1: Create golden test cases**
+- [x] **Step 1: Create golden test cases**
 
 ```json
 [
@@ -1284,12 +1284,12 @@ git commit -m "feat: add comparison mode to SRE investigation pipeline"
 ]
 ```
 
-- [ ] **Step 2: Verify JSON is valid**
+- [x] **Step 2: Verify JSON is valid**
 
 Run: `python -c "import json, pathlib; json.loads(pathlib.Path('src/sentinel/evals/cases/k8s_investigation_cases.json').read_text()); print('OK')"`
 Expected: `OK`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/sentinel/evals/cases/k8s_investigation_cases.json
@@ -1304,7 +1304,7 @@ git commit -m "test: add 3 golden test cases for K8s investigation evaluation"
 - Create: `tests/unit/evals/evaluators/test_comparison_evaluator.py`
 - Create: `src/sentinel/evals/evaluators/comparison_evaluator.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/unit/evals/evaluators/test_comparison_evaluator.py
@@ -1444,12 +1444,12 @@ class TestLatencyThreshold:
         assert result[pass_key].value is False
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `just test tests/unit/evals/evaluators/test_comparison_evaluator.py -v`
 Expected: FAIL with `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement the evaluators**
+- [x] **Step 3: Implement the evaluators**
 
 ```python
 # src/sentinel/evals/evaluators/comparison_evaluator.py
@@ -1583,12 +1583,12 @@ class LatencyThreshold(evaluators.Evaluator):
         }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `just test tests/unit/evals/evaluators/test_comparison_evaluator.py -v`
 Expected: All 5 tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/evals/evaluators/comparison_evaluator.py src/sentinel/evals/cases/k8s_investigation_cases.json tests/unit/evals/evaluators/test_comparison_evaluator.py
@@ -1602,7 +1602,7 @@ git commit -m "feat: add K8s investigation evaluators and golden test cases"
 **Files:**
 - Modify: `src/sentinel/interfaces/chat/app.py`
 
-- [ ] **Step 1: Add the audit trail rendering function**
+- [x] **Step 1: Add the audit trail rendering function**
 
 Add this function after `_render_scenario_buttons()` (around line 674) in `app.py`:
 
@@ -1634,7 +1634,7 @@ def _render_audit_trail(audit_trail: list[dict[str, Any]]) -> None:
                 st.json(payload)
 ```
 
-- [ ] **Step 2: Wire audit trail into SRE result rendering**
+- [x] **Step 2: Wire audit trail into SRE result rendering**
 
 Find where the K8s result is displayed in the chat output (after `_run_sre` is called, where `last_k8s_result` is used). Add an audit trail expander after the K8s results section. Locate the section around line 185-204 where `st.session_state["last_k8s_result"]` is set, then find where results are rendered and add:
 
@@ -1646,12 +1646,12 @@ if k8s_data:
         _render_audit_trail(k8s_data.get("audit_trail", []))
 ```
 
-- [ ] **Step 3: Verify the app loads without errors**
+- [x] **Step 3: Verify the app loads without errors**
 
 Run: `python -c "import sentinel.interfaces.chat.app; print('OK')"`
 Expected: `OK` (no import errors)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/sentinel/interfaces/chat/app.py
@@ -1665,7 +1665,7 @@ git commit -m "feat: add audit trail viewer to Streamlit chat app"
 **Files:**
 - Modify: `src/sentinel/interfaces/chat/app.py`
 
-- [ ] **Step 1: Add comparison mode rendering function**
+- [x] **Step 1: Add comparison mode rendering function**
 
 Add this function after `_render_audit_trail()`:
 
@@ -1717,7 +1717,7 @@ def _render_comparison(
         st.markdown(" | ".join(summary_parts))
 ```
 
-- [ ] **Step 2: Wire comparison mode into the result rendering**
+- [x] **Step 2: Wire comparison mode into the result rendering**
 
 In the section where SRE results are displayed (after `_run_sre()` returns), add a check for comparison mode:
 
@@ -1739,12 +1739,12 @@ if k8s_data:
         _render_audit_trail(k8s_data.get("audit_trail", []))
 ```
 
-- [ ] **Step 3: Verify the app loads without errors**
+- [x] **Step 3: Verify the app loads without errors**
 
 Run: `python -c "import sentinel.interfaces.chat.app; print('OK')"`
 Expected: `OK`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/sentinel/interfaces/chat/app.py
@@ -1757,28 +1757,28 @@ git commit -m "feat: add side-by-side comparison UI to Streamlit chat app"
 
 **Files:** None (verification only)
 
-- [ ] **Step 1: Run full unit test suite**
+- [x] **Step 1: Run full unit test suite**
 
 Run: `just test`
 Expected: All tests PASS.
 
-- [ ] **Step 2: Run linter**
+- [x] **Step 2: Run linter**
 
 Run: `just lint`
 Expected: No errors from ruff, mypy, or import-linter.
 
-- [ ] **Step 3: Fix any lint issues**
+- [x] **Step 3: Fix any lint issues**
 
 If mypy or ruff report issues, fix them and re-run.
 
-- [ ] **Step 4: Commit any fixes**
+- [x] **Step 4: Commit any fixes**
 
 ```bash
 git add -u
 git commit -m "fix: resolve lint issues from comparison framework"
 ```
 
-- [ ] **Step 5: Update plan checkboxes**
+- [x] **Step 5: Update plan checkboxes**
 
 In `docs/plans/k8s-agent-and-mcp-integration.md`, check off completed steps:
 - [x] Step 26: Implement comparison mode in pipeline node

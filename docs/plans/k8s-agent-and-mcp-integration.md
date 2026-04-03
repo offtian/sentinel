@@ -320,11 +320,11 @@ The local testing chat app (`interfaces/chat/app.py`) gains:
 - [ ] Step 25: Integration tests against local kagent
 
 ### Phase E: Comparison Framework
-- [ ] Step 26: Implement comparison mode in pipeline node (concurrent adapter execution)
-- [ ] Step 27: Create `tests/evals/datasets/k8s_investigation/` golden cases
-- [ ] Step 28: Create `evals/evaluators/comparison.py` side-by-side scoring using `EvaluationMetrics`
-- [ ] Step 29: Extend `evals/reporting.py` and `evals/rendering.py` for `ComparisonReport`
-- [ ] Step 30: End-to-end comparison test with both backends
+- [x] Step 26: Implement comparison mode in pipeline node (concurrent adapter execution)
+- [x] Step 27: Create `tests/evals/datasets/k8s_investigation/` golden cases
+- [x] Step 28: Create `evals/evaluators/comparison.py` side-by-side scoring using `EvaluationMetrics`
+- [ ] Step 29: Extend `evals/reporting.py` and `evals/rendering.py` for `ComparisonReport` — deferred, existing reporting works
+- [ ] Step 30: End-to-end comparison test with both backends — deferred, requires running LLM
 
 ### Phase F: Helm & Infrastructure
 - [x] Step 31: Add `clusterrole.yaml` and `clusterrolebinding.yaml` templates
@@ -337,8 +337,8 @@ The local testing chat app (`interfaces/chat/app.py`) gains:
 - [x] Step 36: Add investigation backend selector to sidebar (Holmes / Native K8s / Kagent / Both)
 - [x] Step 37: Add cluster/namespace configuration inputs (shown when K8s backend selected)
 - [x] Step 38: Add K8s-specific test scenarios to sidebar (Node NotReady, rollout stuck, PVC pending, HPA scaling failure, ingress 404, readiness probe failure)
-- [ ] Step 39: Implement audit trail viewer — timeline of `AuditEntry` records with status badges and collapsible payload JSON
-- [ ] Step 40: Implement comparison mode UI — side-by-side columns showing both backends' results, confidence, duration, and audit trails
+- [x] Step 39: Implement audit trail viewer — timeline of `AuditEntry` records with status badges and collapsible payload JSON
+- [x] Step 40: Implement comparison mode UI — side-by-side columns showing both backends' results, confidence, duration, and audit trails
 - [x] Step 41: Wire backend selector to `K8S_INVESTIGATION_BACKEND` config and pass `InvestigationContext` to pipeline
 
 ## Changes
