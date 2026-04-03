@@ -236,6 +236,30 @@ async def _run_support(
     )
 
 
+async def _run_chart_generation(
+    text: str,
+    *,
+    on_status: Callable[[str], None],
+) -> common.ChartGenerationReply:
+    from sentinel.domain.charts import entities as chart_entities
+    from sentinel.interfaces.graphs import chart_generation
+
+    now = datetime.now(tz=UTC)
+    request = chart_entities.ChartRequest(
+        requester="local-user",
+        team="platform",
+        raw_message=text,
+        requested_at=now,
+    )
+
+    on_status("Parsing chart request...")
+    return await chart_generation.generate_chart(
+        request=request,
+        parser_model=_selected_model("analyser"),
+        generator_model=_selected_model("analyser"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Formatting helpers
 # ---------------------------------------------------------------------------
@@ -326,6 +350,31 @@ def _format_support(reply: common.SupportReply) -> str:
             for s in sources[:5]
         )
         parts.append(f"\n**Sources:**\n{source_lines}")
+    return "\n".join(parts)
+
+
+def _format_chart_result(reply: common.ChartGenerationReply) -> str:
+    confidence_label = reply.confidence.label.value if reply.confidence else "Unknown"
+    confidence_icon = {"High": "\U0001f7e2", "Medium": "\U0001f7e1"}.get(
+        confidence_label, "\U0001f534"
+    )
+
+    parts = [
+        f"### Chart Generation: {reply.service_name}",
+        f"**Confidence:** {confidence_icon} {confidence_label}  "
+        f"**Files:** {reply.files_generated}  "
+        f"**Attempts:** {reply.generation_attempts}",
+    ]
+    if reply.validation_passed:
+        parts.append("\n\u2705 Validation passed")
+    else:
+        parts.append("\n\u274c Validation failed")
+    if reply.policy_violations > 0:
+        parts.append(f"\n\u26a0\ufe0f {reply.policy_violations} policy violation(s)")
+    if reply.pr_url and not reply.pr_url.startswith(("Commit failed", "Branch", "Git", "PR")):
+        parts.append(f"\n**PR:** {reply.pr_url}")
+    if reply.error:
+        parts.append(f"\n**Error:** {reply.error}")
     return "\n".join(parts)
 
 
@@ -511,6 +560,34 @@ _K8S_SCENARIOS: tuple[dict[str, str], ...] = (
     },
 )
 
+_CHART_SCENARIOS: tuple[dict[str, str], ...] = (
+    {
+        "label": "Simple web service",
+        "prompt": (
+            "Deploy a Python web service called api-gateway on port 8080. "
+            "It needs 256Mi memory and 200m CPU. Team: platform."
+        ),
+    },
+    {
+        "label": "Service with HPA",
+        "prompt": (
+            "Deploy a Node.js service called order-processor using image "
+            "myrepo/order-processor:v2.1.0. It listens on port 3000 and needs "
+            "autoscaling from 3 to 10 replicas. Memory limit 512Mi, CPU limit 1000m. "
+            "It connects to redis at redis.internal:6379. Team: platform."
+        ),
+    },
+    {
+        "label": "Secure service with NetworkPolicy",
+        "prompt": (
+            "Deploy a Go microservice called auth-service on port 9090. "
+            "It must run as non-root with a strict network policy allowing "
+            "only ingress on port 9090 and egress to postgres.internal:5432. "
+            "Memory: 128Mi-256Mi, CPU: 100m-500m. 2 replicas. Team: platform."
+        ),
+    },
+)
+
 
 # ---------------------------------------------------------------------------
 # Audit trail rendering
@@ -574,6 +651,7 @@ def _render_sidebar() -> None:
         _render_scenario_buttons("SRE Investigation", _SRE_SCENARIOS, "sre")
         _render_scenario_buttons("Support Review", _SUPPORT_SCENARIOS, "support")
         _render_scenario_buttons("K8s Investigation", _K8S_SCENARIOS, "k8s")
+        _render_scenario_buttons("Chart Generation", _CHART_SCENARIOS, "chart")
 
         st.divider()
         st.header("Investigation Backend")
@@ -584,6 +662,12 @@ def _render_sidebar() -> None:
             options=["Disabled", "Native K8s", "Kagent", "Both (comparison)"],
             key="k8s_backend",
         )
+
+        st.divider()
+        st.header("Chart Generation")
+        if "chart_mode" not in st.session_state:
+            st.session_state["chart_mode"] = False
+        st.toggle("Enable chart generation mode", key="chart_mode")
 
         st.divider()
         st.header("Model Selection")
@@ -637,8 +721,7 @@ def _render_k8s_result() -> None:
         return
 
     with st.expander(
-        f"K8s Investigation ({k8s_result['adapter_name']}) — "
-        f"{k8s_result['duration_ms']}ms",
+        f"K8s Investigation ({k8s_result['adapter_name']}) — {k8s_result['duration_ms']}ms",
         expanded=True,
     ):
         if k8s_result["findings"]:
@@ -647,8 +730,7 @@ def _render_k8s_result() -> None:
                 st.markdown(f"- {finding}")
         else:
             st.info(
-                "No findings (K8s client not configured"
-                " — connect a cluster to get real results)"
+                "No findings (K8s client not configured — connect a cluster to get real results)"
             )
         if k8s_result["sources_queried"]:
             st.caption(f"Sources: {', '.join(k8s_result['sources_queried'])}")
@@ -668,6 +750,14 @@ def _handle_user_input(user_input: str) -> None:
         collector = common.TraceCollector()
 
         try:
+            if st.session_state.get("chart_mode", False):
+                reply = _run_async(_run_chart_generation(user_input, on_status=_on_status))
+                formatted = _format_chart_result(reply)
+                status_placeholder.empty()
+                st.markdown(formatted)
+                st.session_state.messages.append({"role": "assistant", "content": formatted})
+                return
+
             classification = _run_async(_classify_intent(user_input, trace_collector=collector))
             is_sre = classification.intent == intent_router.Intent.SRE
             route_label = "SRE Investigation" if is_sre else "Support Review"
