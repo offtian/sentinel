@@ -30,7 +30,7 @@ class TestFindingsKeywordCoverage:
         result = await ev.evaluate(ctx)
 
         # Then the assertion passes
-        pass_key = [k for k in result if k.endswith("_pass")][0]
+        pass_key = next(k for k in result if k.endswith("_pass"))
         assert result[pass_key].value is True
 
     @pytest.mark.asyncio
@@ -47,7 +47,7 @@ class TestFindingsKeywordCoverage:
         result = await ev.evaluate(ctx)
 
         # Then the assertion fails
-        pass_key = [k for k in result if k.endswith("_pass")][0]
+        pass_key = next(k for k in result if k.endswith("_pass"))
         assert result[pass_key].value is False
 
 
@@ -65,7 +65,7 @@ class TestMinimumSourceCount:
         result = await ev.evaluate(ctx)
 
         # Then the assertion passes
-        pass_key = [k for k in result if k.endswith("_pass")][0]
+        pass_key = next(k for k in result if k.endswith("_pass"))
         assert result[pass_key].value is True
 
 
@@ -83,7 +83,7 @@ class TestLatencyThreshold:
         result = await ev.evaluate(ctx)
 
         # Then the assertion passes
-        pass_key = [k for k in result if k.endswith("_pass")][0]
+        pass_key = next(k for k in result if k.endswith("_pass"))
         assert result[pass_key].value is True
 
     @pytest.mark.asyncio
@@ -99,5 +99,5 @@ class TestLatencyThreshold:
         result = await ev.evaluate(ctx)
 
         # Then the assertion fails
-        pass_key = [k for k in result if k.endswith("_pass")][0]
+        pass_key = next(k for k in result if k.endswith("_pass"))
         assert result[pass_key].value is False

@@ -7,8 +7,7 @@ from typing import Any
 from sentinel.domain.charts import entities as chart_entities
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.sre import entities as sre_entities
-from sentinel.domain.sre import holmes_adapter
-from sentinel.domain.sre import investigation
+from sentinel.domain.sre import holmes_adapter, investigation
 from sentinel.domain.support import entities as support_entities
 
 
@@ -274,7 +273,8 @@ def make_investigation_result(
     audit_trail: tuple[investigation.AuditEntry, ...] | None = None,
 ) -> investigation.InvestigationResult:
     return investigation.InvestigationResult(
-        findings=findings or (make_finding(source="kubernetes", summary="Pod restarting due to OOMKilled"),),
+        findings=findings
+        or (make_finding(source="kubernetes", summary="Pod restarting due to OOMKilled"),),
         sources_queried=sources_queried,
         duration_ms=duration_ms,
         adapter_name=adapter_name,

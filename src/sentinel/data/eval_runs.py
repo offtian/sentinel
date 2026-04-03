@@ -86,4 +86,4 @@ async def fetch_eval_runs(
         query=query,
         values={"dataset_name": dataset_name, "limit": limit},
     )
-    return [dict(row._mapping) for row in rows]
+    return [dict(row) for row in rows]

@@ -36,18 +36,18 @@ class TestFetchEvalRuns:
     async def test_returns_rows_for_dataset(self) -> None:
         # Given a mock database with rows
         mock_db = mock.AsyncMock()
-        row_mock = mock.MagicMock()
-        row_mock._mapping = {
-            "id": uuid.uuid4(),
-            "dataset_name": "k8s_investigation",
-            "total_cases": 3,
-            "passed_cases": 3,
-            "failed_cases": 0,
-            "average_score": 0.9,
-            "run_duration_ms": 3000,
-            "created_at": "2026-04-03T12:00:00+00:00",
-        }
-        mock_db.fetch_all.return_value = [row_mock]
+        mock_db.fetch_all.return_value = [
+            {
+                "id": uuid.uuid4(),
+                "dataset_name": "k8s_investigation",
+                "total_cases": 3,
+                "passed_cases": 3,
+                "failed_cases": 0,
+                "average_score": 0.9,
+                "run_duration_ms": 3000,
+                "created_at": "2026-04-03T12:00:00+00:00",
+            },
+        ]
 
         # When fetching by dataset name
         rows = await eval_runs.fetch_eval_runs(

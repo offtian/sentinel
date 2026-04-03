@@ -148,10 +148,12 @@ class InvestigateWithHolmes(BaseNode[State, Dependencies, common.InvestigationRe
                     duration_ms=0,
                     adapter_name="holmes",
                 )
-                ctx.state.comparison_result = comparison.ComparisonResult.from_investigation_results(
-                    baseline=baseline_result,
-                    challenger=challenger_result,
-                    case_id=ctx.state.alert.id,
+                ctx.state.comparison_result = (
+                    comparison.ComparisonResult.from_investigation_results(
+                        baseline=baseline_result,
+                        challenger=challenger_result,
+                        case_id=ctx.state.alert.id,
+                    )
                 )
             except Exception as exc:
                 logs.log_exception(

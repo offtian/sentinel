@@ -32,7 +32,7 @@ class TestComparisonModeInPipeline:
         node = sre_investigation.InvestigateWithHolmes()
 
         # When the node runs
-        next_node = await node.run(ctx)
+        await node.run(ctx)
 
         # Then a comparison result is stored on state
         assert state.comparison_result is not None

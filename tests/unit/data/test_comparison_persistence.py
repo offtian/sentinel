@@ -40,17 +40,17 @@ class TestFetchComparisonRuns:
         # Given a mock database with one row
         mock_db = mock.AsyncMock()
         investigation_id = uuid.uuid4()
-        row_mock = mock.MagicMock()
-        row_mock._mapping = {
-            "id": uuid.uuid4(),
-            "investigation_record_id": investigation_id,
-            "baseline_adapter": "holmes",
-            "challenger_adapter": "native_k8s",
-            "baseline_duration_ms": 500,
-            "challenger_duration_ms": 200,
-            "created_at": "2026-04-03T12:00:00+00:00",
-        }
-        mock_db.fetch_all.return_value = [row_mock]
+        mock_db.fetch_all.return_value = [
+            {
+                "id": uuid.uuid4(),
+                "investigation_record_id": investigation_id,
+                "baseline_adapter": "holmes",
+                "challenger_adapter": "native_k8s",
+                "baseline_duration_ms": 500,
+                "challenger_duration_ms": 200,
+                "created_at": "2026-04-03T12:00:00+00:00",
+            },
+        ]
 
         # When fetching by investigation record id
         rows = await comparison_persistence.fetch_comparison_runs(

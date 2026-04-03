@@ -666,7 +666,7 @@ def _render_comparison(
         st.markdown("### Holmes (baseline)")
         confidence_val = holmes_reply.confidence.total if holmes_reply.confidence else "N/A"
         st.metric("Confidence", f"{confidence_val}")
-        st.markdown(f"**Sources:** {', '.join(holmes_reply.sources_queried)}")
+        st.markdown(f"**Sources:** {', '.join(holmes_reply.sources_queried or [])}")
         if holmes_reply.findings_summary:
             st.markdown("**Findings:**")
             st.markdown(holmes_reply.findings_summary)
@@ -686,7 +686,7 @@ def _render_comparison(
 
     # Summary row
     st.divider()
-    holmes_sources = len(holmes_reply.sources_queried)
+    holmes_sources = len(holmes_reply.sources_queried or [])
     k8s_sources = len(k8s_data.get("sources_queried", []))
     k8s_duration = k8s_data.get("duration_ms", 0)
 
@@ -695,9 +695,7 @@ def _render_comparison(
         summary_parts.append(f"**Faster:** {adapter} ({k8s_duration}ms)")
     if holmes_sources != k8s_sources:
         more_sources = (
-            "Holmes"
-            if holmes_sources > k8s_sources
-            else k8s_data.get("adapter_name", "K8s")
+            "Holmes" if holmes_sources > k8s_sources else k8s_data.get("adapter_name", "K8s")
         )
         summary_parts.append(f"**More sources:** {more_sources}")
 

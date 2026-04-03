@@ -94,4 +94,4 @@ async def fetch_comparison_runs(
             "limit": limit,
         },
     )
-    return [dict(row._mapping) for row in rows]
+    return [dict(row) for row in rows]
