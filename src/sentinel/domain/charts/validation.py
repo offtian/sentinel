@@ -121,11 +121,23 @@ async def validate_chart(
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(gf.content)
 
-        helm_ok, helm_errors, helm_warnings = await _run_helm_template(chart_dir=chart_dir)
-        conform_ok, conform_errors, conform_warnings = await _run_kubeconform(chart_dir=chart_dir)
+        (
+            (helm_ok, helm_errors, helm_warnings),
+            (conform_ok, conform_errors, conform_warnings),
+        ) = await asyncio.gather(
+            _run_helm_template(chart_dir=chart_dir),
+            _run_kubeconform(chart_dir=chart_dir),
+        )
 
-    all_errors = helm_errors + conform_errors
-    all_warnings = helm_warnings + conform_warnings
+    # When helm template fails, kubeconform errors are noise — discard them
+    # so the retry loop only sees actionable helm errors.
+    if not helm_ok:
+        all_errors = helm_errors
+        all_warnings = helm_warnings
+        conform_ok = False
+    else:
+        all_errors = helm_errors + conform_errors
+        all_warnings = helm_warnings + conform_warnings
 
     result = entities.ValidationResult(
         helm_template_ok=helm_ok,
