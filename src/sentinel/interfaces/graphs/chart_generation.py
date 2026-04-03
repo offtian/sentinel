@@ -16,7 +16,6 @@ from sentinel.domain.charts import confidence as chart_confidence
 from sentinel.domain.charts import entities, policies, validation
 from sentinel.domain.pipeline import types as pipeline_types
 from sentinel.interfaces.graphs.agents import chart_generator, chart_request_parser, utils
-from sentinel.settings import get_settings
 from sentinel.utils import logs
 
 
@@ -122,11 +121,17 @@ async def generate_chart(
     :param max_retries: Override for K8S_CHART_MAX_RETRIES.
     :returns: A ChartGenerationReply with results.
     """
-    settings = get_settings()
-    parser_model = parser_model or settings.k8s_chart_parser_llm
-    generator_model = generator_model or settings.k8s_chart_generator_llm
-    if max_retries is None:
-        max_retries = settings.k8s_chart_max_retries
+    # Callers should provide models via config.build_chart_generation_kwargs().
+    # Fall back to config singleton if not provided.
+    if not parser_model or not generator_model or max_retries is None:
+        from sentinel.config import get_config
+
+        cfg = get_config()
+        defaults = cfg.build_chart_generation_kwargs()
+        parser_model = parser_model or str(defaults["parser_model"])
+        generator_model = generator_model or str(defaults["generator_model"])
+        if max_retries is None:
+            max_retries = int(defaults["max_retries"])
 
     # Step 1: Parse request
     try:

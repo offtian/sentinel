@@ -47,7 +47,7 @@ class SRESettings(BaseSettings):
 
     # K8s investigation agent
     k8s_investigation_backend: str = ""  # "native", "kagent", "both", or "" (disabled)
-    k8s_investigator_llm: str = "ollama/qwen3:8b"
+    k8s_investigator_llm: str = "ollama/qwen3-coder:30b"
     k8s_cluster_name: str = ""
     k8s_default_namespace: str = ""
 
@@ -66,7 +66,7 @@ class K8sChartSettings(BaseSettings):
     """K8s chart coding agent settings."""
 
     k8s_chart_generator_llm: str = "ollama/qwen3-coder:30b"
-    k8s_chart_parser_llm: str = "ollama/qwen3-coder:30b"
+    k8s_chart_parser_llm: str = "ollama/qwen3:8b"
     k8s_chart_auto_validate: bool = False
     k8s_chart_auto_sandbox: bool = False
     k8s_chart_sandbox_context: str = ""

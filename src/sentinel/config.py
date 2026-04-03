@@ -196,6 +196,34 @@ class Configuration(BaseModel):
     def chart_generator_model(self) -> str:
         return _normalise_model_name(self.settings.k8s_chart_generator_llm)
 
+    @property
+    def chart_max_retries(self) -> int:
+        return self.settings.k8s_chart_max_retries
+
+    def build_chart_generation_kwargs(
+        self,
+        *,
+        parser_model: str = "",
+        generator_model: str = "",
+        max_retries: int | None = None,
+    ) -> dict[str, object]:
+        """
+        Build keyword arguments for ``chart_generation.generate_chart()``.
+
+        Callers can override individual settings (e.g. the Streamlit UI passes
+        user-selected models) while the rest falls back to configuration.
+
+        :param parser_model: Override for the parser LLM model.
+        :param generator_model: Override for the generator LLM model.
+        :param max_retries: Override for max self-heal retries.
+        :returns: kwargs dict ready to pass to ``generate_chart()``.
+        """
+        return {
+            "parser_model": parser_model or self.chart_parser_model,
+            "generator_model": generator_model or self.chart_generator_model,
+            "max_retries": max_retries if max_retries is not None else self.chart_max_retries,
+        }
+
     # -- Support pipeline helpers --------------------------------------------
 
     def build_document_searcher(self) -> searcher.BaseDocumentSearcher | None:

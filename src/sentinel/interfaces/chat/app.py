@@ -245,6 +245,7 @@ async def _run_chart_generation(
     *,
     on_status: Callable[[str], None],
 ) -> common.ChartGenerationReply:
+    from sentinel.config import get_config
     from sentinel.domain.charts import entities as chart_entities
     from sentinel.interfaces.graphs import chart_generation
 
@@ -256,11 +257,16 @@ async def _run_chart_generation(
         requested_at=now,
     )
 
+    cfg = get_config()
+    chart_kwargs = cfg.build_chart_generation_kwargs(
+        parser_model=_selected_model("chart_parser"),
+        generator_model=_selected_model("chart_generator"),
+    )
+
     on_status("Parsing chart request...")
     return await chart_generation.generate_chart(
         request=request,
-        parser_model=_selected_model("chart_parser"),
-        generator_model=_selected_model("chart_generator"),
+        **chart_kwargs,  # type: ignore[arg-type]
     )
 
 
