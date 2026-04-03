@@ -1,0 +1,62 @@
+[
+    {
+        "name": "CrashLoopBackOff - OOMKilled",
+        "inputs": {
+            "agent_name": "k8s_investigation",
+            "case_payload": {
+                "alert": {
+                    "id": "eval-001",
+                    "source": "pagerduty",
+                    "title": "Pod api-gateway-5f8c9 in CrashLoopBackOff",
+                    "description": "Container 'api' in pod api-gateway-5f8c9 has been OOMKilled 5 times in the last 10 minutes. Memory limit is 256Mi.",
+                    "severity": "high",
+                    "service": "api-gateway"
+                },
+                "expected_keywords": ["OOMKilled", "memory", "restart"],
+                "min_findings_count": 1,
+                "max_latency_ms": 5000
+            }
+        },
+        "expected_output": "Investigation should identify OOMKilled as root cause with memory remediation"
+    },
+    {
+        "name": "Node NotReady - kubelet heartbeat",
+        "inputs": {
+            "agent_name": "k8s_investigation",
+            "case_payload": {
+                "alert": {
+                    "id": "eval-002",
+                    "source": "datadog",
+                    "title": "Node ip-10-0-1-42 is NotReady",
+                    "description": "Node ip-10-0-1-42 has not sent a heartbeat in 5 minutes. kubelet is unresponsive. 12 pods affected.",
+                    "severity": "critical",
+                    "service": "kubernetes-cluster"
+                },
+                "expected_keywords": ["NotReady", "kubelet", "heartbeat"],
+                "min_findings_count": 1,
+                "max_latency_ms": 5000
+            }
+        },
+        "expected_output": "Investigation should identify kubelet failure as root cause"
+    },
+    {
+        "name": "Deployment rollout stuck",
+        "inputs": {
+            "agent_name": "k8s_investigation",
+            "case_payload": {
+                "alert": {
+                    "id": "eval-003",
+                    "source": "pagerduty",
+                    "title": "Deployment payments-service rollout stuck",
+                    "description": "Deployment payments-service has been progressing for 15 minutes. New ReplicaSet has 0/3 ready pods. Old ReplicaSet still running 3/3.",
+                    "severity": "high",
+                    "service": "payments-service"
+                },
+                "expected_keywords": ["rollout", "ReplicaSet", "scaling"],
+                "min_findings_count": 1,
+                "max_latency_ms": 5000
+            }
+        },
+        "expected_output": "Investigation should identify stuck rollout with ReplicaSet analysis"
+    }
+]
