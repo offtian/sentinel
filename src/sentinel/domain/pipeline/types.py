@@ -86,6 +86,19 @@ class StatusUpdateClient(abc.ABC):
         """Update the current processing status for user feedback."""
 
 
+class ChartGenerationReply(BaseModel):
+    """Output from the chart generation pipeline."""
+
+    service_name: str
+    files_generated: int = 0
+    validation_passed: bool = False
+    policy_violations: int = 0
+    generation_attempts: int = 1
+    confidence: confidence_entities.ConfidenceScore | None = None
+    pr_url: str = ""
+    error: str | None = None
+
+
 class NoOpStatusUpdateClient(StatusUpdateClient):
     async def update_status(self, message: str) -> None:
         pass

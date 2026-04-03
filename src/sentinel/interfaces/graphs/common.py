@@ -14,4 +14,5 @@ from sentinel.domain.pipeline.types import PersistTicketReviewFn as PersistTicke
 from sentinel.domain.pipeline.types import RequestApprovalFn as RequestApprovalFn
 from sentinel.domain.pipeline.types import StatusUpdateClient as StatusUpdateClient
 from sentinel.domain.pipeline.types import SupportReply as SupportReply
+from sentinel.domain.pipeline.types import ChartGenerationReply as ChartGenerationReply
 from sentinel.domain.pipeline.types import TraceCollector as TraceCollector
