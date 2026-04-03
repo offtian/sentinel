@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
@@ -7,6 +8,7 @@ from sentinel.domain.charts import entities as chart_entities
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre import holmes_adapter
+from sentinel.domain.sre import investigation
 from sentinel.domain.support import entities as support_entities
 
 
@@ -238,6 +240,88 @@ def make_generated_file(
     content: str = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api-gateway",
 ) -> chart_entities.GeneratedFile:
     return chart_entities.GeneratedFile(path=path, content=content)
+
+
+def make_audit_entry(
+    *,
+    adapter_name: str = "native_k8s",
+    action: str = "tool_call",
+    tool_name: str | None = "get_pod_status",
+    status: str = "success",
+    duration_ms: int = 42,
+    error_code: str | None = None,
+    payload: dict[str, Any] | None = None,
+    timestamp: datetime | None = None,
+) -> investigation.AuditEntry:
+    return investigation.AuditEntry(
+        timestamp=timestamp or datetime(2026, 4, 3, 12, 0, tzinfo=UTC),
+        adapter_name=adapter_name,
+        action=action,
+        tool_name=tool_name,
+        status=status,
+        duration_ms=duration_ms,
+        error_code=error_code,
+        payload=payload or {},
+    )
+
+
+def make_investigation_result(
+    *,
+    findings: tuple[sre_entities.Finding, ...] | None = None,
+    sources_queried: tuple[str, ...] = ("kubernetes", "datadog_logs"),
+    duration_ms: int = 350,
+    adapter_name: str = "native_k8s",
+    audit_trail: tuple[investigation.AuditEntry, ...] | None = None,
+) -> investigation.InvestigationResult:
+    return investigation.InvestigationResult(
+        findings=findings or (make_finding(source="kubernetes", summary="Pod restarting due to OOMKilled"),),
+        sources_queried=sources_queried,
+        duration_ms=duration_ms,
+        adapter_name=adapter_name,
+        audit_trail=audit_trail or (make_audit_entry(adapter_name=adapter_name),),
+    )
+
+
+class MockKagentAdapter(investigation.K8sInvestigationAdapter):
+    """Mock kagent adapter for testing comparison mode."""
+
+    def __init__(
+        self,
+        *,
+        findings: tuple[sre_entities.Finding, ...] = (),
+        delay_ms: int = 0,
+    ) -> None:
+        self._findings = findings or (
+            make_finding(source="kagent", summary="CRD investigation: pod OOMKilled"),
+        )
+        self._delay_ms = delay_ms
+
+    @property
+    def is_configured(self) -> bool:
+        return True
+
+    async def investigate(
+        self,
+        *,
+        alert: sre_entities.Alert,
+        context: investigation.InvestigationContext | None = None,
+    ) -> investigation.InvestigationResult:
+        if self._delay_ms > 0:
+            await asyncio.sleep(self._delay_ms / 1000)
+        return investigation.InvestigationResult(
+            findings=self._findings,
+            sources_queried=("kagent_crd",),
+            duration_ms=self._delay_ms or 200,
+            adapter_name="kagent",
+            audit_trail=(
+                make_audit_entry(
+                    adapter_name="kagent",
+                    action="crd_operation",
+                    tool_name=None,
+                    duration_ms=self._delay_ms or 200,
+                ),
+            ),
+        )
 
 
 def make_validation_result(
