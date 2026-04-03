@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: order-processor
+  namespace: argocd
+spec:
+  destination:
+    namespace: order-processor
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    chart: order-processor
+    repoURL: https://charts.example.com
+    targetRevision: 1.0.0
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

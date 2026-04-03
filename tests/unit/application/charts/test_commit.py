@@ -4,6 +4,8 @@ import asyncio
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from sentinel.application.charts import commit
 from sentinel.domain.charts import entities
 
@@ -90,5 +92,51 @@ class TestCommitToGitOps:
                 )
             )
 
-        # Then git commands were called
+        # Then git commands were called and PR URL returned
         assert mock_run.call_count >= 1
+
+    def test_raises_on_git_checkout_failure(self, tmp_path: Path):
+        # Given a chart output
+        chart = entities.ChartOutput(
+            service_name="api-gateway",
+            files=(
+                entities.GeneratedFile(
+                    path="Chart.yaml",
+                    content="apiVersion: v2\nname: api-gateway",
+                ),
+            ),
+        )
+
+        # When git checkout fails
+        with mock.patch.object(commit, "_run_command") as mock_run:
+            mock_run.return_value = (1, "", "fatal: branch already exists")
+
+            # Then GitOpsCommitError is raised
+            with pytest.raises(commit.GitOpsCommitError, match="Branch creation failed"):
+                asyncio.run(commit.commit_to_gitops(chart=chart, gitops_root=tmp_path))
+
+    def test_raises_on_gh_pr_create_failure(self, tmp_path: Path):
+        # Given a chart output where git succeeds but gh fails
+        chart = entities.ChartOutput(
+            service_name="api-gateway",
+            files=(
+                entities.GeneratedFile(
+                    path="Chart.yaml",
+                    content="apiVersion: v2\nname: api-gateway",
+                ),
+            ),
+        )
+
+        # When gh pr create fails
+        with mock.patch.object(commit, "_run_command") as mock_run:
+
+            def side_effect(*args, **kwargs):
+                if args[0] == "gh":
+                    return (1, "", "gh auth login required")
+                return (0, "ok", "")
+
+            mock_run.side_effect = side_effect
+
+            # Then GitOpsCommitError is raised with PR creation message
+            with pytest.raises(commit.GitOpsCommitError, match="PR creation failed"):
+                asyncio.run(commit.commit_to_gitops(chart=chart, gitops_root=tmp_path))
