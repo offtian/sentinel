@@ -9,8 +9,9 @@ from pydantic_ai.toolsets import AbstractToolset
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
 from sentinel.domain.confidence import entities as confidence_entities
+from sentinel.domain.evaluation import comparison
 from sentinel.domain.sre import entities as sre_entities
-from sentinel.domain.sre import holmes_adapter
+from sentinel.domain.sre import holmes_adapter, investigation
 from sentinel.domain.vendor_adapters.pagerduty import PagerDutyClient
 from sentinel.interfaces.graphs import common
 from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser, utils
@@ -33,12 +34,15 @@ class Dependencies:
     request_approval_fn: common.RequestApprovalFn | None = None
     # Toolsets injected at agent.run() time.  Built by config.py.
     analyser_toolsets: Sequence[AbstractToolset[object]] = ()
+    # Optional challenger adapter for comparison mode.
+    challenger_adapter: investigation.BaseInvestigationAdapter | None = None
 
 
 @dataclasses.dataclass
 class State:
     alert: sre_entities.Alert
     investigation: sre_entities.Investigation | None = None
+    comparison_result: comparison.ComparisonResult | None = None
 
 
 @dataclasses.dataclass
@@ -127,6 +131,37 @@ class InvestigateWithHolmes(BaseNode[State, Dependencies, common.InvestigationRe
                 holmes_tool_calls=[],
                 holmes_sources=[],
             )
+
+        # Run challenger adapter concurrently if configured (comparison mode)
+        if ctx.deps.challenger_adapter is not None:
+            try:
+                challenger_result = await ctx.deps.challenger_adapter.investigate(
+                    alert=ctx.state.alert,
+                )
+                # Build a baseline InvestigationResult from Holmes output
+                baseline_result = investigation.InvestigationResult(
+                    findings=tuple(
+                        sre_entities.Finding(source=s, summary="", relevance=0.5)
+                        for s in holmes_result.sources_queried
+                    ),
+                    sources_queried=tuple(holmes_result.sources_queried),
+                    duration_ms=0,
+                    adapter_name="holmes",
+                )
+                ctx.state.comparison_result = comparison.ComparisonResult.from_investigation_results(
+                    baseline=baseline_result,
+                    challenger=challenger_result,
+                    case_id=ctx.state.alert.id,
+                )
+            except Exception as exc:
+                logs.log_exception(
+                    exc,
+                    params={
+                        "alert_id": ctx.state.alert.id,
+                        "node": "InvestigateWithHolmes",
+                        "comparison": "challenger_failed",
+                    },
+                )
 
         logs.log_event(
             "holmes_investigation_completed",
@@ -421,6 +456,7 @@ async def investigate_alert(
     require_approval_below: float = 0.0,
     request_approval_fn: common.RequestApprovalFn | None = None,
     analyser_toolsets: Sequence[AbstractToolset[object]] = (),
+    challenger_adapter: investigation.BaseInvestigationAdapter | None = None,
 ) -> common.InvestigationReply:
     """
     Run the full SRE investigation pipeline for an alert.
@@ -440,6 +476,7 @@ async def investigate_alert(
         require_approval_below=require_approval_below,
         request_approval_fn=request_approval_fn,
         analyser_toolsets=analyser_toolsets,
+        challenger_adapter=challenger_adapter,
     )
 
     investigation_graph = Graph(
