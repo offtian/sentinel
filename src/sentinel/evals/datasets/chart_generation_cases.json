@@ -1,0 +1,123 @@
+[
+  {
+    "id": "cg-001",
+    "description": "Simple web service with port and resources",
+    "input": {
+      "raw_message": "Deploy a Python web service called api-gateway on port 8080 with 256Mi memory and 200m CPU",
+      "requester": "alice",
+      "team": "platform"
+    },
+    "output": {
+      "service_name": "api-gateway",
+      "files": [
+        {"path": "templates/deployment.yaml", "content": "apiVersion: apps/v1\nkind: Deployment"},
+        {"path": "templates/service.yaml", "content": "apiVersion: v1\nkind: Service"}
+      ],
+      "confidence": 0.85
+    },
+    "expected": {
+      "has_deployment": true,
+      "has_service": true,
+      "min_files": 2,
+      "min_confidence": 0.7
+    }
+  },
+  {
+    "id": "cg-002",
+    "description": "Service with HPA and dependencies",
+    "input": {
+      "raw_message": "Deploy order-processor with autoscaling 3-10 replicas, 512Mi memory, connects to redis:6379",
+      "requester": "bob",
+      "team": "platform"
+    },
+    "output": {
+      "service_name": "order-processor",
+      "files": [
+        {"path": "templates/deployment.yaml", "content": "apiVersion: apps/v1\nkind: Deployment"},
+        {"path": "templates/service.yaml", "content": "apiVersion: v1\nkind: Service"},
+        {"path": "templates/hpa.yaml", "content": "apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler"}
+      ],
+      "confidence": 0.8
+    },
+    "expected": {
+      "has_deployment": true,
+      "has_service": true,
+      "has_hpa": true,
+      "min_files": 3,
+      "min_confidence": 0.7
+    }
+  },
+  {
+    "id": "cg-003",
+    "description": "Secure service with NetworkPolicy",
+    "input": {
+      "raw_message": "Deploy auth-service on port 9090 with strict network policy and non-root security context",
+      "requester": "alice",
+      "team": "platform"
+    },
+    "output": {
+      "service_name": "auth-service",
+      "files": [
+        {"path": "templates/deployment.yaml", "content": "apiVersion: apps/v1\nkind: Deployment"},
+        {"path": "templates/service.yaml", "content": "apiVersion: v1\nkind: Service"},
+        {"path": "templates/networkpolicy.yaml", "content": "apiVersion: networking.k8s.io/v1\nkind: NetworkPolicy"}
+      ],
+      "confidence": 0.8
+    },
+    "expected": {
+      "has_deployment": true,
+      "has_service": true,
+      "has_networkpolicy": true,
+      "min_files": 3,
+      "min_confidence": 0.7
+    }
+  },
+  {
+    "id": "cg-004",
+    "description": "Complex service with env vars, dependencies, and all resources",
+    "input": {
+      "raw_message": "Deploy payment-gateway on port 443 with env vars STRIPE_KEY and LOG_LEVEL=debug, depends on postgres:5432 and redis:6379, needs HPA 2-8 replicas, network policy, PDB, memory 512Mi-1Gi, CPU 250m-1000m",
+      "requester": "alice",
+      "team": "platform"
+    },
+    "output": {
+      "service_name": "payment-gateway",
+      "files": [
+        {"path": "templates/deployment.yaml", "content": "apiVersion: apps/v1"},
+        {"path": "templates/service.yaml", "content": "apiVersion: v1"},
+        {"path": "templates/hpa.yaml", "content": "apiVersion: autoscaling/v2"},
+        {"path": "templates/networkpolicy.yaml", "content": "apiVersion: networking.k8s.io/v1"}
+      ],
+      "confidence": 0.75
+    },
+    "expected": {
+      "has_deployment": true,
+      "has_service": true,
+      "min_files": 4,
+      "min_confidence": 0.6
+    }
+  },
+  {
+    "id": "cg-005",
+    "description": "Minimal spec relying on defaults",
+    "input": {
+      "raw_message": "Deploy a service called health-check",
+      "requester": "bob",
+      "team": "platform"
+    },
+    "output": {
+      "service_name": "health-check",
+      "files": [
+        {"path": "templates/deployment.yaml", "content": "apiVersion: apps/v1"},
+        {"path": "templates/service.yaml", "content": "apiVersion: v1"}
+      ],
+      "confidence": 0.9
+    },
+    "expected": {
+      "has_deployment": true,
+      "has_service": true,
+      "min_files": 2,
+      "min_confidence": 0.7
+    }
+  }
+]

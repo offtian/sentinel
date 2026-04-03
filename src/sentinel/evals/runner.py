@@ -14,7 +14,7 @@ from sentinel.utils import logs
 from . import cases, rendering, reporting, types
 
 
-_KNOWN_AGENTS = ("alert_classifier", "root_cause_analyser", "response_drafter")
+_KNOWN_AGENTS = ("alert_classifier", "root_cause_analyser", "response_drafter", "chart_generator")
 
 
 async def _noop_task(input_data: types.InputData) -> str:

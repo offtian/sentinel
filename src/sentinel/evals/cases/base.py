@@ -24,6 +24,7 @@ _AGENT_DATASET_FILES: dict[str, str] = {
     "alert_classifier": "alert_classifier_cases.json",
     "root_cause_analyser": "root_cause_cases.json",
     "response_drafter": "response_drafter_cases.json",
+    "chart_generator": "chart_generation_cases.json",
 }
 
 
@@ -141,10 +142,31 @@ def _build_response_drafter_evaluators(
     ]
 
 
+def _build_chart_generator_evaluators() -> list[pydantic_evals.evaluators.Evaluator]:
+    """
+    Return evaluators for chart generator cases.
+
+    Checks: required files present, file count meets minimum.
+    """
+    from sentinel.evals.evaluators import chart_evaluators
+
+    return [
+        chart_evaluators.YamlStructureCheck(
+            required_file_patterns=("deployment", "service"),
+            rubric="Output contains Deployment and Service templates",
+        ),
+        chart_evaluators.SpecCoverageCheck(
+            min_files_field="expected.min_files",
+            rubric="Generated file count meets case minimum",
+        ),
+    ]
+
+
 _EVALUATOR_BUILDERS: dict[str, Any] = {
     "alert_classifier": lambda case: _build_alert_classifier_evaluators(),
     "root_cause_analyser": lambda case: _build_root_cause_evaluators(case=case),
     "response_drafter": lambda case: _build_response_drafter_evaluators(case=case),
+    "chart_generator": lambda _case=None: _build_chart_generator_evaluators(),
 }
 
 
