@@ -5,29 +5,63 @@ You are an expert Helm chart developer generating production-grade Kubernetes ma
 Given a structured service specification and team policy, generate a complete set of
 Helm chart template files. Each file must be valid YAML with proper Kubernetes API versions.
 
-Required output files:
-1. **templates/deployment.yaml** — Deployment with containers, ports, resources, probes, security context
-2. **templates/service.yaml** — ClusterIP Service exposing container ports
-3. **templates/hpa.yaml** (if replicas specified) — HorizontalPodAutoscaler
-4. **templates/networkpolicy.yaml** (if NetworkPolicy in extra_resources) — ingress/egress rules
-5. **templates/argocd-app.yaml** — ArgoCD Application resource pointing to the chart
+## Required files
 
-CRITICAL RULES — you MUST follow these:
-- Generate PLAIN, STATIC Kubernetes YAML only. Do NOT use any Helm template functions.
-- Do NOT use: {{ "{{" }} include ... {{ "}}" }}, {{ "{{" }} .Values.* {{ "}}" }}, {{ "{{" }} .Release.Name {{ "}}" }}, {{ "{{" }} .Chart.Name {{ "}}" }}, or any {{ "{{" }} ... {{ "}}" }} expressions.
-- Do NOT reference _helpers.tpl or named templates. Do NOT use tpl, define, or include.
-- Use the LITERAL values from the spec (service name, image, ports, etc.) directly in the YAML.
-- Every file must be fully valid, self-contained YAML that passes `helm template` and `kubeconform` without errors.
+| # | `path` (exact value) | What to generate |
+|---|----------------------|------------------|
+| 1 | `templates/deployment.yaml` | Deployment with containers, ports, resources, probes, securityContext |
+| 2 | `templates/service.yaml` | ClusterIP Service exposing the container ports |
+| 3 | `templates/hpa.yaml` | HorizontalPodAutoscaler (only if replicas are specified) |
+| 4 | `templates/networkpolicy.yaml` | NetworkPolicy (only if NetworkPolicy is in extra_resources) |
+| 5 | `templates/argocd-app.yaml` | ArgoCD Application (apiVersion: argoproj.io/v1alpha1) |
 
-Content rules:
-- Include metadata.labels with standard labels: app.kubernetes.io/name, app.kubernetes.io/instance
-- Add team labels from policy default_labels
-- Always include readiness and liveness probes (httpGet on first port, or tcpSocket)
-- Set securityContext.runAsNonRoot based on spec
-- Set resource requests and limits from spec
-- For HPA: target CPU utilisation at 70%, use autoscaling/v2
-- For NetworkPolicy: allow ingress on service ports, restrict egress to allowed_egress hosts
-- For ArgoCD Application: use apiVersion argoproj.io/v1alpha1
+## CRITICAL: Plain YAML only
+
+Every file must pass `helm template` and `kubeconform` with zero errors.
+The ONLY way to guarantee this is to write **plain, static YAML with literal values**.
+
+NEVER use:
+- `{{ "{{" }} ... {{ "}}" }}` expressions of any kind
+- `{{ "{{" }} include {{ "}}" }}`, `{{ "{{" }} .Values.* {{ "}}" }}`, `{{ "{{" }} .Release.Name {{ "}}" }}`, `{{ "{{" }} .Chart.Name {{ "}}" }}`
+- `tpl`, `define`, `_helpers.tpl`, or named templates
+
+Substitute every value directly from the spec. For example, if the service name is
+`order-processor`, write `name: order-processor` — not `name: {{ "{{" }} .Release.Name {{ "}}" }}`.
+
+## Content rules
+
+- Labels: include `app.kubernetes.io/name` and `app.kubernetes.io/instance` on every resource, plus any `default_labels` from the team policy.
+- Probes: always add readinessProbe and livenessProbe (httpGet on the first port, or tcpSocket if no HTTP port).
+- Security: set `securityContext.runAsNonRoot` from the spec.
+- Resources: set requests and limits from the spec.
+- HPA: target CPU utilisation 70%, use `autoscaling/v2`.
+- NetworkPolicy: allow ingress on service ports, restrict egress to `allowed_egress` hosts.
+
+## Example output (single file)
+
+Below is a correct `templates/service.yaml` for a service named `order-processor`
+with one port (8080/TCP). Study the style and follow it exactly.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-processor
+  labels:
+    app.kubernetes.io/name: order-processor
+    app.kubernetes.io/instance: order-processor
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: order-processor
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+```
+
+Notice: no template expressions, no comments, just valid YAML with literal values.
 
 Output each file as a GeneratedFile with `path` and `content` fields.
 {% endblock %}
