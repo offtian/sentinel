@@ -163,6 +163,8 @@ class Configuration(BaseModel):
         Build the K8s investigation adapter based on configuration.
 
         Returns None when K8s investigation is disabled.
+        Injects MCP client toolsets from ``MCP_SERVERS`` and
+        ``K8S_MCP_SERVER_URL`` settings when available.
 
         :returns: A K8sInvestigationAdapter or None.
         """
@@ -173,14 +175,25 @@ class Configuration(BaseModel):
         if backend in ("native", "both"):
             from sentinel.domain.sre import k8s_native_agent
             from sentinel.interfaces.graphs.agents import k8s_runner
+            from sentinel.plugins.toolsets import mcp as mcp_toolset_mod
+
+            mcp_toolsets = list(
+                mcp_toolset_mod.build_mcp_toolsets(config_json=self.settings.mcp_servers)
+            )
+
+            if self.settings.k8s_mcp_server_url:
+                from pydantic_ai.mcp import MCPServerSSE
+
+                mcp_toolsets.append(MCPServerSSE(url=self.settings.k8s_mcp_server_url))
 
             return k8s_native_agent.NativeK8sAgent(
                 k8s_client=None,  # Wire real K8s client when kubernetes lib is integrated
                 model_name=_normalise_model_name(self.settings.k8s_investigator_llm),
+                mcp_toolsets=tuple(mcp_toolsets),
                 agent_runner=k8s_runner.run_k8s_agent,
             )
 
-        return None  # kagent adapter wired in Task 11
+        return None  # kagent adapter wired separately
 
     @property
     def k8s_investigator_model(self) -> str:

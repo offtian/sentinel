@@ -72,12 +72,12 @@ def build_mcp_toolsets(*, config_json: str) -> tuple[Any, ...]:
     if not configs:
         return ()
 
-    from pydantic_ai.mcp import MCPServerHTTP, MCPServerStdio
+    from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
 
     toolsets: list[Any] = []
     for config in configs:
         if config.url:
-            toolsets.append(MCPServerHTTP(url=config.url))
+            toolsets.append(MCPServerSSE(url=config.url))
             logger.info("MCP HTTP client configured", name=config.name, url=config.url)
         elif config.command:
             toolsets.append(MCPServerStdio(config.command, args=list(config.args)))
