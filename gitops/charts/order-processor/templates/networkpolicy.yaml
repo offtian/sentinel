@@ -5,29 +5,25 @@ metadata:
   labels:
     app.kubernetes.io/name: order-processor
     app.kubernetes.io/instance: order-processor
-    team: backend
 spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/name: order-processor
-      app.kubernetes.io/instance: order-processor
   policyTypes:
-  - Ingress
-  - Egress
+    - Ingress
+    - Egress
   ingress:
-  - from:
-    - podSelector:
-        matchLabels:
-          app.kubernetes.io/name: order-processor
-          app.kubernetes.io/instance: order-processor
-    ports:
-    - protocol: TCP
-      port: 8080
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: order-processor
+      ports:
+        - protocol: TCP
+          port: 8080
   egress:
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          name: allowed-namespace
-    ports:
-    - protocol: TCP
-      port: 53
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+      ports:
+        - protocol: TCP
+          port: 53
