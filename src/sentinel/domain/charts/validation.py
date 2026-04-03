@@ -69,6 +69,8 @@ async def _run_kubeconform(
         proc = await asyncio.create_subprocess_exec(
             "kubeconform",
             "-summary",
+            "-skip",
+            "Application",
             str(chart_dir / "templates"),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

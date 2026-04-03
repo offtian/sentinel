@@ -86,6 +86,13 @@ class StatusUpdateClient(abc.ABC):
         """Update the current processing status for user feedback."""
 
 
+class ChartStepTiming(BaseModel):
+    """Timing for a single pipeline step."""
+
+    step: str
+    duration_ms: int = 0
+
+
 class ChartGenerationReply(BaseModel):
     """Output from the chart generation pipeline."""
 
@@ -97,6 +104,10 @@ class ChartGenerationReply(BaseModel):
     confidence: confidence_entities.ConfidenceScore | None = None
     pr_url: str = ""
     error: str | None = None
+    total_duration_ms: int = 0
+    step_timings: tuple[ChartStepTiming, ...] = ()
+    parser_model: str = ""
+    generator_model: str = ""
 
 
 class NoOpStatusUpdateClient(StatusUpdateClient):

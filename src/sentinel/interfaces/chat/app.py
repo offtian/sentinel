@@ -388,6 +388,33 @@ def _format_chart_result(reply: common.ChartGenerationReply) -> str:
     return "\n".join(parts)
 
 
+def _render_chart_metrics(reply: common.ChartGenerationReply) -> None:
+    """Render timing and model metrics for chart generation."""
+    total_sec = reply.total_duration_ms / 1000
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Time", f"{total_sec:.1f}s")
+    col2.metric("Files", reply.files_generated)
+    col3.metric("Attempts", reply.generation_attempts)
+    confidence_val = f"{reply.confidence.total:.0%}" if reply.confidence else "N/A"
+    col4.metric("Confidence", confidence_val)
+
+    with st.expander("Pipeline Timing Breakdown", expanded=False):
+        if reply.parser_model or reply.generator_model:
+            st.caption(
+                f"Parser: `{reply.parser_model}`  \u2022  Generator: `{reply.generator_model}`"
+            )
+        for step_timing in reply.step_timings:
+            duration_sec = step_timing.duration_ms / 1000
+            pct = (
+                (step_timing.duration_ms / reply.total_duration_ms * 100)
+                if reply.total_duration_ms
+                else 0
+            )
+            st.markdown(f"**{step_timing.step}** — {duration_sec:.1f}s ({pct:.0f}%)")
+            st.progress(min(pct / 100, 1.0))
+
+
 # ---------------------------------------------------------------------------
 # Example scenarios — derived from PRD alert/ticket categories
 # ---------------------------------------------------------------------------
@@ -765,6 +792,7 @@ def _handle_user_input(user_input: str) -> None:
                 formatted = _format_chart_result(reply)
                 status_placeholder.empty()
                 st.markdown(formatted)
+                _render_chart_metrics(reply)
                 st.session_state.messages.append({"role": "assistant", "content": formatted})
                 return
 
