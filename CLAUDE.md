@@ -6,17 +6,17 @@ See @README.md for project overview, API endpoints, and architecture diagram.
 ## Essential Commands
 
 ```bash
-make install          # Install dependencies with UV
-make test             # Run unit tests
-make test-integration # Run integration tests (requires DB)
-make test-evals       # Run functional/E2E tests
-make lint             # Ruff + MyPy + import-linter
-make lint-fix         # Auto-format with Ruff
+just install          # Install dependencies with UV
+just test             # Run unit tests
+just test-integration # Run integration tests (requires DB)
+just test-evals       # Run functional/E2E tests
+just lint             # Ruff + MyPy + import-linter
+just lint-fix         # Auto-format with Ruff
 ```
 
 ```bash
-uv run pytest tests/unit/path/test_file.py           # Single test file
-uv run pytest tests/unit/path/test_file.py::TestClass # Single test class
+just test tests/unit/path/test_file.py           # Single test file
+just test tests/unit/path/test_file.py::TestClass # Single test class
 ```
 
 ## Architecture (non-obvious)

@@ -1,0 +1,158 @@
+# Sentinel — task runner
+# Run `just` to see all available recipes.
+# Works from any subdirectory.
+
+set fallback  # search parent directories for this justfile
+set dotenv-load  # load .env automatically
+
+# Setup
+# -----
+
+# Install dependencies
+install:
+    uv sync --locked --all-extras
+    .venv/bin/python -c "import sentinel; print(sentinel.__file__)"
+
+# Update lockfile
+lock:
+    uv lock
+
+# Development
+# -----------
+
+# Start HTTP API + Slack Socket Mode handler
+run:
+    uv run python -m sentinel.main
+
+# API-only mode with hot-reload (no Slack bot)
+run-api:
+    uv run uvicorn sentinel.interfaces.api.app:app --host 127.0.0.1 --port 8000 --reload
+
+# Background worker that polls the job queue
+run-worker:
+    uv run python -m sentinel.worker
+
+# Streamlit chat UI for local e2e testing
+run-chat:
+    uv run streamlit run src/sentinel/interfaces/chat/app.py --server.port 8501
+
+# Testing
+# -------
+
+# Run unit tests
+test *ARGS:
+    uv run pytest tests/unit/ -x -vv {{ ARGS }}
+
+# Run integration tests (requires DB)
+test-integration *ARGS:
+    uv run pytest tests/integration/ -x -vv {{ ARGS }}
+
+# Run functional / eval tests
+test-evals *ARGS:
+    uv run pytest tests/functional/ tests/evals/ -x -vv {{ ARGS }}
+
+# Quick health-check against running API
+smoke-test:
+    curl -s http://localhost:8000/health | python -m json.tool
+
+# Code Quality
+# ------------
+
+# Run all linters (ruff + mypy + import-linter)
+lint:
+    uv run ruff check src/ tests/
+    uv run ruff format --check src/ tests/
+    uv run mypy src/
+    uv run lint-imports
+
+# Auto-fix lint issues and format
+lint-fix:
+    uv run ruff check --fix src/ tests/
+    uv run ruff format src/ tests/
+
+# Ruff check only
+ruff-check:
+    uv run ruff check src/ tests/
+
+# Ruff format only
+ruff-format:
+    uv run ruff format src/ tests/
+
+# MyPy type-check
+typecheck:
+    uv run mypy src/
+
+# Import-linter check
+check-imports:
+    uv run lint-imports
+
+# Database
+# --------
+
+# Run pending migrations
+run-db-migrations:
+    uv run python -m alembic -c src/sentinel/data/alembic.ini upgrade head
+
+# Generate a new migration
+build-migration MESSAGE:
+    uv run python -m alembic -c src/sentinel/data/alembic.ini revision --autogenerate -m "{{ MESSAGE }}"
+
+# Roll back one migration
+downgrade-db-migration:
+    uv run python -m alembic -c src/sentinel/data/alembic.ini downgrade -1
+
+# Docker
+# ------
+
+# Build Docker image
+docker-build:
+    docker build -t sentinel:latest .
+
+# Start Docker Compose stack
+docker-compose-up:
+    docker compose up -d
+
+# Kubernetes (local — Docker Desktop)
+# ------------------------------------
+
+# Build image + deploy to local K8s
+k8s-up:
+    docker build -t sentinel-api:local .
+    @echo "Loading image into K8s nodes..."
+    @for node in $(kubectl get nodes -o name | cut -d/ -f2); do \
+        echo "  → $node"; \
+        docker save sentinel-api:local | docker exec -i $node ctr -n k8s.io images import -; \
+    done
+    kubectl apply -f helm/ollama-local.yaml
+    kubectl apply -f helm/postgres-local.yaml
+    kubectl apply -f helm/grafana-stack-local.yaml
+    kubectl wait --for=condition=ready pod -l app=ollama --timeout=120s
+    kubectl wait --for=condition=ready pod -l app=sentinel-postgres --timeout=60s
+    kubectl wait --for=condition=ready pod -l app=grafana --timeout=60s
+    helm upgrade --install sentinel ./helm/sentinel -f ./helm/sentinel/values-local.yaml
+
+# Full rebuild + redeploy (cleans stale migration job)
+k8s-deploy:
+    helm uninstall sentinel || true
+    kubectl delete job sentinel-migration --ignore-not-found
+    just k8s-up
+
+# Tear down local K8s stack
+k8s-down:
+    helm uninstall sentinel || true
+    kubectl delete -f helm/grafana-stack-local.yaml || true
+    kubectl delete -f helm/postgres-local.yaml || true
+    kubectl delete -f helm/ollama-local.yaml || true
+
+# Tail sentinel logs
+k8s-logs:
+    kubectl logs -l app.kubernetes.io/name=sentinel --all-containers --prefix -f
+
+# Housekeeping
+# ------------
+
+# Remove caches and build artifacts
+clean:
+    find src/ tests/ -type d -name "__pycache__" -exec rm -rf {} +
+    find . -maxdepth 1 -type d -name "*.egg-info" -exec rm -rf {} +
+    rm -rf .mypy_cache .pytest_cache .ruff_cache htmlcov .coverage

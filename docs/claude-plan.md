@@ -311,14 +311,14 @@ dependencies = [
 
 ### Local Development
 ```bash
-make install                    # UV install
-make run-api                    # FastAPI on localhost:8000
-make run-worker                 # Background worker
-make test                       # Unit tests
-make test-integration           # Integration tests
-make test-evals                 # Functional/eval tests
-make lint                       # Ruff + MyPy + import-linter
-make k8s-up                     # Deploy to local K8s
+just install                    # UV install
+just run-api                    # FastAPI on localhost:8000
+just run-worker                 # Background worker
+just test                       # Unit tests
+just test-integration           # Integration tests
+just test-evals                 # Functional/eval tests
+just lint                       # Ruff + MyPy + import-linter
+just k8s-up                     # Deploy to local K8s
 ```
 
 ### SRE Testing

@@ -25,7 +25,7 @@ Both pipelines are built as [Pydantic Graph](https://ai.pydantic.dev/pydantic-gr
 ### SRE Investigation Pipeline
 
 ```
-ClassifyAlert → InvestigateWithHolmes → AnalyseRootCause → DetermineConfidence → PublishFindings
+ClassifyAlert → InvestigateWithHolmes → AnalyseRootCause → DetermineConfidence → [ApprovalGate] → PublishFindings
 ```
 
 Each node has structured error handling via `NodeError` / `PipelineNodeFailed`. The `DetermineConfidence` node enforces an approval gate for low-confidence results (configurable via `require_approval_below_confidence`).
@@ -42,16 +42,16 @@ Error handling and approval gating follow the same pattern as the SRE pipeline.
 
 ```bash
 # Install dependencies
-make install
+just install
 
 # Copy and fill in environment variables
 cp .env.default .env
 
 # Start PostgreSQL + API with Docker Compose
-make docker-compose-up
+just docker-compose-up
 
 # Or run the API locally (requires a running Postgres)
-make run-api
+just run-api
 ```
 
 The API starts at `http://localhost:8000`. Health check at `GET /health`.
@@ -84,17 +84,17 @@ The API starts at `http://localhost:8000`. Health check at `GET /health`.
 
 ```bash
 # Run unit tests
-make test
+just test
 
 # Run linting (ruff + mypy + import-linter)
-make lint
+just lint
 
 # Auto-format
-make lint-fix
+just lint-fix
 
 # Database migrations
-make run-db-migrations
-make build-migration MESSAGE="add new table"
+just run-db-migrations
+just build-migration "add new table"
 ```
 
 ## Configuration
@@ -163,8 +163,9 @@ src/sentinel/
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) — design principles, layer diagram, pipeline flows
-- [Roadmap](docs/roadmap.md) — phased delivery plan with implementation details
+- [PRD](docs/prd.md) — requirements, acceptance criteria, and remaining gaps
+- [Architecture](docs/architecture.md) — design principles, layer diagram, and pipeline flows
+- [Claude Plan](docs/claude-plan.md) — operational context, repo structure, and implementation notes
 
 ## License
 
