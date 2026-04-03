@@ -65,6 +65,8 @@ _MODEL_ROLES = (
     ("analyser", "Root Cause Analyser"),
     ("reviewer", "Ticket Reviewer"),
     ("drafter", "Response Drafter"),
+    ("chart_parser", "Chart Parser"),
+    ("chart_generator", "Chart Generator"),
 )
 
 _SETTINGS_KEY_FOR_ROLE: dict[str, str] = {
@@ -73,6 +75,8 @@ _SETTINGS_KEY_FOR_ROLE: dict[str, str] = {
     "analyser": "root_cause_llm",
     "reviewer": "ticket_reviewer_llm",
     "drafter": "response_drafter_llm",
+    "chart_parser": "k8s_chart_parser_llm",
+    "chart_generator": "k8s_chart_generator_llm",
 }
 
 
@@ -255,8 +259,8 @@ async def _run_chart_generation(
     on_status("Parsing chart request...")
     return await chart_generation.generate_chart(
         request=request,
-        parser_model=_selected_model("analyser"),
-        generator_model=_selected_model("analyser"),
+        parser_model=_selected_model("chart_parser"),
+        generator_model=_selected_model("chart_generator"),
     )
 
 

@@ -9,8 +9,8 @@ class TestK8sChartSettings:
         s = settings.Settings()
 
         # Then chart agent settings have expected defaults
-        assert s.k8s_chart_generator_llm == "openai/gpt-4.1"
-        assert s.k8s_chart_parser_llm == "openai/gpt-4.1-mini"
+        assert s.k8s_chart_generator_llm == "ollama/qwen3-coder:30b"
+        assert s.k8s_chart_parser_llm == "ollama/qwen3:8b"
         assert s.k8s_chart_auto_validate is False
         assert s.k8s_chart_auto_sandbox is False
         assert s.k8s_chart_sandbox_context == ""
