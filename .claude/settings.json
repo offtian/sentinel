@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/check-plan.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check-plan.sh",
             "timeout": 5,
             "statusMessage": "Checking for plan file..."
           }

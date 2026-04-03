@@ -17,6 +17,11 @@ install:
 lock:
     uv lock
 
+# Create a plan file from the template
+create-plan NAME:
+    test ! -e "docs/plans/{{ NAME }}.md"
+    cp docs/plans/_template.md "docs/plans/{{ NAME }}.md"
+
 # Development
 # -----------
 
