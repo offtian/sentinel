@@ -22,4 +22,3 @@ htmlcov/
 *.swo
 *~
 .DS_Store
-uv.lock
