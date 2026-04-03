@@ -12,6 +12,18 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/verify-python.sh",
+            "timeout": 180,
+            "statusMessage": "Running just clean, just lint-fix, just lint..."
+          }
+        ]
+      }
     ]
   }
 }
