@@ -3412,12 +3412,12 @@ Expected: All tests pass.
 
 - [ ] **Step 2: Run linter**
 
-Run: `make lint`
+Run: `just lint`
 Expected: No errors. If there are ruff or mypy issues, fix them.
 
 - [ ] **Step 3: Run lint-fix if needed**
 
-Run: `make lint-fix`
+Run: `just lint-fix`
 
 - [ ] **Step 4: Final commit if any lint fixes**
 

@@ -11,6 +11,10 @@ set dotenv-load  # load .env automatically
 # Install dependencies
 install:
     uv sync --locked --all-extras
+    just verify-install
+
+# Verify the virtualenv can import sentinel
+verify-install:
     .venv/bin/python -c "import sentinel; print(sentinel.__file__)"
 
 # Update lockfile
@@ -158,6 +162,6 @@ k8s-logs:
 
 # Remove caches and build artifacts
 clean:
-    find src/ tests/ -type d -name "__pycache__" -exec rm -rf {} +
-    find . -maxdepth 1 -type d -name "*.egg-info" -exec rm -rf {} +
-    rm -rf .mypy_cache .pytest_cache .ruff_cache htmlcov .coverage
+    find src/ tests/ -type d -name "__pycache__" -exec rm -rf {} \; 2>/dev/null || true
+    find . -maxdepth 1 -type d -name "*.egg-info" -exec rm -rf {} \; 2>/dev/null || true
+    rm -rf .mypy_cache .pytest_cache .ruff_cache htmlcov .coverage 2>/dev/null || true

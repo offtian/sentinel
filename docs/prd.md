@@ -120,7 +120,7 @@ Acceptance criteria:
 - [x] Audit trail of all investigations and reviews persisted to the database
 - [x] Multi-factor confidence scoring (`ConfidenceScore.from_factors`) with source count, relevance, and recency weights
 - [x] Feedback stats endpoint (`GET /api/support/stats`) returns acceptance/rejection rates for tracking accuracy improvement
-- [x] Evaluation framework with golden test datasets (5 SRE + 5 support cases) and automated quality rubrics (`make test-evals`)
+- [x] Evaluation framework with golden test datasets (5 SRE + 5 support cases) and automated quality rubrics (`just test-evals`)
 
 ### 5. Scheduled Automations
 
@@ -193,7 +193,7 @@ This mirrors the standard RLHF-lite pattern used in production agent systems (e.
 
 2. **Multi-factor confidence scoring** — `ConfidenceScore.from_factors()` (`domain/confidence/entities.py:49-99`) independently scores three dimensions: source evidence count (30% weight), relevance quality (50%), and data recency (20%). This decomposition means you can track *why* confidence is low (no sources? stale data? poor relevance?) rather than just a single opaque number. The label thresholds (HIGH >= 0.7, MEDIUM >= 0.4) directly gate the approval workflow — investigations below the threshold require human sign-off before publishing.
 
-3. **Evaluation framework** — Golden test datasets (`tests/evals/datasets/`) with known-good alert→investigation pairs. Each case specifies expected keywords, minimum confidence thresholds, and expected labels. Running `make test-evals` validates that prompt changes or model swaps don't regress quality. This is the "eval-driven development" pattern advocated by Anthropic and OpenAI for production agent systems — you write the eval before changing the prompt, same as TDD for code.
+3. **Evaluation framework** — Golden test datasets (`tests/evals/datasets/`) with known-good alert→investigation pairs. Each case specifies expected keywords, minimum confidence thresholds, and expected labels. Running `just test-evals` validates that prompt changes or model swaps don't regress quality. This is the "eval-driven development" pattern advocated by Anthropic and OpenAI for production agent systems — you write the eval before changing the prompt, same as TDD for code.
 
 The feedback data feeds back into the eval loop: when a human rejects an investigation, the case can be added to the golden dataset as a regression test. Over time, the golden dataset grows to reflect real failure modes seen in production.
 

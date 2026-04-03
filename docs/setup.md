@@ -14,7 +14,7 @@ git clone <repo-url> sentinel
 cd sentinel
 
 # Install all dependencies (Python + dev tools)
-make install
+just install
 ```
 
 This creates a `.venv/` with all dependencies including test and linting tools.
@@ -54,7 +54,7 @@ SLACK_BOT_TOKEN=
 
 ```bash
 # Starts PostgreSQL on port 5432
-make docker-compose-up
+just docker-compose-up
 ```
 
 ### Option B: Local PostgreSQL
@@ -66,13 +66,13 @@ createdb sentinel
 Then run migrations:
 
 ```bash
-make run-db-migrations
+just run-db-migrations
 ```
 
 ## 4. Run the API
 
 ```bash
-make run-api
+just run-api
 ```
 
 The API starts at [http://localhost:8000](http://localhost:8000).
@@ -119,7 +119,7 @@ curl -X POST http://localhost:8000/api/support/review \
 
 ```bash
 # Unit tests (fast, no external deps)
-make test
+just test
 
 # Single test file
 uv run pytest tests/unit/domain/sre/test_entities.py -vv
@@ -132,10 +132,10 @@ uv run pytest tests/unit/domain/sre/test_entities.py::TestAlert::test_create_ale
 
 ```bash
 # Run all checks (ruff lint + format check + mypy + import-linter)
-make lint
+just lint
 
 # Auto-fix formatting
-make lint-fix
+just lint-fix
 ```
 
 ## Setting Up External Integrations
@@ -192,23 +192,23 @@ OPENAI_API_KEY=sk-...
 
 ```bash
 # Apply all pending migrations
-make run-db-migrations
+just run-db-migrations
 
 # Create a new migration after changing models.py
-make build-migration MESSAGE="add feedback column"
+just build-migration "add feedback column"
 
 # Roll back the last migration
-make downgrade-db-migration
+just downgrade-db-migration
 ```
 
 ## Docker Build
 
 ```bash
 # Build the image
-make docker-build
+just docker-build
 
 # Run everything (db + api + Grafana stack)
-make docker-compose-up
+just docker-compose-up
 ```
 
 This starts PostgreSQL, the Sentinel API, and the full Grafana observability stack:
@@ -225,9 +225,9 @@ The observability backend auto-selects Grafana when `ENVIRONMENT=localdev`. Data
 ## Local Kubernetes
 
 ```bash
-make k8s-up    # Deploys PostgreSQL + Grafana stack + Sentinel (api + worker)
-make k8s-down  # Tears down everything
-make k8s-logs  # Tail Sentinel pod logs
+just k8s-up    # Deploys PostgreSQL + Grafana stack + Sentinel (api + worker)
+just k8s-down  # Tears down everything
+just k8s-logs  # Tail Sentinel pod logs
 ```
 
 The Grafana stack is deployed from `helm/grafana-stack-local.yaml` (Prometheus, Loki, Tempo, Grafana with pre-configured datasources). Grafana is exposed via NodePort on port 3000.

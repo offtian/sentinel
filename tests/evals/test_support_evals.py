@@ -4,7 +4,7 @@ Evaluation tests for the support review pipeline.
 These tests run golden cases through the pipeline with mocked LLM agents
 and verify that the outputs meet quality rubrics.
 
-Run with: ``make test-evals`` or ``uv run pytest tests/evals/ -x -vv``
+Run with: ``just test-evals`` or ``uv run pytest tests/evals/ -x -vv``
 """
 
 from __future__ import annotations

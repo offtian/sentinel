@@ -7,7 +7,7 @@ Slack credentials, ECR, or a deployed hostname.
 
 Run with::
 
-    make run-chat
+    just run-chat
     # or
     uv run streamlit run src/sentinel/interfaces/chat/app.py
 """
