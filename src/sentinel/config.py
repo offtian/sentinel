@@ -186,6 +186,16 @@ class Configuration(BaseModel):
     def k8s_investigator_model(self) -> str:
         return _normalise_model_name(self.settings.k8s_investigator_llm)
 
+    # -- Chart generation helpers --------------------------------------------
+
+    @property
+    def chart_parser_model(self) -> str:
+        return _normalise_model_name(self.settings.k8s_chart_parser_llm)
+
+    @property
+    def chart_generator_model(self) -> str:
+        return _normalise_model_name(self.settings.k8s_chart_generator_llm)
+
     # -- Support pipeline helpers --------------------------------------------
 
     def build_document_searcher(self) -> searcher.BaseDocumentSearcher | None:
