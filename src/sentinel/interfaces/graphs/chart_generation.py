@@ -19,6 +19,7 @@ from sentinel.domain.charts import confidence as chart_confidence
 from sentinel.domain.charts import entities, policies, validation
 from sentinel.domain.pipeline import types as pipeline_types
 from sentinel.interfaces.graphs.agents import chart_generator, chart_request_parser, utils
+from sentinel.settings import get_settings
 from sentinel.utils import logs
 
 
@@ -288,16 +289,13 @@ async def generate_chart(
     """
     pipeline_start = time.monotonic()
     timings: list[pipeline_types.ChartStepTiming] = []
-    # Resolve defaults from config singleton if not provided.
+    settings = get_settings()
+    # Resolve defaults from settings if not provided.
     if not parser_model or not generator_model or max_retries is None:
-        from sentinel.config import get_config
-
-        defaults = get_config().build_chart_generation_kwargs()
-        parser_model = parser_model or str(defaults["parser_model"])
-        generator_model = generator_model or str(defaults["generator_model"])
+        parser_model = parser_model or settings.k8s_chart_parser_llm
+        generator_model = generator_model or settings.k8s_chart_generator_llm
         if max_retries is None:
-            raw_retries = defaults["max_retries"]
-            max_retries = raw_retries if isinstance(raw_retries, int) else int(str(raw_retries))
+            max_retries = settings.k8s_chart_max_retries
 
     # Steps 1+2: Parse request and load policy concurrently
     result = await _parse_and_load_policy(

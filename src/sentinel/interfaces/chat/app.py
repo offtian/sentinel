@@ -24,13 +24,14 @@ import httpx
 import streamlit as st
 
 from sentinel import bootstrap
+from sentinel.domain.charts import entities as chart_entities
 from sentinel.domain.search import factory as search_factory
 from sentinel.domain.sre import entities as sre_entities
-from sentinel.domain.sre import holmes_adapter
+from sentinel.domain.sre import holmes_adapter, k8s_native_agent
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.chat.status_update import StreamlitStatusUpdateClient
-from sentinel.interfaces.graphs import common, sre_investigation, support_review
-from sentinel.interfaces.graphs.agents import intent_router, utils
+from sentinel.interfaces.graphs import chart_generation, common, sre_investigation, support_review
+from sentinel.interfaces.graphs.agents import intent_router, k8s_runner, utils
 from sentinel.settings import get_settings
 
 
@@ -134,9 +135,6 @@ async def _classify_intent(
 
 def _build_k8s_adapter() -> Any:
     """Build a K8s investigation adapter when a K8s backend is selected."""
-    from sentinel.domain.sre import k8s_native_agent
-    from sentinel.interfaces.graphs.agents import k8s_runner
-
     return k8s_native_agent.NativeK8sAgent(
         k8s_client=None,  # No real cluster — agent will return unconfigured result
         model_name=_selected_model("analyser"),
@@ -245,10 +243,6 @@ async def _run_chart_generation(
     *,
     on_status: Callable[[str], None],
 ) -> common.ChartGenerationReply:
-    from sentinel.config import get_config
-    from sentinel.domain.charts import entities as chart_entities
-    from sentinel.interfaces.graphs import chart_generation
-
     now = datetime.now(tz=UTC)
     request = chart_entities.ChartRequest(
         requester="local-user",
@@ -257,11 +251,12 @@ async def _run_chart_generation(
         requested_at=now,
     )
 
-    cfg = get_config()
-    chart_kwargs = cfg.build_chart_generation_kwargs(
-        parser_model=_selected_model("chart_parser"),
-        generator_model=_selected_model("chart_generator"),
-    )
+    settings = get_settings()
+    chart_kwargs = {
+        "parser_model": _selected_model("chart_parser"),
+        "generator_model": _selected_model("chart_generator"),
+        "max_retries": settings.k8s_chart_max_retries,
+    }
 
     on_status("Parsing chart request...")
     return await chart_generation.generate_chart(
