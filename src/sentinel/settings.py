@@ -62,6 +62,17 @@ class SRESettings(BaseSettings):
     mcp_server_api_key: str = ""
 
 
+class K8sChartSettings(BaseSettings):
+    """K8s chart coding agent settings."""
+
+    k8s_chart_generator_llm: str = "openai/gpt-4.1"
+    k8s_chart_parser_llm: str = "openai/gpt-4.1-mini"
+    k8s_chart_auto_validate: bool = False
+    k8s_chart_auto_sandbox: bool = False
+    k8s_chart_sandbox_context: str = ""
+    k8s_chart_max_retries: int = 3
+
+
 class SupportSettings(BaseSettings):
     """Support-specific vendor and feature settings."""
 
@@ -88,7 +99,7 @@ class LLMSettings(BaseSettings):
     response_drafter_llm: str = "ollama/qwen3:8b"
 
 
-class Settings(LLMSettings, SRESettings, SupportSettings):
+class Settings(LLMSettings, SRESettings, K8sChartSettings, SupportSettings):
     """
     Application-wide settings, composed from domain-specific base classes.
 
