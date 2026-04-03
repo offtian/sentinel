@@ -68,6 +68,12 @@ def write_chart_files(
     return output_dir
 
 
+class GitOpsCommitError(Exception):
+    """
+    Raise when any step of the GitOps commit workflow fails.
+    """
+
+
 async def commit_to_gitops(
     *,
     chart: entities.ChartOutput,
@@ -80,7 +86,8 @@ async def commit_to_gitops(
     :param chart: The chart output with generated files.
     :param gitops_root: Root directory for gitops charts.
     :param branch_prefix: Prefix for the branch name.
-    :returns: The pull request URL, or an error message.
+    :returns: The pull request URL.
+    :raises GitOpsCommitError: if any git or gh command fails.
     """
     output_dir = write_chart_files(chart=chart, gitops_root=gitops_root)
 
@@ -90,23 +97,23 @@ async def commit_to_gitops(
     rc, out, err = await _run_command("git", "checkout", "-b", branch_name, cwd=PROJECT_ROOT)
     if rc != 0:
         logger.warning("git_checkout_failed", branch=branch_name, stderr=err)
-        return f"Branch creation failed: {err}"
+        raise GitOpsCommitError(f"Branch creation failed: {err}")
 
     rc, out, err = await _run_command("git", "add", str(output_dir), cwd=PROJECT_ROOT)
     if rc != 0:
         logger.warning("git_add_failed", stderr=err)
-        return f"Git add failed: {err}"
+        raise GitOpsCommitError(f"Git add failed: {err}")
 
     commit_msg = f"feat: generate Helm chart for {chart.service_name}"
     rc, out, err = await _run_command("git", "commit", "-m", commit_msg, cwd=PROJECT_ROOT)
     if rc != 0:
         logger.warning("git_commit_failed", stderr=err)
-        return f"Git commit failed: {err}"
+        raise GitOpsCommitError(f"Git commit failed: {err}")
 
     rc, out, err = await _run_command("git", "push", "-u", "origin", branch_name, cwd=PROJECT_ROOT)
     if rc != 0:
         logger.warning("git_push_failed", stderr=err)
-        return f"Git push failed: {err}"
+        raise GitOpsCommitError(f"Git push failed: {err}")
 
     pr_title = f"feat: deploy {chart.service_name} Helm chart"
     pr_body = (
@@ -128,7 +135,7 @@ async def commit_to_gitops(
     )
     if rc != 0:
         logger.warning("gh_pr_create_failed", stderr=err)
-        return f"PR creation failed: {err}"
+        raise GitOpsCommitError(f"PR creation failed: {err}")
 
     logger.info("chart_pr_created", service_name=chart.service_name, pr_url=out)
     return out

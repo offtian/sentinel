@@ -11,6 +11,8 @@ in the reply.
 
 from __future__ import annotations
 
+import asyncio
+
 from sentinel.application.charts import commit as chart_commit
 from sentinel.domain.charts import confidence as chart_confidence
 from sentinel.domain.charts import entities, policies, validation
@@ -108,6 +110,53 @@ async def _commit_chart(
     return await chart_commit.commit_to_gitops(chart=chart)
 
 
+async def _parse_and_load_policy(
+    *,
+    request: entities.ChartRequest,
+    parser_model: str,
+) -> pipeline_types.ChartGenerationReply | tuple[entities.ChartSpec, entities.TeamPolicy]:
+    """
+    Run request parsing and policy loading concurrently.
+
+    :param request: The raw chart request from the user.
+    :param parser_model: LLM model for request parsing.
+    :returns: A (spec, policy) tuple on success, or an early-exit reply on failure.
+    """
+    parse_result, policy_result = await asyncio.gather(
+        _parse_request(request=request, model=parser_model),
+        _load_policy(team=request.team),
+        return_exceptions=True,
+    )
+
+    if isinstance(parse_result, BaseException):
+        if isinstance(parse_result, Exception):
+            logs.log_exception(parse_result, params={"node": "ParseRequest"})
+            return pipeline_types.ChartGenerationReply(
+                service_name="unknown",
+                error=f"Failed to parse request: {parse_result}",
+            )
+        raise parse_result
+
+    spec: entities.ChartSpec = parse_result
+
+    logs.log_event(
+        "chart_request_parsed",
+        params={"service_name": spec.service_name, "image": spec.image},
+    )
+
+    if isinstance(policy_result, FileNotFoundError):
+        logs.log_exception(policy_result, params={"node": "LoadPolicy", "team": request.team})
+        return pipeline_types.ChartGenerationReply(
+            service_name=spec.service_name,
+            error=f"Policy not found: {policy_result}",
+        )
+    if isinstance(policy_result, BaseException):
+        raise policy_result
+
+    policy: entities.TeamPolicy = policy_result
+    return spec, policy
+
+
 async def generate_chart(
     *,
     request: entities.ChartRequest,
@@ -134,32 +183,15 @@ async def generate_chart(
         parser_model = parser_model or str(defaults["parser_model"])
         generator_model = generator_model or str(defaults["generator_model"])
         if max_retries is None:
-            max_retries = int(defaults["max_retries"])
+            raw_retries = defaults["max_retries"]
+            max_retries = raw_retries if isinstance(raw_retries, int) else int(str(raw_retries))
 
-    # Step 1: Parse request
-    try:
-        spec = await _parse_request(request=request, model=parser_model)
-    except Exception as exc:
-        logs.log_exception(exc, params={"node": "ParseRequest"})
-        return pipeline_types.ChartGenerationReply(
-            service_name="unknown",
-            error=f"Failed to parse request: {exc}",
-        )
+    # Steps 1+2: Parse request and load policy concurrently
+    result = await _parse_and_load_policy(request=request, parser_model=parser_model)
+    if isinstance(result, pipeline_types.ChartGenerationReply):
+        return result
 
-    logs.log_event(
-        "chart_request_parsed",
-        params={"service_name": spec.service_name, "image": spec.image},
-    )
-
-    # Step 2: Load policy
-    try:
-        policy = await _load_policy(team=request.team)
-    except FileNotFoundError as exc:
-        logs.log_exception(exc, params={"node": "LoadPolicy", "team": request.team})
-        return pipeline_types.ChartGenerationReply(
-            service_name=spec.service_name,
-            error=f"Policy not found: {exc}",
-        )
+    spec, policy = result
 
     # Step 3: Merge spec with policy
     merged_spec, violations = policies.merge_spec_with_policy(spec=spec, policy=policy)
@@ -248,11 +280,13 @@ async def generate_chart(
     )
 
     # Step 7: Commit to GitOps
+    pr_url = ""
+    commit_error: str | None = None
     try:
         pr_url = await _commit_chart(chart=chart_output)
     except Exception as exc:
         logs.log_exception(exc, params={"node": "CommitToGitOps"})
-        pr_url = f"Commit failed: {exc}"
+        commit_error = f"Commit failed: {exc}"
 
     logs.log_event(
         "chart_generation_completed",
@@ -272,4 +306,5 @@ async def generate_chart(
         generation_attempts=generation_attempts,
         confidence=score,
         pr_url=pr_url,
+        error=commit_error,
     )
