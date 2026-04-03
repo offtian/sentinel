@@ -1,0 +1,5 @@
+# User-to-team mapping.
+# Format: <user_id>: <team_name>
+# Team name must match a <team>.yaml file in this directory.
+alice: platform
+bob: data-eng

@@ -1,0 +1,15 @@
+team: platform
+namespace: platform-prod
+max_memory: 2Gi
+max_cpu: 2000m
+max_replicas: 10
+require_network_policy: true
+require_non_root: true
+allowed_egress:
+  - host: redis.internal
+    port: 6379
+  - host: postgres.internal
+    port: 5432
+default_labels:
+  team: platform
+  env: production
