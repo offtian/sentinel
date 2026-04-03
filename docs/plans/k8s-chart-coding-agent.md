@@ -1,6 +1,6 @@
 # Plan: K8s Chart Coding Agent
 
-**Status:** draft
+**Status:** complete
 **Created:** 2026-04-03
 **Last updated:** 2026-04-03
 
@@ -142,19 +142,19 @@ Uses Pydantic `BaseModel` (matching existing domain entities):
 
 ## Steps
 
-- [ ] Step 1: Add chart agent settings to `settings.py`
-- [ ] Step 2: Create domain types (`domain/charts/entities.py`)
-- [ ] Step 3: Create policy registry (`policies/` YAML files + `domain/charts/policies.py`)
-- [ ] Step 4: Create chart request parser agent (`agents/chart_request_parser.py` + prompt)
-- [ ] Step 5: Create chart generator agent (`agents/chart_generator.py` + prompt)
-- [ ] Step 6: Create validation runner (`domain/charts/validation.py`)
-- [ ] Step 7: Create confidence scoring (`domain/charts/confidence.py`)
-- [ ] Step 8: Create pipeline graph (`interfaces/graphs/chart_generation.py`)
-- [ ] Step 9: Create GitOps committer (`application/charts/commit.py`)
-- [ ] Step 10: Wire into config.py
-- [ ] Step 11: Add Streamlit UI section
-- [ ] Step 12: Create evaluation framework (cases + evaluators)
-- [ ] Step 13: Run end-to-end validation and fix issues
+- [x] Step 1: Add chart agent settings to `settings.py`
+- [x] Step 2: Create domain types (`domain/charts/entities.py`)
+- [x] Step 3: Create policy registry (`policies/` YAML files + `domain/charts/policies.py`)
+- [x] Step 4: Create chart request parser agent (`agents/chart_request_parser.py` + prompt)
+- [x] Step 5: Create chart generator agent (`agents/chart_generator.py` + prompt)
+- [x] Step 6: Create validation runner (`domain/charts/validation.py`)
+- [x] Step 7: Create confidence scoring (`domain/charts/confidence.py`)
+- [x] Step 8: Create pipeline graph (`interfaces/graphs/chart_generation.py`)
+- [x] Step 9: Create GitOps committer (`application/charts/commit.py`)
+- [x] Step 10: Wire into config.py
+- [x] Step 11: Add Streamlit UI section
+- [x] Step 12: Create evaluation framework (cases + evaluators)
+- [x] Step 13: Run end-to-end validation and fix issues
 
 ## Changes
 

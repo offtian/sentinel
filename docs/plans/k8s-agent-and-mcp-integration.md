@@ -1,8 +1,8 @@
 # Plan: K8s Agent & MCP Integration
 
-**Status:** draft
+**Status:** in-progress
 **Created:** 2026-04-02
-**Last updated:** 2026-04-02
+**Last updated:** 2026-04-03
 
 ## Goal
 
@@ -287,35 +287,35 @@ The local testing chat app (`interfaces/chat/app.py`) gains:
 ## Steps
 
 ### Phase A: Foundation (adapter hierarchy + audit trail + evaluation metrics)
-- [ ] Step 1: Create `domain/sre/investigation.py` with `BaseInvestigationAdapter`, `K8sInvestigationAdapter`, `InvestigationResult`, `InvestigationContext`, `AuditEntry`
-- [ ] Step 2: Refactor `DirectToolsetAdapter` to implement `BaseInvestigationAdapter` (rename `BaseHolmesAdapter`), emit `AuditEntry` records
-- [ ] Step 3: Update all references to `BaseHolmesAdapter` across codebase and tests
-- [ ] Step 4: Create `domain/evaluation/metrics.py` with `EvaluationMetrics` and `domain/evaluation/comparison.py` with `ComparisonResult`
-- [ ] Step 5: Add `evaluation` layer to import-linter contracts in `pyproject.toml` (between `evals` and `domain`)
-- [ ] Step 6: Verify import-linter contracts pass, all existing tests green
+- [x] Step 1: Create `domain/sre/investigation.py` with `BaseInvestigationAdapter`, `K8sInvestigationAdapter`, `InvestigationResult`, `InvestigationContext`, `AuditEntry`
+- [x] Step 2: Refactor `DirectToolsetAdapter` to implement `BaseInvestigationAdapter` (rename `BaseHolmesAdapter`), emit `AuditEntry` records
+- [x] Step 3: Update all references to `BaseHolmesAdapter` across codebase and tests
+- [x] Step 4: Create `domain/evaluation/metrics.py` with `EvaluationMetrics` and `domain/evaluation/comparison.py` with `ComparisonResult`
+- [x] Step 5: Add `evaluation` layer to import-linter contracts in `pyproject.toml` (between `evals` and `domain`)
+- [x] Step 6: Verify import-linter contracts pass, all existing tests green
 
 ### Phase B: K8s Native Agent
-- [ ] Step 7: Add `kubernetes` async client dependency to `pyproject.toml`
-- [ ] Step 8: Create `domain/tools/kubernetes.py` with K8s query tool functions
-- [ ] Step 9: Create `plugins/toolsets/kubernetes.py` wrapping tools as `FunctionToolset`
-- [ ] Step 10: Create `plugins/prompts/k8s_investigator.j2` system prompt template
-- [ ] Step 11: Create `interfaces/graphs/agents/k8s_investigator.py` PydanticAI agent
-- [ ] Step 12: Implement `NativeK8sAgent` in `domain/sre/k8s_native_agent.py`
-- [ ] Step 13: Add `K8S_INVESTIGATION_BACKEND` config and wire in `config.py`
-- [ ] Step 14: Unit tests for all new modules
+- [x] Step 7: Add `kubernetes` async client dependency to `pyproject.toml`
+- [x] Step 8: Create `domain/tools/kubernetes.py` with K8s query tool functions
+- [x] Step 9: Create `plugins/toolsets/kubernetes.py` wrapping tools as `FunctionToolset`
+- [x] Step 10: Create `plugins/prompts/k8s_investigator.j2` system prompt template
+- [x] Step 11: Create `interfaces/graphs/agents/k8s_investigator.py` PydanticAI agent
+- [x] Step 12: Implement `NativeK8sAgent` in `domain/sre/k8s_native_agent.py`
+- [x] Step 13: Add `K8S_INVESTIGATION_BACKEND` config and wire in `config.py`
+- [x] Step 14: Unit tests for all new modules
 
 ### Phase C: MCP Integration
-- [ ] Step 15: Add `fastmcp` dependency to `pyproject.toml`
-- [ ] Step 16: Create `interfaces/mcp/server.py` FastMCP app with observability, documentation, investigation tools
-- [ ] Step 17: Create `plugins/toolsets/mcp.py` MCP client toolset builder
-- [ ] Step 18: Wire MCP client into K8s native agent (optional kubectl MCP server)
-- [ ] Step 19: Add `MCP_SERVERS` and `K8S_MCP_SERVER_URL` config vars
-- [ ] Step 20: Unit tests for MCP server tools and client builder
+- [x] Step 15: Add `fastmcp` dependency to `pyproject.toml`
+- [x] Step 16: Create `interfaces/mcp/server.py` FastMCP app with observability, documentation, investigation tools
+- [x] Step 17: Create `plugins/toolsets/mcp.py` MCP client toolset builder
+- [ ] Step 18: Wire MCP client into K8s native agent (optional kubectl MCP server) — MCP tool implementations are stubs ("not yet wired")
+- [x] Step 19: Add `MCP_SERVERS` and `K8S_MCP_SERVER_URL` config vars
+- [x] Step 20: Unit tests for MCP server tools and client builder
 
 ### Phase D: Kagent Integration
-- [ ] Step 21: Create `domain/sre/kagent_adapter.py` implementing `K8sInvestigationAdapter`
-- [ ] Step 22: Add kagent CRD creation, polling, and result mapping
-- [ ] Step 23: Add `KAGENT_INVESTIGATION_TIMEOUT_SECONDS` config
+- [x] Step 21: Create `domain/sre/kagent_adapter.py` implementing `K8sInvestigationAdapter`
+- [ ] Step 22: Add kagent CRD creation, polling, and result mapping — adapter exists but CRD integration marked "pending"
+- [x] Step 23: Add `KAGENT_INVESTIGATION_TIMEOUT_SECONDS` config
 - [ ] Step 24: Set up Kind/Minikube dev environment with kagent operator
 - [ ] Step 25: Integration tests against local kagent
 
@@ -327,19 +327,19 @@ The local testing chat app (`interfaces/chat/app.py`) gains:
 - [ ] Step 30: End-to-end comparison test with both backends
 
 ### Phase F: Helm & Infrastructure
-- [ ] Step 31: Add `clusterrole.yaml` and `clusterrolebinding.yaml` templates
-- [ ] Step 32: Add `mcp-deployment.yaml` and `mcp-service.yaml` templates
-- [ ] Step 33: Update `values.yaml` with `k8sAgent`, `kagent`, `mcpServer` blocks
-- [ ] Step 34: Update `networkpolicy.yaml` with K8s API, kagent, MCP egress rules
+- [x] Step 31: Add `clusterrole.yaml` and `clusterrolebinding.yaml` templates
+- [x] Step 32: Add `mcp-deployment.yaml` and `mcp-service.yaml` templates
+- [x] Step 33: Update `values.yaml` with `k8sAgent`, `kagent`, `mcpServer` blocks
+- [x] Step 34: Update `networkpolicy.yaml` with K8s API, kagent, MCP egress rules
 - [ ] Step 35: Update documentation (`docs/prd.md`, `docs/architecture.md`, `docs/claude-plan.md`)
 
 ### Phase G: Streamlit Chat App
-- [ ] Step 36: Add investigation backend selector to sidebar (Holmes / Native K8s / Kagent / Both)
-- [ ] Step 37: Add cluster/namespace configuration inputs (shown when K8s backend selected)
-- [ ] Step 38: Add K8s-specific test scenarios to sidebar (Node NotReady, rollout stuck, PVC pending, HPA scaling failure, ingress 404, readiness probe failure)
+- [x] Step 36: Add investigation backend selector to sidebar (Holmes / Native K8s / Kagent / Both)
+- [x] Step 37: Add cluster/namespace configuration inputs (shown when K8s backend selected)
+- [x] Step 38: Add K8s-specific test scenarios to sidebar (Node NotReady, rollout stuck, PVC pending, HPA scaling failure, ingress 404, readiness probe failure)
 - [ ] Step 39: Implement audit trail viewer — timeline of `AuditEntry` records with status badges and collapsible payload JSON
 - [ ] Step 40: Implement comparison mode UI — side-by-side columns showing both backends' results, confidence, duration, and audit trails
-- [ ] Step 41: Wire backend selector to `K8S_INVESTIGATION_BACKEND` config and pass `InvestigationContext` to pipeline
+- [x] Step 41: Wire backend selector to `K8S_INVESTIGATION_BACKEND` config and pass `InvestigationContext` to pipeline
 
 ## Changes
 

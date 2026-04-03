@@ -67,7 +67,7 @@
 - Modify: `src/sentinel/settings.py:20-91`
 - Test: `tests/unit/test_settings.py` (create if not exists)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_settings.py
@@ -90,12 +90,12 @@ class TestK8sChartSettings:
         assert s.k8s_chart_max_retries == 3
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/test_settings.py::TestK8sChartSettings -v`
 Expected: FAIL — attributes don't exist yet.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Add a new settings class between `SRESettings` and `SupportSettings` in `src/sentinel/settings.py`:
 
@@ -117,12 +117,12 @@ Update the `Settings` class inheritance to include `K8sChartSettings`:
 class Settings(LLMSettings, SRESettings, K8sChartSettings, SupportSettings):
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/test_settings.py::TestK8sChartSettings -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/settings.py tests/unit/test_settings.py
@@ -139,7 +139,7 @@ git commit -m "feat: add K8s chart agent settings"
 - Create: `tests/unit/domain/charts/__init__.py`
 - Test: `tests/unit/domain/charts/test_entities.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/domain/charts/test_entities.py
@@ -345,12 +345,12 @@ class TestChartOutput:
         assert output.confidence_score is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/domain/charts/test_entities.py -v`
 Expected: FAIL — module `sentinel.domain.charts` does not exist.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `src/sentinel/domain/charts/__init__.py` (empty file).
 
@@ -463,12 +463,12 @@ class ChartOutput(BaseModel):
     confidence_score: float | None = None
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/domain/charts/test_entities.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/domain/charts/ tests/unit/domain/charts/
@@ -482,7 +482,7 @@ git commit -m "feat: add domain entities for chart coding agent"
 **Files:**
 - Modify: `tests/factories/__init__.py`
 
-- [ ] **Step 1: Add chart factories**
+- [x] **Step 1: Add chart factories**
 
 Append to `tests/factories/__init__.py`:
 
@@ -605,12 +605,12 @@ def make_chart_output(
     )
 ```
 
-- [ ] **Step 2: Verify factories work**
+- [x] **Step 2: Verify factories work**
 
 Run: `uv run pytest tests/unit/domain/charts/test_entities.py -v`
 Expected: PASS (no regressions)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/factories/__init__.py
@@ -627,7 +627,7 @@ git commit -m "feat: add test factories for chart domain entities"
 - Create: `policies/_teams.yaml`
 - Test: `tests/unit/domain/charts/test_policies.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/domain/charts/test_policies.py
@@ -817,12 +817,12 @@ class TestMergeSpecWithPolicy:
         assert "NetworkPolicy" in merged.extra_resources
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/domain/charts/test_policies.py -v`
 Expected: FAIL — `sentinel.domain.charts.policies` does not exist.
 
-- [ ] **Step 3: Create policy YAML files**
+- [x] **Step 3: Create policy YAML files**
 
 Create `policies/_teams.yaml`:
 
@@ -854,7 +854,7 @@ default_labels:
   env: production
 ```
 
-- [ ] **Step 4: Implement the policy module**
+- [x] **Step 4: Implement the policy module**
 
 Create `src/sentinel/domain/charts/policies.py`:
 
@@ -1037,12 +1037,12 @@ def merge_spec_with_policy(
     return merged, tuple(violations)
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/domain/charts/test_policies.py -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/sentinel/domain/charts/policies.py policies/platform.yaml policies/_teams.yaml
@@ -1057,7 +1057,7 @@ git commit -m "feat: add policy registry with YAML loading and merge logic"
 - Create: `src/sentinel/domain/charts/validation.py`
 - Test: `tests/unit/domain/charts/test_validation.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/domain/charts/test_validation.py
@@ -1172,12 +1172,12 @@ class TestValidateChart:
         assert len(result.warnings) == 2
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/domain/charts/test_validation.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `src/sentinel/domain/charts/validation.py`:
 
@@ -1330,12 +1330,12 @@ async def validate_chart(
     return result
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/domain/charts/test_validation.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/domain/charts/validation.py tests/unit/domain/charts/test_validation.py
@@ -1350,7 +1350,7 @@ git commit -m "feat: add chart validation runner with helm and kubeconform"
 - Create: `src/sentinel/domain/charts/confidence.py`
 - Test: `tests/unit/domain/charts/test_confidence.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/domain/charts/test_confidence.py
@@ -1461,12 +1461,12 @@ class TestChartConfidenceScore:
 
 Add `import pytest` at the top of the test file.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/domain/charts/test_confidence.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `src/sentinel/domain/charts/confidence.py`:
 
@@ -1557,12 +1557,12 @@ def calculate_chart_confidence(
     )
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/domain/charts/test_confidence.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/domain/charts/confidence.py tests/unit/domain/charts/test_confidence.py
@@ -1578,7 +1578,7 @@ git commit -m "feat: add weighted confidence scoring for chart generation"
 - Create: `src/sentinel/plugins/prompts/chart_request_parser.j2`
 - Test: `tests/unit/interfaces/graphs/agents/test_chart_request_parser.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/interfaces/graphs/agents/test_chart_request_parser.py
@@ -1624,12 +1624,12 @@ class TestChartRequestParserAgent:
         assert len(chart_request_parser.SYSTEM_PROMPT) > 50
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/interfaces/graphs/agents/test_chart_request_parser.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Create prompt template**
+- [x] **Step 3: Create prompt template**
 
 Create `src/sentinel/plugins/prompts/chart_request_parser.j2`:
 
@@ -1666,7 +1666,7 @@ Output must be valid JSON matching the ChartSpec schema exactly.
 {% endblock %}
 ```
 
-- [ ] **Step 4: Implement the agent**
+- [x] **Step 4: Implement the agent**
 
 Create `src/sentinel/interfaces/graphs/agents/chart_request_parser.py`:
 
@@ -1716,12 +1716,12 @@ def build_context(ctx: dataclasses.dataclass) -> str:
     )
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/interfaces/graphs/agents/test_chart_request_parser.py -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/sentinel/interfaces/graphs/agents/chart_request_parser.py \
@@ -1739,7 +1739,7 @@ git commit -m "feat: add chart request parser agent with Jinja2 prompt"
 - Create: `src/sentinel/plugins/prompts/chart_generator.j2`
 - Test: `tests/unit/interfaces/graphs/agents/test_chart_generator.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/interfaces/graphs/agents/test_chart_generator.py
@@ -1804,12 +1804,12 @@ class TestChartGeneratorAgent:
         assert len(chart_generator.SYSTEM_PROMPT) > 50
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/interfaces/graphs/agents/test_chart_generator.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Create prompt template**
+- [x] **Step 3: Create prompt template**
 
 Create `src/sentinel/plugins/prompts/chart_generator.j2`:
 
@@ -1856,7 +1856,7 @@ Generate the complete Helm chart files for the **{{ service_name }}** service us
 {% endblock %}
 ```
 
-- [ ] **Step 4: Implement the agent**
+- [x] **Step 4: Implement the agent**
 
 Create `src/sentinel/interfaces/graphs/agents/chart_generator.py`:
 
@@ -1915,12 +1915,12 @@ def build_context(ctx: dataclasses.dataclass) -> str:
     )
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/interfaces/graphs/agents/test_chart_generator.py -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/sentinel/interfaces/graphs/agents/chart_generator.py \
@@ -1939,7 +1939,7 @@ git commit -m "feat: add chart generator agent with Jinja2 prompt"
 - Create: `tests/unit/application/charts/__init__.py`
 - Test: `tests/unit/application/charts/test_commit.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/application/charts/test_commit.py
@@ -2043,12 +2043,12 @@ class TestCommitToGitOps:
         assert mock_run.call_count >= 1
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/application/charts/test_commit.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `src/sentinel/application/charts/__init__.py` (empty).
 
@@ -2194,12 +2194,12 @@ async def commit_to_gitops(
     return out
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/application/charts/test_commit.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/application/charts/ tests/unit/application/charts/
@@ -2214,7 +2214,7 @@ git commit -m "feat: add GitOps committer for chart generation output"
 - Modify: `src/sentinel/domain/pipeline/types.py`
 - Modify: `src/sentinel/interfaces/graphs/common.py`
 
-- [ ] **Step 1: Add ChartGenerationReply to pipeline types**
+- [x] **Step 1: Add ChartGenerationReply to pipeline types**
 
 Append to `src/sentinel/domain/pipeline/types.py`:
 
@@ -2232,7 +2232,7 @@ class ChartGenerationReply(BaseModel):
     error: str | None = None
 ```
 
-- [ ] **Step 2: Re-export from common.py**
+- [x] **Step 2: Re-export from common.py**
 
 Add to `src/sentinel/interfaces/graphs/common.py`:
 
@@ -2240,12 +2240,12 @@ Add to `src/sentinel/interfaces/graphs/common.py`:
 from sentinel.domain.pipeline.types import ChartGenerationReply as ChartGenerationReply
 ```
 
-- [ ] **Step 3: Run existing tests**
+- [x] **Step 3: Run existing tests**
 
 Run: `uv run pytest tests/unit/ -x -q`
 Expected: PASS (no regressions)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/sentinel/domain/pipeline/types.py src/sentinel/interfaces/graphs/common.py
@@ -2262,7 +2262,7 @@ git commit -m "feat: add ChartGenerationReply pipeline type"
 
 This is the largest task. The pipeline has 7 nodes with a self-heal loop.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/interfaces/graphs/test_chart_generation.py
@@ -2346,12 +2346,12 @@ class TestGenerateChart:
         assert "policy" in result.error.lower()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/interfaces/graphs/test_chart_generation.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Implement the pipeline**
+- [x] **Step 3: Implement the pipeline**
 
 Create `src/sentinel/interfaces/graphs/chart_generation.py`:
 
@@ -2603,12 +2603,12 @@ async def generate_chart(
     )
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/interfaces/graphs/test_chart_generation.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/interfaces/graphs/chart_generation.py \
@@ -2623,7 +2623,7 @@ git commit -m "feat: add chart generation pipeline with self-heal loop"
 **Files:**
 - Modify: `src/sentinel/config.py:63-240`
 
-- [ ] **Step 1: Add chart model properties**
+- [x] **Step 1: Add chart model properties**
 
 Add to `src/sentinel/config.py` in the `Configuration` class, after the existing `k8s_investigator_model` property:
 
@@ -2639,12 +2639,12 @@ Add to `src/sentinel/config.py` in the `Configuration` class, after the existing
         return _normalise_model_name(self.settings.k8s_chart_generator_llm)
 ```
 
-- [ ] **Step 2: Run existing tests**
+- [x] **Step 2: Run existing tests**
 
 Run: `uv run pytest tests/unit/ -x -q`
 Expected: PASS (no regressions)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/sentinel/config.py
@@ -2658,7 +2658,7 @@ git commit -m "feat: add chart generation model properties to config"
 **Files:**
 - Modify: `src/sentinel/interfaces/chat/app.py`
 
-- [ ] **Step 1: Add chart generation scenarios**
+- [x] **Step 1: Add chart generation scenarios**
 
 Add after `_K8S_SCENARIOS` in `app.py`:
 
@@ -2692,7 +2692,7 @@ _CHART_SCENARIOS: tuple[dict[str, str], ...] = (
 )
 ```
 
-- [ ] **Step 2: Add chart generation runner**
+- [x] **Step 2: Add chart generation runner**
 
 Add after `_run_support()`:
 
@@ -2721,7 +2721,7 @@ async def _run_chart_generation(
     )
 ```
 
-- [ ] **Step 3: Add chart result formatting**
+- [x] **Step 3: Add chart result formatting**
 
 Add after `_format_support()`:
 
@@ -2749,7 +2749,7 @@ def _format_chart_result(reply: common.ChartGenerationReply) -> str:
     return "\n".join(parts)
 ```
 
-- [ ] **Step 4: Add scenario buttons to sidebar**
+- [x] **Step 4: Add scenario buttons to sidebar**
 
 In `_render_sidebar()`, after the K8s investigation scenarios line, add:
 
@@ -2757,7 +2757,7 @@ In `_render_sidebar()`, after the K8s investigation scenarios line, add:
         _render_scenario_buttons("Chart Generation", _CHART_SCENARIOS, "chart")
 ```
 
-- [ ] **Step 5: Wire into intent handling**
+- [x] **Step 5: Wire into intent handling**
 
 In `_handle_user_input()`, add a chart generation path. After the SRE/Support routing, add detection for chart generation requests. The simplest approach is to check the intent or add a sidebar toggle:
 
@@ -2787,11 +2787,11 @@ In `_handle_user_input()`, before the intent classification, add:
             return
 ```
 
-- [ ] **Step 6: Verify the UI renders without errors**
+- [x] **Step 6: Verify the UI renders without errors**
 
 Run: `uv run streamlit run src/sentinel/interfaces/chat/app.py` and verify the page loads.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/sentinel/interfaces/chat/app.py
@@ -2808,7 +2808,7 @@ git commit -m "feat: add chart generation mode to Streamlit chat UI"
 - Modify: `src/sentinel/evals/cases/base.py`
 - Test: `tests/unit/evals/evaluators/test_chart_evaluators.py`
 
-- [ ] **Step 1: Create dataset JSON**
+- [x] **Step 1: Create dataset JSON**
 
 Create `src/sentinel/evals/datasets/chart_generation_cases.json`:
 
@@ -2938,7 +2938,7 @@ Create `src/sentinel/evals/datasets/chart_generation_cases.json`:
 ]
 ```
 
-- [ ] **Step 2: Write evaluator tests**
+- [x] **Step 2: Write evaluator tests**
 
 ```python
 # tests/unit/evals/evaluators/test_chart_evaluators.py
@@ -3014,12 +3014,12 @@ def _make_eval_context(*, case_payload: dict) -> chart_evaluators.evaluators.Eva
     return ctx
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/evals/evaluators/test_chart_evaluators.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 4: Implement evaluators**
+- [x] **Step 4: Implement evaluators**
 
 Create `src/sentinel/evals/evaluators/chart_evaluators.py`:
 
@@ -3132,7 +3132,7 @@ class SpecCoverageCheck(evaluators.Evaluator):
         }
 ```
 
-- [ ] **Step 5: Register in base.py**
+- [x] **Step 5: Register in base.py**
 
 Add to `src/sentinel/evals/cases/base.py`:
 
@@ -3168,12 +3168,12 @@ Add to the `_EVALUATOR_BUILDERS` dict (find it in the file and add the entry):
     "chart_generator": lambda _case=None: _build_chart_generator_evaluators(),
 ```
 
-- [ ] **Step 6: Run test to verify it passes**
+- [x] **Step 6: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/evals/evaluators/test_chart_evaluators.py -v`
 Expected: PASS
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/sentinel/evals/datasets/chart_generation_cases.json \
@@ -3190,7 +3190,7 @@ git commit -m "feat: add evaluation framework for chart generation"
 **Files:**
 - Create: `tests/functional/test_chart_generation_pipeline.py`
 
-- [ ] **Step 1: Write the end-to-end test**
+- [x] **Step 1: Write the end-to-end test**
 
 ```python
 # tests/functional/test_chart_generation_pipeline.py
@@ -3389,12 +3389,12 @@ class TestChartGenerationPipeline:
         assert result.error is None
 ```
 
-- [ ] **Step 2: Run the functional test**
+- [x] **Step 2: Run the functional test**
 
 Run: `uv run pytest tests/functional/test_chart_generation_pipeline.py -v`
 Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/functional/test_chart_generation_pipeline.py
@@ -3405,21 +3405,21 @@ git commit -m "test: add functional tests for chart generation pipeline"
 
 ## Task 16: Run Full Test Suite and Lint
 
-- [ ] **Step 1: Run all tests**
+- [x] **Step 1: Run all tests**
 
 Run: `uv run pytest tests/ -x -q`
 Expected: All tests pass.
 
-- [ ] **Step 2: Run linter**
+- [x] **Step 2: Run linter**
 
 Run: `just lint`
 Expected: No errors. If there are ruff or mypy issues, fix them.
 
-- [ ] **Step 3: Run lint-fix if needed**
+- [x] **Step 3: Run lint-fix if needed**
 
 Run: `just lint-fix`
 
-- [ ] **Step 4: Final commit if any lint fixes**
+- [x] **Step 4: Final commit if any lint fixes**
 
 ```bash
 git add -u

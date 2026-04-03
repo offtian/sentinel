@@ -69,7 +69,7 @@
 - Create: `src/sentinel/domain/sre/investigation.py`
 - Test: `tests/unit/domain/sre/test_investigation.py`
 
-- [ ] **Step 1: Write tests for AuditEntry and InvestigationResult**
+- [x] **Step 1: Write tests for AuditEntry and InvestigationResult**
 
 ```python
 # tests/unit/domain/sre/test_investigation.py
@@ -189,12 +189,12 @@ class TestInvestigationResult:
         assert result.duration_ms == 1500
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/domain/sre/test_investigation.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'sentinel.domain.sre.investigation'`
 
-- [ ] **Step 3: Implement domain types**
+- [x] **Step 3: Implement domain types**
 
 ```python
 # src/sentinel/domain/sre/investigation.py
@@ -305,12 +305,12 @@ class K8sInvestigationAdapter(BaseInvestigationAdapter):
     pass
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/domain/sre/test_investigation.py -v`
 Expected: All 4 tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/domain/sre/investigation.py tests/unit/domain/sre/test_investigation.py
@@ -328,7 +328,7 @@ git commit -m "feat: add investigation adapter hierarchy with audit trail types"
 - Modify: `src/sentinel/config.py`
 - Modify: `src/sentinel/interfaces/chat/app.py`
 
-- [ ] **Step 1: Update BaseHolmesAdapter to extend BaseInvestigationAdapter**
+- [x] **Step 1: Update BaseHolmesAdapter to extend BaseInvestigationAdapter**
 
 In `src/sentinel/domain/sre/holmes_adapter.py`, make `BaseHolmesAdapter` a subclass of `BaseInvestigationAdapter` for backward compatibility, and add `is_configured` to concrete adapters:
 
@@ -396,7 +396,7 @@ Update `DirectToolsetAdapter.investigate()` signature (line 124-128) to accept `
     ) -> HolmesInvestigationResult:
 ```
 
-- [ ] **Step 2: Update MockHolmesAdapter in test factories**
+- [x] **Step 2: Update MockHolmesAdapter in test factories**
 
 In `tests/factories/__init__.py`, update `MockHolmesAdapter.investigate()` to accept `context`:
 
@@ -418,17 +418,17 @@ Add `is_configured` property:
         return True
 ```
 
-- [ ] **Step 3: Run all existing tests to verify nothing breaks**
+- [x] **Step 3: Run all existing tests to verify nothing breaks**
 
 Run: `uv run pytest tests/unit/ -v --tb=short`
 Expected: All existing tests PASS (the `context` parameter has a default of `None`)
 
-- [ ] **Step 4: Verify import-linter contracts pass**
+- [x] **Step 4: Verify import-linter contracts pass**
 
 Run: `uv run lint-imports`
 Expected: All contracts PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/domain/sre/holmes_adapter.py tests/factories/__init__.py
@@ -447,7 +447,7 @@ git commit -m "refactor: make BaseHolmesAdapter extend BaseInvestigationAdapter"
 - Test: `tests/unit/domain/evaluation/test_comparison.py`
 - Modify: `pyproject.toml` (import-linter)
 
-- [ ] **Step 1: Write tests for EvaluationMetrics**
+- [x] **Step 1: Write tests for EvaluationMetrics**
 
 ```python
 # tests/unit/domain/evaluation/test_metrics.py
@@ -508,7 +508,7 @@ class TestEvaluationMetrics:
             result.factual_precision = 0.9  # type: ignore[misc]
 ```
 
-- [ ] **Step 2: Write tests for ComparisonResult**
+- [x] **Step 2: Write tests for ComparisonResult**
 
 ```python
 # tests/unit/domain/evaluation/test_comparison.py
@@ -557,12 +557,12 @@ class TestComparisonResult:
         assert result.case_id == "k8s-crashloop-001"
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/domain/evaluation/ -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 4: Implement evaluation types**
+- [x] **Step 4: Implement evaluation types**
 
 ```python
 # src/sentinel/domain/evaluation/__init__.py
@@ -633,12 +633,12 @@ class ComparisonResult:
     winner_by_dimension: Mapping[str, str]
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/domain/evaluation/ -v`
 Expected: All 3 tests PASS
 
-- [ ] **Step 6: Add `evaluation` to import-linter layers**
+- [x] **Step 6: Add `evaluation` to import-linter layers**
 
 In `pyproject.toml`, add `evaluation` between `evals` and `plugins` in the layers list (line 203):
 
@@ -664,12 +664,12 @@ layers = [
 
 Wait — `domain/evaluation/` is inside the `domain` package, so it's already covered by the `domain` layer. No import-linter change needed. Delete this step.
 
-- [ ] **Step 7: Verify import-linter and full test suite**
+- [x] **Step 7: Verify import-linter and full test suite**
 
 Run: `uv run lint-imports && uv run pytest tests/unit/ -v --tb=short`
 Expected: All contracts and tests PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/sentinel/domain/evaluation/ tests/unit/domain/evaluation/
@@ -684,7 +684,7 @@ git commit -m "feat: add pipeline-agnostic evaluation metrics and comparison typ
 - Create: `src/sentinel/domain/tools/kubernetes.py`
 - Test: `tests/unit/domain/tools/test_kubernetes.py`
 
-- [ ] **Step 1: Write tests for K8s tool functions**
+- [x] **Step 1: Write tests for K8s tool functions**
 
 ```python
 # tests/unit/domain/tools/test_kubernetes.py
@@ -796,12 +796,12 @@ class TestGetPodLogs:
         assert "not available" in result.lower()
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/domain/tools/test_kubernetes.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement K8s tool functions**
+- [x] **Step 3: Implement K8s tool functions**
 
 ```python
 # src/sentinel/domain/tools/kubernetes.py
@@ -1023,12 +1023,12 @@ async def describe_resource(
     return "\n".join(lines)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/domain/tools/test_kubernetes.py -v`
 Expected: All 5 tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/domain/tools/kubernetes.py tests/unit/domain/tools/test_kubernetes.py
@@ -1043,7 +1043,7 @@ git commit -m "feat: add K8s domain tool functions for pod, deployment, event, a
 - Create: `src/sentinel/plugins/toolsets/kubernetes.py`
 - Test: `tests/unit/plugins/toolsets/test_kubernetes.py`
 
-- [ ] **Step 1: Write tests for K8s toolset**
+- [x] **Step 1: Write tests for K8s toolset**
 
 ```python
 # tests/unit/plugins/toolsets/test_kubernetes.py
@@ -1076,12 +1076,12 @@ class TestBuildKubernetesToolset:
         assert toolset is not None
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/plugins/toolsets/test_kubernetes.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement K8s toolset wrapper**
+- [x] **Step 3: Implement K8s toolset wrapper**
 
 ```python
 # src/sentinel/plugins/toolsets/kubernetes.py
@@ -1233,12 +1233,12 @@ def build_kubernetes_toolset(
     return toolset
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/plugins/toolsets/test_kubernetes.py -v`
 Expected: All 2 tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/plugins/toolsets/kubernetes.py tests/unit/plugins/toolsets/test_kubernetes.py
@@ -1253,7 +1253,7 @@ git commit -m "feat: add K8s FunctionToolset wrapper for PydanticAI agents"
 - Create: `src/sentinel/plugins/prompts/k8s_investigator.j2`
 - Create: `src/sentinel/interfaces/graphs/agents/k8s_investigator.py`
 
-- [ ] **Step 1: Create K8s investigator prompt template**
+- [x] **Step 1: Create K8s investigator prompt template**
 
 ```jinja2
 {# K8s Investigator — analyses Kubernetes cluster state for root cause diagnosis. #}
@@ -1297,7 +1297,7 @@ Use the available Kubernetes tools to investigate this alert.
 {% endblock %}
 ```
 
-- [ ] **Step 2: Create K8s investigator agent module**
+- [x] **Step 2: Create K8s investigator agent module**
 
 ```python
 # src/sentinel/interfaces/graphs/agents/k8s_investigator.py
@@ -1364,12 +1364,12 @@ def build_k8s_context(ctx: RunContext[Dependencies]) -> str:
     )
 ```
 
-- [ ] **Step 3: Verify the agent module loads**
+- [x] **Step 3: Verify the agent module loads**
 
 Run: `uv run python -c "from sentinel.interfaces.graphs.agents import k8s_investigator; print(k8s_investigator.agent)"`
 Expected: Prints agent repr without errors
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/sentinel/plugins/prompts/k8s_investigator.j2 src/sentinel/interfaces/graphs/agents/k8s_investigator.py
@@ -1384,7 +1384,7 @@ git commit -m "feat: add K8s investigator PydanticAI agent with prompt template"
 - Create: `src/sentinel/domain/sre/k8s_native_agent.py`
 - Test: `tests/unit/domain/sre/test_k8s_native_agent.py`
 
-- [ ] **Step 1: Write tests for NativeK8sAgent**
+- [x] **Step 1: Write tests for NativeK8sAgent**
 
 ```python
 # tests/unit/domain/sre/test_k8s_native_agent.py
@@ -1460,12 +1460,12 @@ class TestNativeK8sAgent:
         assert result.duration_ms >= 0
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/domain/sre/test_k8s_native_agent.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement NativeK8sAgent**
+- [x] **Step 3: Implement NativeK8sAgent**
 
 ```python
 # src/sentinel/domain/sre/k8s_native_agent.py
@@ -1660,12 +1660,12 @@ async def _run_k8s_agent(
     )
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/domain/sre/test_k8s_native_agent.py -v`
 Expected: All 3 tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/domain/sre/k8s_native_agent.py tests/unit/domain/sre/test_k8s_native_agent.py
@@ -1680,7 +1680,7 @@ git commit -m "feat: implement NativeK8sAgent with PydanticAI and K8s tools"
 - Modify: `src/sentinel/settings.py`
 - Modify: `src/sentinel/config.py`
 
-- [ ] **Step 1: Add K8s and MCP settings**
+- [x] **Step 1: Add K8s and MCP settings**
 
 In `src/sentinel/settings.py`, add to `SRESettings` class (after line 46):
 
@@ -1702,7 +1702,7 @@ In `src/sentinel/settings.py`, add to `SRESettings` class (after line 46):
     mcp_server_api_key: str = ""
 ```
 
-- [ ] **Step 2: Add config methods for K8s adapter**
+- [x] **Step 2: Add config methods for K8s adapter**
 
 In `src/sentinel/config.py`, add after `build_holmes_adapter()` (after line 157):
 
@@ -1735,17 +1735,17 @@ Add the import at the top of `config.py`:
 from sentinel.domain.sre import investigation
 ```
 
-- [ ] **Step 3: Run existing tests to verify nothing breaks**
+- [x] **Step 3: Run existing tests to verify nothing breaks**
 
 Run: `uv run pytest tests/unit/ -v --tb=short`
 Expected: All tests PASS
 
-- [ ] **Step 4: Verify import-linter**
+- [x] **Step 4: Verify import-linter**
 
 Run: `uv run lint-imports`
 Expected: All contracts PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/settings.py src/sentinel/config.py
@@ -1766,7 +1766,7 @@ git commit -m "feat: add K8s agent and MCP settings with config wiring"
 - Modify: `pyproject.toml` (add `fastmcp` dependency)
 - Test: `tests/unit/interfaces/mcp/test_server.py`
 
-- [ ] **Step 1: Add `fastmcp` dependency**
+- [x] **Step 1: Add `fastmcp` dependency**
 
 In `pyproject.toml`, add to the dependencies list (after line 41):
 ```toml
@@ -1775,7 +1775,7 @@ In `pyproject.toml`, add to the dependencies list (after line 41):
 
 Run: `uv sync`
 
-- [ ] **Step 2: Write tests for MCP server tools**
+- [x] **Step 2: Write tests for MCP server tools**
 
 ```python
 # tests/unit/interfaces/mcp/test_server.py
@@ -1810,12 +1810,12 @@ class TestMcpObservabilityTools:
         assert "api-service" in result or "Error" in result
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/interfaces/mcp/test_server.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 4: Implement MCP server and tool modules**
+- [x] **Step 4: Implement MCP server and tool modules**
 
 ```python
 # src/sentinel/interfaces/mcp/__init__.py
@@ -2018,12 +2018,12 @@ if __name__ == "__main__":
     mcp.run(transport="streamable-http")
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/interfaces/mcp/test_server.py -v`
 Expected: All tests PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add pyproject.toml src/sentinel/interfaces/mcp/ tests/unit/interfaces/mcp/
@@ -2038,7 +2038,7 @@ git commit -m "feat: add MCP server exposing observability, documentation, and i
 - Create: `src/sentinel/plugins/toolsets/mcp.py`
 - Test: `tests/unit/plugins/toolsets/test_mcp.py`
 
-- [ ] **Step 1: Write tests for MCP client builder**
+- [x] **Step 1: Write tests for MCP client builder**
 
 ```python
 # tests/unit/plugins/toolsets/test_mcp.py
@@ -2090,12 +2090,12 @@ class TestParseMcpServerConfigs:
         assert result[0].args == ("--namespace", "default")
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/plugins/toolsets/test_mcp.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement MCP client toolset builder**
+- [x] **Step 3: Implement MCP client toolset builder**
 
 ```python
 # src/sentinel/plugins/toolsets/mcp.py
@@ -2189,12 +2189,12 @@ def build_mcp_toolsets(
     return tuple(toolsets)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/plugins/toolsets/test_mcp.py -v`
 Expected: All 3 tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/plugins/toolsets/mcp.py tests/unit/plugins/toolsets/test_mcp.py
@@ -2209,7 +2209,7 @@ git commit -m "feat: add MCP client toolset builder for PydanticAI agents"
 - Create: `src/sentinel/domain/sre/kagent_adapter.py`
 - Test: `tests/unit/domain/sre/test_kagent_adapter.py`
 
-- [ ] **Step 1: Write tests for KagentAdapter**
+- [x] **Step 1: Write tests for KagentAdapter**
 
 ```python
 # tests/unit/domain/sre/test_kagent_adapter.py
@@ -2258,12 +2258,12 @@ class TestKagentAdapter:
         assert result.audit_trail[0].status == "error"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/unit/domain/sre/test_kagent_adapter.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement KagentAdapter**
+- [x] **Step 3: Implement KagentAdapter**
 
 ```python
 # src/sentinel/domain/sre/kagent_adapter.py
@@ -2388,7 +2388,7 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
 Run: `uv run pytest tests/unit/domain/sre/test_kagent_adapter.py -v`
 Expected: All 3 tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/domain/sre/kagent_adapter.py tests/unit/domain/sre/test_kagent_adapter.py
@@ -2407,7 +2407,7 @@ git commit -m "feat: add KagentAdapter skeleton for kagent CRD delegation"
 - Modify: `helm/sentinel/values.yaml`
 - Modify: `helm/sentinel/templates/networkpolicy.yaml`
 
-- [ ] **Step 1: Add new values to values.yaml**
+- [x] **Step 1: Add new values to values.yaml**
 
 Append to `helm/sentinel/values.yaml` (after the `networkPolicy` block, line 156):
 
@@ -2442,7 +2442,7 @@ mcpServer:
       memory: 512Mi
 ```
 
-- [ ] **Step 2: Create ClusterRole template**
+- [x] **Step 2: Create ClusterRole template**
 
 ```yaml
 # helm/sentinel/templates/clusterrole.yaml
@@ -2481,7 +2481,7 @@ rules:
 {{- end }}
 ```
 
-- [ ] **Step 3: Create ClusterRoleBinding template**
+- [x] **Step 3: Create ClusterRoleBinding template**
 
 ```yaml
 # helm/sentinel/templates/clusterrolebinding.yaml
@@ -2503,7 +2503,7 @@ subjects:
 {{- end }}
 ```
 
-- [ ] **Step 4: Create MCP deployment template**
+- [x] **Step 4: Create MCP deployment template**
 
 ```yaml
 # helm/sentinel/templates/mcp-deployment.yaml
@@ -2553,7 +2553,7 @@ spec:
 {{- end }}
 ```
 
-- [ ] **Step 5: Create MCP service template**
+- [x] **Step 5: Create MCP service template**
 
 ```yaml
 # helm/sentinel/templates/mcp-service.yaml
@@ -2578,7 +2578,7 @@ spec:
 {{- end }}
 ```
 
-- [ ] **Step 6: Update network policy**
+- [x] **Step 6: Update network policy**
 
 Read the existing `networkpolicy.yaml` first, then add egress rules for K8s API server, kagent namespace, and MCP server. Add these egress rules inside the existing `{{- if .Values.networkPolicy.enabled }}` block:
 
@@ -2611,12 +2611,12 @@ Read the existing `networkpolicy.yaml` first, then add egress rules for K8s API 
     {{- end }}
 ```
 
-- [ ] **Step 7: Validate Helm template rendering**
+- [x] **Step 7: Validate Helm template rendering**
 
 Run: `helm template sentinel helm/sentinel/ --set k8sAgent.enabled=true --set mcpServer.enabled=true --set kagent.enabled=true | head -100`
 Expected: Valid YAML output with ClusterRole, MCP deployment, and service
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add helm/sentinel/
@@ -2630,7 +2630,7 @@ git commit -m "feat: add Helm templates for K8s agent RBAC, MCP server deploymen
 **Files:**
 - Modify: `src/sentinel/interfaces/chat/app.py`
 
-- [ ] **Step 1: Add K8s test scenarios**
+- [x] **Step 1: Add K8s test scenarios**
 
 Add after `_SUPPORT_SCENARIOS` (around line 405) in `app.py`:
 
@@ -2699,7 +2699,7 @@ _K8S_SCENARIOS: tuple[dict[str, str], ...] = (
 )
 ```
 
-- [ ] **Step 2: Add backend selector and K8s scenarios to sidebar**
+- [x] **Step 2: Add backend selector and K8s scenarios to sidebar**
 
 Update `_render_sidebar()` to include investigation backend selector and K8s scenarios. After the Support scenarios section (around line 429), add:
 
