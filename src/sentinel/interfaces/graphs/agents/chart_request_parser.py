@@ -30,6 +30,7 @@ agent: Agent[Dependencies, entities.ChartSpec] = Agent(
     output_type=entities.ChartSpec,
     system_prompt=SYSTEM_PROMPT,
     instrument=True,
+    output_retries=3,
 )
 
 

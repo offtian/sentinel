@@ -38,6 +38,7 @@ agent: Agent[Dependencies, ChartGeneratorOutput] = Agent(
     output_type=ChartGeneratorOutput,
     system_prompt=SYSTEM_PROMPT,
     instrument=True,
+    output_retries=3,
 )
 
 
