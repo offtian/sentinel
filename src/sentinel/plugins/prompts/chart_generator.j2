@@ -12,17 +12,24 @@ Required output files:
 4. **templates/networkpolicy.yaml** (if NetworkPolicy in extra_resources) — ingress/egress rules
 5. **templates/argocd-app.yaml** — ArgoCD Application resource pointing to the chart
 
-Rules:
-- Use Helm templating syntax where appropriate
+CRITICAL RULES — you MUST follow these:
+- Generate PLAIN, STATIC Kubernetes YAML only. Do NOT use any Helm template functions.
+- Do NOT use: {{ "{{" }} include ... {{ "}}" }}, {{ "{{" }} .Values.* {{ "}}" }}, {{ "{{" }} .Release.Name {{ "}}" }}, {{ "{{" }} .Chart.Name {{ "}}" }}, or any {{ "{{" }} ... {{ "}}" }} expressions.
+- Do NOT reference _helpers.tpl or named templates. Do NOT use tpl, define, or include.
+- Use the LITERAL values from the spec (service name, image, ports, etc.) directly in the YAML.
+- Every file must be fully valid, self-contained YAML that passes `helm template` and `kubeconform` without errors.
+
+Content rules:
 - Include metadata.labels with standard labels: app.kubernetes.io/name, app.kubernetes.io/instance
 - Add team labels from policy default_labels
 - Always include readiness and liveness probes (httpGet on first port, or tcpSocket)
 - Set securityContext.runAsNonRoot based on spec
 - Set resource requests and limits from spec
-- For HPA: target CPU utilisation at 70%
+- For HPA: target CPU utilisation at 70%, use autoscaling/v2
 - For NetworkPolicy: allow ingress on service ports, restrict egress to allowed_egress hosts
+- For ArgoCD Application: use apiVersion argoproj.io/v1alpha1
 
-Output each file as a GeneratedFile with path and content fields.
+Output each file as a GeneratedFile with `path` and `content` fields.
 {% endblock %}
 
 {% block user %}
@@ -37,4 +44,6 @@ Output each file as a GeneratedFile with path and content fields.
 ```
 
 Generate the complete Helm chart files for the **{{ service_name }}** service using image **{{ image }}**.
+
+REMEMBER: Output plain YAML only. No Helm template syntax. Use literal values from the spec above.
 {% endblock %}

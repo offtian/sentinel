@@ -76,7 +76,10 @@ async def _generate_chart_files(
     user_prompt = f"Generate Helm chart for {spec.service_name}"
     if error_context:
         user_prompt += (
-            f"\n\nPrevious attempt failed with errors:\n{error_context}\nPlease fix these issues."
+            f"\n\nYour PREVIOUS attempt FAILED validation with these errors:\n{error_context}\n\n"
+            "IMPORTANT: Do NOT use Helm template functions like {{ include ... }}, {{ .Values.* }}, "
+            "{{ .Release.Name }}, or any {{ ... }} expressions. Output PLAIN YAML with literal values only. "
+            "Every file must be self-contained and pass helm template + kubeconform."
         )
 
     result = await chart_generator.agent.run(
