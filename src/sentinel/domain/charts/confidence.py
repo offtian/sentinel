@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from sentinel.domain.confidence import entities as confidence_entities
 
+
 _RETRY_SCORES: dict[int, float] = {0: 1.0, 1: 0.7, 2: 0.4, 3: 0.1}
 
 _WEIGHT_SCHEMA = 0.30

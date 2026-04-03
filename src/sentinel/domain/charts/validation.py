@@ -51,8 +51,7 @@ async def _run_helm_template(
 
     stderr_text = stderr.decode().strip()
     if stderr_text:
-        for line in stderr_text.splitlines():
-            warnings.append(line)
+        warnings = list(stderr_text.splitlines())
 
     return True, tuple(errors), tuple(warnings)
 

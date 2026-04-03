@@ -82,7 +82,7 @@ class TestCommitToGitOps:
         with mock.patch.object(commit, "_run_command") as mock_run:
             mock_run.return_value = (0, "https://github.com/org/repo/pull/42", "")
 
-            result = asyncio.run(
+            asyncio.run(
                 commit.commit_to_gitops(
                     chart=chart,
                     gitops_root=tmp_path,

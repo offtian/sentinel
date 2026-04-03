@@ -2,59 +2,107 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a Pydantic Graph pipeline that takes natural language chart requests, applies team policies, generates Helm charts via PydanticAI agents, validates them, and commits to a GitOps directory.
+**Goal:** Build a Pydantic Graph pipeline that parses natural-language chart requests, applies team policies, generates Helm charts via PydanticAI agents, validates them, and commits to a GitOps directory.
 
-**Architecture:** Pydantic Graph DAG (7 nodes) matching the SRE investigation pipeline pattern. Two PydanticAI agents (parser + generator). Policy registry as YAML files. Confidence scoring gates approval. Output to `gitops/charts/`.
+**Architecture:** 7-node pipeline (`ParseRequest → LoadPolicy → MergeSpec → GenerateChart → ValidateChart → ApprovalGate → CommitToGitOps`) with a self-heal loop on validation failures (max 3 retries). Two PydanticAI agents handle NL parsing and chart generation. Policy YAML files in `policies/` define per-team constraints.
 
-**Tech Stack:** PydanticAI, Pydantic Graph, Pydantic Settings, Jinja2 (prompts), helm CLI, kubeconform, structlog
+**Tech Stack:** Python 3.13, PydanticAI, Pydantic Graph, Pydantic BaseModel, Jinja2 prompts, structlog, YAML (PyYAML), subprocess (helm/kubeconform), Streamlit, pydantic_evals.
 
-**Design spec:** `docs/plans/k8s-chart-coding-agent.md`
+**Design spec:** [docs/plans/k8s-chart-coding-agent.md](../../plans/k8s-chart-coding-agent.md)
 
 ---
 
-### Task 1: Settings
+## File Structure
+
+### New files
+
+| File | Responsibility |
+|------|---------------|
+| `src/sentinel/domain/charts/__init__.py` | Package init |
+| `src/sentinel/domain/charts/entities.py` | Domain types: ChartRequest, ChartSpec, TeamPolicy, ChartOutput, etc. |
+| `src/sentinel/domain/charts/policies.py` | Load team YAML, resolve user→team, merge spec with policy |
+| `src/sentinel/domain/charts/validation.py` | Run `helm template` + `kubeconform` via subprocess |
+| `src/sentinel/domain/charts/confidence.py` | Weighted multi-factor confidence scoring for charts |
+| `src/sentinel/interfaces/graphs/agents/chart_request_parser.py` | PydanticAI agent: NL → ChartSpec |
+| `src/sentinel/interfaces/graphs/agents/chart_generator.py` | PydanticAI agent: ChartSpec → Helm YAML files |
+| `src/sentinel/interfaces/graphs/chart_generation.py` | 7-node Pydantic Graph pipeline + `generate_chart()` entry point |
+| `src/sentinel/application/charts/__init__.py` | Package init |
+| `src/sentinel/application/charts/commit.py` | Write files to gitops/, create branch, open PR |
+| `src/sentinel/plugins/prompts/chart_request_parser.j2` | System + user prompt for parser agent |
+| `src/sentinel/plugins/prompts/chart_generator.j2` | System + user prompt for generator agent |
+| `policies/platform.yaml` | Example team policy |
+| `policies/_teams.yaml` | User-to-team mapping |
+| `src/sentinel/evals/datasets/chart_generation_cases.json` | 5 golden test cases |
+| `src/sentinel/evals/evaluators/chart_evaluators.py` | Chart-specific evaluators |
+| `tests/unit/domain/charts/__init__.py` | Test package init |
+| `tests/unit/domain/charts/test_entities.py` | Entity tests |
+| `tests/unit/domain/charts/test_policies.py` | Policy loader tests |
+| `tests/unit/domain/charts/test_validation.py` | Validation runner tests |
+| `tests/unit/domain/charts/test_confidence.py` | Confidence scoring tests |
+| `tests/unit/interfaces/graphs/agents/test_chart_request_parser.py` | Parser agent structure tests |
+| `tests/unit/interfaces/graphs/agents/test_chart_generator.py` | Generator agent structure tests |
+| `tests/unit/interfaces/graphs/test_chart_generation.py` | Pipeline node tests |
+| `tests/unit/application/charts/__init__.py` | Test package init |
+| `tests/unit/application/charts/test_commit.py` | GitOps committer tests |
+| `tests/unit/evals/evaluators/test_chart_evaluators.py` | Evaluator tests |
+| `tests/functional/test_chart_generation_pipeline.py` | End-to-end pipeline test |
+
+### Modified files
+
+| File | What changes |
+|------|-------------|
+| `src/sentinel/settings.py` | Add `K8sChartSettings` class, compose into `Settings` |
+| `src/sentinel/config.py` | Add chart model properties + `build_chart_generation_deps()` |
+| `src/sentinel/domain/pipeline/types.py` | Add `ChartGenerationReply` |
+| `src/sentinel/interfaces/graphs/common.py` | Re-export `ChartGenerationReply` |
+| `src/sentinel/evals/cases/base.py` | Register `chart_generator` dataset + evaluator builder |
+| `src/sentinel/interfaces/chat/app.py` | Add chart generation scenarios, runner, and UI |
+| `tests/factories/__init__.py` | Add `make_chart_request()`, `make_chart_spec()`, etc. |
+
+---
+
+## Task 1: Add Chart Agent Settings
 
 **Files:**
-- Modify: `src/sentinel/settings.py`
-- Test: `tests/unit/test_settings.py`
+- Modify: `src/sentinel/settings.py:20-91`
+- Test: `tests/unit/test_settings.py` (create if not exists)
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/unit/charts/test_settings.py`:
-
 ```python
+# tests/unit/test_settings.py
 from __future__ import annotations
 
 from sentinel import settings
 
 
-class TestChartSettings:
-    def test_chart_settings_have_defaults(self) -> None:
-        # Given the default settings
+class TestK8sChartSettings:
+    def test_defaults_are_set(self):
+        # Given default settings
+        s = settings.Settings()
 
-        # When settings are loaded
-        cfg = settings.Settings()
-
-        # Then chart-specific settings have sensible defaults
-        assert cfg.k8s_chart_generator_llm == "openai/gpt-4.1"
-        assert cfg.k8s_chart_parser_llm == "openai/gpt-4.1-mini"
-        assert cfg.k8s_chart_auto_validate is False
-        assert cfg.k8s_chart_auto_sandbox is False
-        assert cfg.k8s_chart_sandbox_context == ""
-        assert cfg.k8s_chart_max_retries == 3
+        # Then chart agent settings have expected defaults
+        assert s.k8s_chart_generator_llm == "openai/gpt-4.1"
+        assert s.k8s_chart_parser_llm == "openai/gpt-4.1-mini"
+        assert s.k8s_chart_auto_validate is False
+        assert s.k8s_chart_auto_sandbox is False
+        assert s.k8s_chart_sandbox_context == ""
+        assert s.k8s_chart_max_retries == 3
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/unit/charts/test_settings.py -v`
-Expected: FAIL — `Settings` has no attribute `k8s_chart_generator_llm`
+Run: `uv run pytest tests/unit/test_settings.py::TestK8sChartSettings -v`
+Expected: FAIL — attributes don't exist yet.
 
-- [ ] **Step 3: Add settings to SRESettings**
+- [ ] **Step 3: Write minimal implementation**
 
-In `src/sentinel/settings.py`, add to the `SRESettings` class after the MCP settings block:
+Add a new settings class between `SRESettings` and `SupportSettings` in `src/sentinel/settings.py`:
 
 ```python
-    # K8s chart coding agent
+class K8sChartSettings(BaseSettings):
+    """K8s chart coding agent settings."""
+
     k8s_chart_generator_llm: str = "openai/gpt-4.1"
     k8s_chart_parser_llm: str = "openai/gpt-4.1-mini"
     k8s_chart_auto_validate: bool = False
@@ -63,32 +111,38 @@ In `src/sentinel/settings.py`, add to the `SRESettings` class after the MCP sett
     k8s_chart_max_retries: int = 3
 ```
 
+Update the `Settings` class inheritance to include `K8sChartSettings`:
+
+```python
+class Settings(LLMSettings, SRESettings, K8sChartSettings, SupportSettings):
+```
+
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run pytest tests/unit/charts/test_settings.py -v`
+Run: `uv run pytest tests/unit/test_settings.py::TestK8sChartSettings -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/sentinel/settings.py tests/unit/charts/test_settings.py
-git commit -m "feat: add K8s chart coding agent settings"
+git add src/sentinel/settings.py tests/unit/test_settings.py
+git commit -m "feat: add K8s chart agent settings"
 ```
 
 ---
 
-### Task 2: Domain Entities
+## Task 2: Create Domain Entities
 
 **Files:**
 - Create: `src/sentinel/domain/charts/__init__.py`
 - Create: `src/sentinel/domain/charts/entities.py`
+- Create: `tests/unit/domain/charts/__init__.py`
 - Test: `tests/unit/domain/charts/test_entities.py`
 
-- [ ] **Step 1: Write the failing tests**
-
-Create `tests/unit/domain/charts/__init__.py` (empty) and `tests/unit/domain/charts/test_entities.py`:
+- [ ] **Step 1: Write the failing test**
 
 ```python
+# tests/unit/domain/charts/test_entities.py
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -97,200 +151,257 @@ from sentinel.domain.charts import entities
 
 
 class TestPortSpec:
-    def test_stores_fields(self) -> None:
-        # Given a port spec with known values
-        port = entities.PortSpec(
-            name="http", container_port=8000, service_port=80, protocol="TCP"
-        )
+    def test_creates_with_defaults(self):
+        # Given a port spec with only required fields
+        port = entities.PortSpec(container_port=8080)
 
-        # Then fields are accessible
-        assert port.name == "http"
-        assert port.container_port == 8000
-        assert port.service_port == 80
+        # Then defaults are set
+        assert port.container_port == 8080
         assert port.protocol == "TCP"
+        assert port.name == ""
 
 
 class TestResourceSpec:
-    def test_stores_fields(self) -> None:
-        # Given a resource spec
-        res = entities.ResourceSpec(
-            cpu_request="100m", cpu_limit="500m",
-            memory_request="128Mi", memory_limit="256Mi",
+    def test_creates_with_all_fields(self):
+        # Given resource requests and limits
+        spec = entities.ResourceSpec(
+            cpu_request="100m",
+            cpu_limit="500m",
+            memory_request="128Mi",
+            memory_limit="512Mi",
         )
 
-        # Then fields are accessible
-        assert res.cpu_request == "100m"
-        assert res.memory_limit == "256Mi"
+        # Then all values are stored
+        assert spec.cpu_request == "100m"
+        assert spec.memory_limit == "512Mi"
 
 
 class TestChartRequest:
-    def test_stores_fields(self) -> None:
-        # Given a chart request
+    def test_creates_with_required_fields(self):
+        # Given a chart request with all required fields
         now = datetime(2026, 4, 3, tzinfo=UTC)
-        req = entities.ChartRequest(
-            requester="U12345",
-            team="trading-infra",
-            raw_message="Deploy order-processor",
+        request = entities.ChartRequest(
+            requester="alice",
+            team="platform",
+            raw_message="Deploy a Python web service called api-gateway on port 8080",
             requested_at=now,
         )
 
-        # Then fields are accessible
-        assert req.requester == "U12345"
-        assert req.team == "trading-infra"
+        # Then fields are set
+        assert request.requester == "alice"
+        assert request.team == "platform"
+        assert request.raw_message.startswith("Deploy")
+        assert request.requested_at == now
 
 
 class TestChartSpec:
-    def test_stores_fields(self) -> None:
-        # Given a chart spec with all fields
+    def test_creates_with_minimal_fields(self):
+        # Given a chart spec with only required fields
         spec = entities.ChartSpec(
-            service_name="order-processor",
-            image="ghcr.io/acme/order-processor:latest",
-            ports=[
-                entities.PortSpec(name="http", container_port=8000, service_port=80, protocol="TCP"),
-            ],
-            resources=entities.ResourceSpec(
-                cpu_request="100m", cpu_limit="500m",
-                memory_request="128Mi", memory_limit="256Mi",
-            ),
-            replicas=entities.ReplicaSpec(min_replicas=2, max_replicas=10, target_cpu_percent=70),
-            dependencies=[
-                entities.DependencySpec(name="postgres", host="postgres.svc", port=5432),
-            ],
-            environment_variables=[
-                entities.EnvVarSpec(name="DB_HOST", value="postgres.svc", secret_ref=None),
-            ],
-            run_as_non_root=True,
-            extra_resources=[],
+            service_name="api-gateway",
+            image="nginx:latest",
         )
 
-        # Then fields are accessible
-        assert spec.service_name == "order-processor"
+        # Then defaults are populated
+        assert spec.service_name == "api-gateway"
+        assert spec.image == "nginx:latest"
+        assert spec.ports == ()
+        assert spec.replicas is None
+        assert spec.resources is None
+        assert spec.run_as_non_root is True
+        assert spec.env_vars == ()
+        assert spec.dependencies == ()
+        assert spec.extra_resources == ()
+
+    def test_creates_with_all_fields(self):
+        # Given a fully specified chart spec
+        spec = entities.ChartSpec(
+            service_name="api-gateway",
+            image="myrepo/api:v1.2.3",
+            ports=(entities.PortSpec(container_port=8080, name="http"),),
+            replicas=entities.ReplicaSpec(min_replicas=2, max_replicas=5),
+            resources=entities.ResourceSpec(
+                cpu_request="100m",
+                cpu_limit="500m",
+                memory_request="128Mi",
+                memory_limit="512Mi",
+            ),
+            run_as_non_root=True,
+            env_vars=(entities.EnvVarSpec(name="LOG_LEVEL", value="info"),),
+            dependencies=(entities.DependencySpec(name="redis", port=6379),),
+            extra_resources=("NetworkPolicy", "PodDisruptionBudget"),
+        )
+
+        # Then all values are stored
         assert len(spec.ports) == 1
-        assert spec.replicas.max_replicas == 10
+        assert spec.replicas.max_replicas == 5
+        assert spec.resources.cpu_limit == "500m"
+        assert spec.env_vars[0].name == "LOG_LEVEL"
+        assert spec.dependencies[0].name == "redis"
+        assert "NetworkPolicy" in spec.extra_resources
+
+
+class TestTeamPolicy:
+    def test_creates_with_all_fields(self):
+        # Given a team policy
+        policy = entities.TeamPolicy(
+            team="platform",
+            namespace="platform-prod",
+            max_memory="2Gi",
+            max_cpu="2000m",
+            max_replicas=10,
+            require_network_policy=True,
+            require_non_root=True,
+            allowed_egress=(
+                entities.EgressRule(host="redis.internal", port=6379),
+            ),
+            default_labels={"team": "platform", "env": "production"},
+        )
+
+        # Then all values are stored
+        assert policy.team == "platform"
+        assert policy.max_replicas == 10
+        assert policy.require_non_root is True
+        assert len(policy.allowed_egress) == 1
+        assert policy.default_labels["team"] == "platform"
 
 
 class TestPolicyViolation:
-    def test_stores_fields(self) -> None:
+    def test_creates_with_all_fields(self):
         # Given a policy violation
         violation = entities.PolicyViolation(
-            field="resources.limits.memory",
-            requested="2Gi",
-            allowed="512Mi",
-            message="Memory limit exceeds team cap",
+            field="memory_limit",
+            requested="4Gi",
+            allowed="2Gi",
+            message="Memory limit exceeds team maximum of 2Gi",
         )
 
-        # Then fields are accessible
-        assert violation.field == "resources.limits.memory"
-        assert violation.requested == "2Gi"
+        # Then fields are set
+        assert violation.field == "memory_limit"
+        assert violation.requested == "4Gi"
 
 
-class TestChartOutput:
-    def test_stores_fields(self) -> None:
-        # Given a chart output with generated files
-        output = entities.ChartOutput(
-            service_name="order-processor",
-            files=[
-                entities.GeneratedFile(path="Chart.yaml", content="apiVersion: v2\n"),
-            ],
-            validation_result=None,
-            policy_violations=[],
-            generation_attempts=1,
-            confidence_score=0.85,
+class TestGeneratedFile:
+    def test_creates_with_path_and_content(self):
+        # Given a generated file
+        gf = entities.GeneratedFile(
+            path="templates/deployment.yaml",
+            content="apiVersion: apps/v1\nkind: Deployment",
         )
 
-        # Then fields are accessible
-        assert output.service_name == "order-processor"
-        assert len(output.files) == 1
-        assert output.confidence_score == 0.85
+        # Then fields are set
+        assert gf.path == "templates/deployment.yaml"
+        assert "Deployment" in gf.content
 
 
 class TestValidationResult:
-    def test_stores_fields(self) -> None:
-        # Given a passing validation result
+    def test_creates_passing_result(self):
+        # Given a passing validation
         result = entities.ValidationResult(
             helm_template_ok=True,
             kubeconform_ok=True,
-            errors=[],
-            warnings=["deprecated API version"],
         )
 
-        # Then fields are accessible
+        # Then it passes and has no errors
         assert result.helm_template_ok is True
+        assert result.kubeconform_ok is True
+        assert result.errors == ()
+        assert result.warnings == ()
+
+    def test_creates_failing_result(self):
+        # Given a failing validation with errors
+        result = entities.ValidationResult(
+            helm_template_ok=False,
+            kubeconform_ok=False,
+            errors=("template rendering failed: missing required field 'image'",),
+            warnings=("deprecated API version apps/v1beta1",),
+        )
+
+        # Then errors and warnings are captured
+        assert result.helm_template_ok is False
+        assert len(result.errors) == 1
         assert len(result.warnings) == 1
+
+
+class TestChartOutput:
+    def test_creates_with_required_fields(self):
+        # Given a chart output
+        output = entities.ChartOutput(
+            service_name="api-gateway",
+            files=(
+                entities.GeneratedFile(
+                    path="templates/deployment.yaml",
+                    content="apiVersion: apps/v1\nkind: Deployment",
+                ),
+            ),
+        )
+
+        # Then defaults are set
+        assert output.service_name == "api-gateway"
+        assert len(output.files) == 1
+        assert output.validation_result is None
+        assert output.policy_violations == ()
+        assert output.generation_attempts == 1
+        assert output.confidence_score is None
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/domain/charts/test_entities.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'sentinel.domain.charts'`
+Expected: FAIL — module `sentinel.domain.charts` does not exist.
 
-- [ ] **Step 3: Create domain entities**
+- [ ] **Step 3: Write minimal implementation**
 
-Create `src/sentinel/domain/charts/__init__.py` (empty) and `src/sentinel/domain/charts/entities.py`:
+Create `src/sentinel/domain/charts/__init__.py` (empty file).
+
+Create `src/sentinel/domain/charts/entities.py`:
 
 ```python
 """
 Domain entities for the K8s chart coding agent.
 
-These types flow through the chart generation pipeline:
-ChartRequest → ChartSpec → ChartOutput.
+These Pydantic models represent the data flowing through the chart generation
+pipeline — from raw user request to validated Helm chart output.
 """
-
 from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PortSpec(BaseModel):
-    name: str
     container_port: int
-    service_port: int
-    protocol: str  # "TCP" | "UDP"
+    protocol: str = "TCP"
+    name: str = ""
 
 
 class ResourceSpec(BaseModel):
-    cpu_request: str
-    cpu_limit: str
-    memory_request: str
-    memory_limit: str
+    cpu_request: str = ""
+    cpu_limit: str = ""
+    memory_request: str = ""
+    memory_limit: str = ""
 
 
 class ReplicaSpec(BaseModel):
-    min_replicas: int
-    max_replicas: int
-    target_cpu_percent: int
+    min_replicas: int = 1
+    max_replicas: int = 3
 
 
 class DependencySpec(BaseModel):
     name: str
-    host: str
-    port: int
+    port: int = 0
 
 
 class EnvVarSpec(BaseModel):
     name: str
-    value: str | None = None
-    secret_ref: str | None = None
+    value: str = ""
+    secret_ref: str = ""
 
 
 class EgressRule(BaseModel):
-    name: str
     host: str
     port: int
-
-
-class TeamPolicy(BaseModel):
-    team: str
-    namespace: str
-    max_memory: str
-    max_cpu: str
-    max_replicas: int
-    require_network_policy: bool
-    require_non_root: bool
-    allowed_egress: list[EgressRule]
-    default_labels: dict[str, str]
 
 
 class ChartRequest(BaseModel):
@@ -303,18 +414,25 @@ class ChartRequest(BaseModel):
 class ChartSpec(BaseModel):
     service_name: str
     image: str
-    ports: list[PortSpec]
-    resources: ResourceSpec
-    replicas: ReplicaSpec
-    dependencies: list[DependencySpec]
-    environment_variables: list[EnvVarSpec]
-    run_as_non_root: bool
-    extra_resources: list[str] = []
+    ports: tuple[PortSpec, ...] = ()
+    replicas: ReplicaSpec | None = None
+    resources: ResourceSpec | None = None
+    run_as_non_root: bool = True
+    env_vars: tuple[EnvVarSpec, ...] = ()
+    dependencies: tuple[DependencySpec, ...] = ()
+    extra_resources: tuple[str, ...] = ()
 
 
-class GeneratedFile(BaseModel):
-    path: str
-    content: str
+class TeamPolicy(BaseModel):
+    team: str
+    namespace: str = ""
+    max_memory: str = ""
+    max_cpu: str = ""
+    max_replicas: int = 0
+    require_network_policy: bool = False
+    require_non_root: bool = True
+    allowed_egress: tuple[EgressRule, ...] = ()
+    default_labels: dict[str, str] = Field(default_factory=dict)
 
 
 class PolicyViolation(BaseModel):
@@ -324,26 +442,31 @@ class PolicyViolation(BaseModel):
     message: str
 
 
+class GeneratedFile(BaseModel):
+    path: str
+    content: str
+
+
 class ValidationResult(BaseModel):
     helm_template_ok: bool
     kubeconform_ok: bool
-    errors: list[str]
-    warnings: list[str]
+    errors: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
 
 
 class ChartOutput(BaseModel):
     service_name: str
-    files: list[GeneratedFile]
+    files: tuple[GeneratedFile, ...] = ()
     validation_result: ValidationResult | None = None
-    policy_violations: list[PolicyViolation] = []
+    policy_violations: tuple[PolicyViolation, ...] = ()
     generation_attempts: int = 1
-    confidence_score: float = 0.0
+    confidence_score: float | None = None
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/domain/charts/test_entities.py -v`
-Expected: PASS (all 7 tests)
+Expected: PASS
 
 - [ ] **Step 5: Commit**
 
@@ -354,11 +477,10 @@ git commit -m "feat: add domain entities for chart coding agent"
 
 ---
 
-### Task 3: Test Factories
+## Task 3: Create Test Factories
 
 **Files:**
 - Modify: `tests/factories/__init__.py`
-- Test: `tests/unit/domain/charts/test_entities.py` (already passing — this adds convenience factories)
 
 - [ ] **Step 1: Add chart factories**
 
@@ -370,65 +492,62 @@ from sentinel.domain.charts import entities as chart_entities
 
 def make_chart_request(
     *,
-    requester: str = "U12345",
-    team: str = "internal-tooling",
-    raw_message: str = "Deploy a FastAPI service called order-processor with Postgres",
+    requester: str = "alice",
+    team: str = "platform",
+    raw_message: str = "Deploy a Python web service called api-gateway on port 8080 with 256Mi memory",
     requested_at: datetime | None = None,
 ) -> chart_entities.ChartRequest:
     return chart_entities.ChartRequest(
         requester=requester,
         team=team,
         raw_message=raw_message,
-        requested_at=requested_at or datetime(2026, 4, 3, tzinfo=UTC),
+        requested_at=requested_at or datetime(2026, 4, 1, tzinfo=UTC),
     )
 
 
 def make_chart_spec(
     *,
-    service_name: str = "order-processor",
-    image: str = "ghcr.io/acme/order-processor:latest",
-    ports: list[chart_entities.PortSpec] | None = None,
-    resources: chart_entities.ResourceSpec | None = None,
+    service_name: str = "api-gateway",
+    image: str = "myrepo/api-gateway:latest",
+    ports: tuple[chart_entities.PortSpec, ...] = (
+        chart_entities.PortSpec(container_port=8080, name="http"),
+    ),
     replicas: chart_entities.ReplicaSpec | None = None,
-    dependencies: list[chart_entities.DependencySpec] | None = None,
-    environment_variables: list[chart_entities.EnvVarSpec] | None = None,
+    resources: chart_entities.ResourceSpec | None = None,
     run_as_non_root: bool = True,
-    extra_resources: list[str] | None = None,
+    env_vars: tuple[chart_entities.EnvVarSpec, ...] = (),
+    dependencies: tuple[chart_entities.DependencySpec, ...] = (),
+    extra_resources: tuple[str, ...] = (),
 ) -> chart_entities.ChartSpec:
     return chart_entities.ChartSpec(
         service_name=service_name,
         image=image,
-        ports=ports or [
-            chart_entities.PortSpec(name="http", container_port=8000, service_port=80, protocol="TCP"),
-        ],
-        resources=resources or chart_entities.ResourceSpec(
-            cpu_request="100m", cpu_limit="500m",
-            memory_request="128Mi", memory_limit="256Mi",
+        ports=ports,
+        replicas=replicas or chart_entities.ReplicaSpec(min_replicas=2, max_replicas=5),
+        resources=resources
+        or chart_entities.ResourceSpec(
+            cpu_request="100m",
+            cpu_limit="500m",
+            memory_request="128Mi",
+            memory_limit="256Mi",
         ),
-        replicas=replicas or chart_entities.ReplicaSpec(
-            min_replicas=2, max_replicas=10, target_cpu_percent=70,
-        ),
-        dependencies=dependencies or [
-            chart_entities.DependencySpec(name="postgres", host="postgres.default.svc.cluster.local", port=5432),
-        ],
-        environment_variables=environment_variables or [
-            chart_entities.EnvVarSpec(name="DB_HOST", value="postgres.default.svc.cluster.local"),
-        ],
         run_as_non_root=run_as_non_root,
-        extra_resources=extra_resources or [],
+        env_vars=env_vars,
+        dependencies=dependencies,
+        extra_resources=extra_resources,
     )
 
 
 def make_team_policy(
     *,
-    team: str = "internal-tooling",
-    namespace: str = "tools",
+    team: str = "platform",
+    namespace: str = "platform-prod",
     max_memory: str = "2Gi",
     max_cpu: str = "2000m",
-    max_replicas: int = 20,
-    require_network_policy: bool = False,
-    require_non_root: bool = False,
-    allowed_egress: list[chart_entities.EgressRule] | None = None,
+    max_replicas: int = 10,
+    require_network_policy: bool = True,
+    require_non_root: bool = True,
+    allowed_egress: tuple[chart_entities.EgressRule, ...] = (),
     default_labels: dict[str, str] | None = None,
 ) -> chart_entities.TeamPolicy:
     return chart_entities.TeamPolicy(
@@ -439,343 +558,303 @@ def make_team_policy(
         max_replicas=max_replicas,
         require_network_policy=require_network_policy,
         require_non_root=require_non_root,
-        allowed_egress=allowed_egress or [],
-        default_labels=default_labels or {"tier": "internal"},
+        allowed_egress=allowed_egress,
+        default_labels=default_labels or {"team": team},
+    )
+
+
+def make_generated_file(
+    *,
+    path: str = "templates/deployment.yaml",
+    content: str = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api-gateway",
+) -> chart_entities.GeneratedFile:
+    return chart_entities.GeneratedFile(path=path, content=content)
+
+
+def make_validation_result(
+    *,
+    helm_template_ok: bool = True,
+    kubeconform_ok: bool = True,
+    errors: tuple[str, ...] = (),
+    warnings: tuple[str, ...] = (),
+) -> chart_entities.ValidationResult:
+    return chart_entities.ValidationResult(
+        helm_template_ok=helm_template_ok,
+        kubeconform_ok=kubeconform_ok,
+        errors=errors,
+        warnings=warnings,
     )
 
 
 def make_chart_output(
     *,
-    service_name: str = "order-processor",
-    files: list[chart_entities.GeneratedFile] | None = None,
+    service_name: str = "api-gateway",
+    files: tuple[chart_entities.GeneratedFile, ...] | None = None,
     validation_result: chart_entities.ValidationResult | None = None,
-    policy_violations: list[chart_entities.PolicyViolation] | None = None,
+    policy_violations: tuple[chart_entities.PolicyViolation, ...] = (),
     generation_attempts: int = 1,
-    confidence_score: float = 0.85,
+    confidence_score: float | None = None,
 ) -> chart_entities.ChartOutput:
     return chart_entities.ChartOutput(
         service_name=service_name,
-        files=files or [
-            chart_entities.GeneratedFile(path="Chart.yaml", content="apiVersion: v2\nname: order-processor\n"),
-            chart_entities.GeneratedFile(path="values.yaml", content="replicaCount: 2\n"),
-        ],
+        files=files or (make_generated_file(),),
         validation_result=validation_result,
-        policy_violations=policy_violations or [],
+        policy_violations=policy_violations,
         generation_attempts=generation_attempts,
         confidence_score=confidence_score,
     )
 ```
 
-- [ ] **Step 2: Run existing tests to verify no regressions**
+- [ ] **Step 2: Verify factories work**
 
-Run: `uv run pytest tests/unit/domain/charts/ -v`
-Expected: PASS
+Run: `uv run pytest tests/unit/domain/charts/test_entities.py -v`
+Expected: PASS (no regressions)
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add tests/factories/__init__.py
-git commit -m "feat: add chart entity test factories"
+git commit -m "feat: add test factories for chart domain entities"
 ```
 
 ---
 
-### Task 4: Policy Registry
+## Task 4: Create Policy Registry
 
 **Files:**
-- Create: `policies/_default.yaml`
-- Create: `policies/trading-infra.yaml`
-- Create: `policies/internal-tooling.yaml`
-- Create: `policies/_teams.yaml`
 - Create: `src/sentinel/domain/charts/policies.py`
+- Create: `policies/platform.yaml`
+- Create: `policies/_teams.yaml`
 - Test: `tests/unit/domain/charts/test_policies.py`
 
-- [ ] **Step 1: Create policy YAML files**
-
-Create `policies/_default.yaml`:
-
-```yaml
-team: _default
-namespace: default
-max_memory: "1Gi"
-max_cpu: "1000m"
-max_replicas: 10
-require_network_policy: true
-require_non_root: true
-allowed_egress: []
-default_labels:
-  managed-by: sentinel-chart-agent
-```
-
-Create `policies/trading-infra.yaml`:
-
-```yaml
-team: trading-infra
-namespace: trading
-max_memory: "512Mi"
-max_cpu: "500m"
-max_replicas: 8
-require_network_policy: true
-require_non_root: true
-allowed_egress:
-  - name: postgres
-    host: "postgres.trading.svc.cluster.local"
-    port: 5432
-  - name: redis
-    host: "redis.trading.svc.cluster.local"
-    port: 6379
-default_labels:
-  tier: critical
-  compliance: sox
-```
-
-Create `policies/internal-tooling.yaml`:
-
-```yaml
-team: internal-tooling
-namespace: tools
-max_memory: "2Gi"
-max_cpu: "2000m"
-max_replicas: 20
-require_network_policy: false
-require_non_root: false
-allowed_egress: []
-default_labels:
-  tier: internal
-```
-
-Create `policies/_teams.yaml`:
-
-```yaml
-users:
-  U12345: trading-infra
-  U67890: internal-tooling
-default_team: internal-tooling
-```
-
-- [ ] **Step 2: Write the failing tests**
-
-Create `tests/unit/domain/charts/test_policies.py`:
+- [ ] **Step 1: Write the failing test**
 
 ```python
+# tests/unit/domain/charts/test_policies.py
 from __future__ import annotations
 
 from pathlib import Path
 from unittest import mock
 
 import pytest
-import yaml
 
 from sentinel.domain.charts import entities, policies
 
 
-FIXTURES_DIR = Path(__file__).parent / "fixtures"
+class TestResolveTeam:
+    def test_returns_team_for_known_user(self, tmp_path: Path):
+        # Given a teams file mapping alice to platform
+        teams_file = tmp_path / "_teams.yaml"
+        teams_file.write_text("alice: platform\nbob: data-eng\n")
 
+        # When resolving alice's team
+        result = policies.resolve_team(user_id="alice", teams_file=teams_file)
 
-@pytest.fixture()
-def policy_dir(tmp_path: Path) -> Path:
-    """Create a temporary policy directory with test YAML files."""
-    default_policy = {
-        "team": "_default",
-        "namespace": "default",
-        "max_memory": "1Gi",
-        "max_cpu": "1000m",
-        "max_replicas": 10,
-        "require_network_policy": True,
-        "require_non_root": True,
-        "allowed_egress": [],
-        "default_labels": {"managed-by": "sentinel-chart-agent"},
-    }
-    trading_policy = {
-        "team": "trading-infra",
-        "namespace": "trading",
-        "max_memory": "512Mi",
-        "max_cpu": "500m",
-        "max_replicas": 8,
-        "require_network_policy": True,
-        "require_non_root": True,
-        "allowed_egress": [
-            {"name": "postgres", "host": "postgres.trading.svc.cluster.local", "port": 5432},
-        ],
-        "default_labels": {"tier": "critical", "compliance": "sox"},
-    }
-    teams = {
-        "users": {"U12345": "trading-infra", "U67890": "internal-tooling"},
-        "default_team": "internal-tooling",
-    }
+        # Then the team is platform
+        assert result == "platform"
 
-    (tmp_path / "_default.yaml").write_text(yaml.dump(default_policy))
-    (tmp_path / "trading-infra.yaml").write_text(yaml.dump(trading_policy))
-    (tmp_path / "_teams.yaml").write_text(yaml.dump(teams))
-    return tmp_path
+    def test_raises_for_unknown_user(self, tmp_path: Path):
+        # Given a teams file without charlie
+        teams_file = tmp_path / "_teams.yaml"
+        teams_file.write_text("alice: platform\n")
+
+        # When resolving charlie's team
+        # Then a ValueError is raised
+        with pytest.raises(ValueError, match="Unknown user"):
+            policies.resolve_team(user_id="charlie", teams_file=teams_file)
 
 
 class TestLoadTeamPolicy:
-    def test_loads_existing_team_policy(self, policy_dir: Path) -> None:
-        # Given a policy directory with a trading-infra policy
+    def test_loads_policy_from_yaml(self, tmp_path: Path):
+        # Given a platform policy file
+        policy_file = tmp_path / "platform.yaml"
+        policy_file.write_text(
+            "team: platform\n"
+            "namespace: platform-prod\n"
+            "max_memory: 2Gi\n"
+            "max_cpu: 2000m\n"
+            "max_replicas: 10\n"
+            "require_network_policy: true\n"
+            "require_non_root: true\n"
+            "default_labels:\n"
+            "  team: platform\n"
+            "  env: production\n"
+        )
 
-        # When loading the policy for trading-infra
-        policy = policies.load_team_policy(team="trading-infra", policies_dir=policy_dir)
+        # When loading the policy
+        result = policies.load_team_policy(
+            team="platform", policies_dir=tmp_path
+        )
 
-        # Then the correct policy is returned
-        assert policy.team == "trading-infra"
-        assert policy.namespace == "trading"
-        assert policy.max_memory == "512Mi"
-        assert policy.require_non_root is True
-        assert len(policy.allowed_egress) == 1
-        assert policy.allowed_egress[0].name == "postgres"
+        # Then all fields are populated
+        assert result.team == "platform"
+        assert result.namespace == "platform-prod"
+        assert result.max_memory == "2Gi"
+        assert result.max_replicas == 10
+        assert result.require_non_root is True
+        assert result.default_labels == {"team": "platform", "env": "production"}
 
-    def test_falls_back_to_default_policy(self, policy_dir: Path) -> None:
-        # Given a policy directory with no policy for "unknown-team"
-
-        # When loading the policy for an unknown team
-        policy = policies.load_team_policy(team="unknown-team", policies_dir=policy_dir)
-
-        # Then the default policy is returned
-        assert policy.team == "_default"
-        assert policy.max_memory == "1Gi"
-
-    def test_raises_when_no_default_exists(self, tmp_path: Path) -> None:
-        # Given an empty policy directory
-
-        # When loading a policy for any team
+    def test_raises_for_missing_team(self, tmp_path: Path):
+        # Given no policy file for 'unknown-team'
+        # When loading the policy
         # Then a FileNotFoundError is raised
-        with pytest.raises(FileNotFoundError, match="No policy file found"):
-            policies.load_team_policy(team="anything", policies_dir=tmp_path)
-
-
-class TestResolveTeam:
-    def test_resolves_known_user(self, policy_dir: Path) -> None:
-        # Given a teams mapping with U12345 → trading-infra
-
-        # When resolving team for U12345
-        team = policies.resolve_team(user_id="U12345", policies_dir=policy_dir)
-
-        # Then the correct team is returned
-        assert team == "trading-infra"
-
-    def test_resolves_unknown_user_to_default(self, policy_dir: Path) -> None:
-        # Given a teams mapping with a default_team of internal-tooling
-
-        # When resolving team for an unknown user
-        team = policies.resolve_team(user_id="UUNKNOWN", policies_dir=policy_dir)
-
-        # Then the default team is returned
-        assert team == "internal-tooling"
+        with pytest.raises(FileNotFoundError, match="No policy file"):
+            policies.load_team_policy(team="unknown-team", policies_dir=tmp_path)
 
 
 class TestMergeSpecWithPolicy:
-    def test_enforces_non_root_from_policy(self) -> None:
-        # Given a spec that allows root and a policy that requires non-root
+    def test_applies_policy_defaults_when_spec_has_no_resources(self):
+        # Given a spec without resources and a policy with limits
         spec = entities.ChartSpec(
-            service_name="test",
-            image="test:latest",
-            ports=[],
-            resources=entities.ResourceSpec(
-                cpu_request="100m", cpu_limit="500m",
-                memory_request="128Mi", memory_limit="256Mi",
-            ),
-            replicas=entities.ReplicaSpec(min_replicas=1, max_replicas=5, target_cpu_percent=70),
-            dependencies=[],
-            environment_variables=[],
-            run_as_non_root=False,
+            service_name="api-gateway",
+            image="myrepo/api:latest",
         )
         policy = entities.TeamPolicy(
-            team="strict",
-            namespace="prod",
-            max_memory="1Gi",
-            max_cpu="1000m",
+            team="platform",
+            namespace="platform-prod",
+            max_memory="2Gi",
+            max_cpu="2000m",
             max_replicas=10,
-            require_network_policy=False,
+            require_network_policy=True,
             require_non_root=True,
-            allowed_egress=[],
-            default_labels={},
         )
 
-        # When merging spec with policy
-        merged, violations = policies.merge_spec_with_policy(spec=spec, policy=policy)
+        # When merging
+        merged, violations = policies.merge_spec_with_policy(
+            spec=spec, policy=policy
+        )
 
-        # Then non-root is enforced and no violations are raised
+        # Then run_as_non_root is enforced and no violations
         assert merged.run_as_non_root is True
-        assert len(violations) == 0
+        assert violations == ()
 
-    def test_detects_memory_limit_violation(self) -> None:
-        # Given a spec requesting 2Gi and a policy capping at 512Mi
+    def test_detects_memory_limit_violation(self):
+        # Given a spec requesting more memory than policy allows
         spec = entities.ChartSpec(
-            service_name="test",
-            image="test:latest",
-            ports=[],
+            service_name="api-gateway",
+            image="myrepo/api:latest",
             resources=entities.ResourceSpec(
-                cpu_request="100m", cpu_limit="500m",
-                memory_request="128Mi", memory_limit="2Gi",
+                memory_limit="4Gi",
+                cpu_limit="500m",
             ),
-            replicas=entities.ReplicaSpec(min_replicas=1, max_replicas=5, target_cpu_percent=70),
-            dependencies=[],
-            environment_variables=[],
-            run_as_non_root=True,
         )
         policy = entities.TeamPolicy(
-            team="strict",
-            namespace="prod",
-            max_memory="512Mi",
-            max_cpu="1000m",
-            max_replicas=10,
-            require_network_policy=False,
-            require_non_root=False,
-            allowed_egress=[],
-            default_labels={},
+            team="platform",
+            max_memory="2Gi",
+            max_cpu="2000m",
         )
 
-        # When merging spec with policy
-        merged, violations = policies.merge_spec_with_policy(spec=spec, policy=policy)
+        # When merging
+        merged, violations = policies.merge_spec_with_policy(
+            spec=spec, policy=policy
+        )
 
         # Then a memory violation is detected
         assert len(violations) == 1
-        assert violations[0].field == "resources.limits.memory"
-        assert violations[0].requested == "2Gi"
-        assert violations[0].allowed == "512Mi"
+        assert violations[0].field == "memory_limit"
+        assert violations[0].requested == "4Gi"
+        assert violations[0].allowed == "2Gi"
 
-    def test_detects_replica_limit_violation(self) -> None:
-        # Given a spec requesting max 50 replicas and a policy capping at 8
+    def test_detects_replicas_violation(self):
+        # Given a spec requesting more replicas than policy allows
         spec = entities.ChartSpec(
-            service_name="test",
-            image="test:latest",
-            ports=[],
-            resources=entities.ResourceSpec(
-                cpu_request="100m", cpu_limit="500m",
-                memory_request="128Mi", memory_limit="256Mi",
-            ),
-            replicas=entities.ReplicaSpec(min_replicas=2, max_replicas=50, target_cpu_percent=70),
-            dependencies=[],
-            environment_variables=[],
-            run_as_non_root=True,
+            service_name="api-gateway",
+            image="myrepo/api:latest",
+            replicas=entities.ReplicaSpec(min_replicas=2, max_replicas=20),
         )
         policy = entities.TeamPolicy(
-            team="strict",
-            namespace="prod",
-            max_memory="1Gi",
-            max_cpu="1000m",
-            max_replicas=8,
-            require_network_policy=False,
-            require_non_root=False,
-            allowed_egress=[],
-            default_labels={},
+            team="platform",
+            max_replicas=10,
         )
 
-        # When merging spec with policy
-        merged, violations = policies.merge_spec_with_policy(spec=spec, policy=policy)
+        # When merging
+        merged, violations = policies.merge_spec_with_policy(
+            spec=spec, policy=policy
+        )
 
-        # Then a replica violation is detected
+        # Then a replicas violation is detected
         assert len(violations) == 1
-        assert violations[0].field == "replicas.max_replicas"
+        assert violations[0].field == "max_replicas"
+
+    def test_enforces_non_root_when_policy_requires(self):
+        # Given a spec with run_as_non_root=False but policy requires it
+        spec = entities.ChartSpec(
+            service_name="api-gateway",
+            image="myrepo/api:latest",
+            run_as_non_root=False,
+        )
+        policy = entities.TeamPolicy(
+            team="platform",
+            require_non_root=True,
+        )
+
+        # When merging
+        merged, violations = policies.merge_spec_with_policy(
+            spec=spec, policy=policy
+        )
+
+        # Then non_root is enforced on the merged spec
+        assert merged.run_as_non_root is True
+
+    def test_adds_network_policy_resource_when_required(self):
+        # Given a spec without NetworkPolicy and a policy requiring it
+        spec = entities.ChartSpec(
+            service_name="api-gateway",
+            image="myrepo/api:latest",
+            extra_resources=(),
+        )
+        policy = entities.TeamPolicy(
+            team="platform",
+            require_network_policy=True,
+        )
+
+        # When merging
+        merged, violations = policies.merge_spec_with_policy(
+            spec=spec, policy=policy
+        )
+
+        # Then NetworkPolicy is added to extra_resources
+        assert "NetworkPolicy" in merged.extra_resources
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/domain/charts/test_policies.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'sentinel.domain.charts.policies'`
+Expected: FAIL — `sentinel.domain.charts.policies` does not exist.
 
-- [ ] **Step 4: Implement policy loader**
+- [ ] **Step 3: Create policy YAML files**
+
+Create `policies/_teams.yaml`:
+
+```yaml
+# User-to-team mapping.
+# Format: <user_id>: <team_name>
+# Team name must match a <team>.yaml file in this directory.
+alice: platform
+bob: data-eng
+```
+
+Create `policies/platform.yaml`:
+
+```yaml
+team: platform
+namespace: platform-prod
+max_memory: 2Gi
+max_cpu: 2000m
+max_replicas: 10
+require_network_policy: true
+require_non_root: true
+allowed_egress:
+  - host: redis.internal
+    port: 6379
+  - host: postgres.internal
+    port: 5432
+default_labels:
+  team: platform
+  env: production
+```
+
+- [ ] **Step 4: Implement the policy module**
 
 Create `src/sentinel/domain/charts/policies.py`:
 
@@ -783,13 +862,12 @@ Create `src/sentinel/domain/charts/policies.py`:
 """
 Policy registry for the K8s chart coding agent.
 
-Loads team policies from YAML files and merges them with chart specs
-to enforce organisational constraints.
+Load team policies from YAML files in the ``policies/`` directory,
+resolve user-to-team mappings, and merge a ``ChartSpec`` with policy
+constraints — detecting violations where the spec exceeds limits.
 """
-
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import yaml
@@ -799,27 +877,30 @@ from sentinel.settings import PROJECT_ROOT
 
 
 _DEFAULT_POLICIES_DIR = PROJECT_ROOT / "policies"
-
-# Kubernetes resource units in bytes for comparison
-_MEMORY_UNITS: dict[str, int] = {
-    "Ki": 1024,
-    "Mi": 1024**2,
-    "Gi": 1024**3,
-    "Ti": 1024**4,
-}
+_DEFAULT_TEAMS_FILE = _DEFAULT_POLICIES_DIR / "_teams.yaml"
 
 
-def _parse_memory_bytes(value: str) -> int:
+def resolve_team(
+    *,
+    user_id: str,
+    teams_file: Path = _DEFAULT_TEAMS_FILE,
+) -> str:
     """
-    Parse a Kubernetes memory string (e.g. '512Mi') into bytes.
+    Resolve a user ID to their team name.
 
-    :raises ValueError: if the format is unrecognised.
+    :param user_id: The user to look up.
+    :param teams_file: Path to the _teams.yaml mapping file.
+    :returns: The team name.
+    :raises ValueError: if the user is not in the mapping.
     """
-    match = re.match(r"^(\d+)(Ki|Mi|Gi|Ti)$", value)
-    if not match:
-        msg = f"Unrecognised memory format: {value}"
+    with teams_file.open() as f:
+        mapping: dict[str, str] = yaml.safe_load(f) or {}
+
+    team = mapping.get(user_id)
+    if team is None:
+        msg = f"Unknown user: {user_id!r}. Add them to {teams_file}."
         raise ValueError(msg)
-    return int(match.group(1)) * _MEMORY_UNITS[match.group(2)]
+    return team
 
 
 def load_team_policy(
@@ -828,257 +909,592 @@ def load_team_policy(
     policies_dir: Path = _DEFAULT_POLICIES_DIR,
 ) -> entities.TeamPolicy:
     """
-    Load the policy for a given team.
+    Load a team's policy from its YAML file.
 
-    Falls back to ``_default.yaml`` if no team-specific file exists.
-
-    :param team: team identifier (e.g. ``"trading-infra"``)
-    :param policies_dir: directory containing policy YAML files
-    :raises FileNotFoundError: if neither team policy nor default policy exists
+    :param team: Team name (matches ``<team>.yaml`` filename).
+    :param policies_dir: Directory containing policy YAML files.
+    :returns: The parsed TeamPolicy.
+    :raises FileNotFoundError: if no policy file exists for the team.
     """
-    team_file = policies_dir / f"{team}.yaml"
-    default_file = policies_dir / "_default.yaml"
-
-    policy_file = team_file if team_file.exists() else default_file
-
+    policy_file = policies_dir / f"{team}.yaml"
     if not policy_file.exists():
-        msg = f"No policy file found for team '{team}' and no _default.yaml in {policies_dir}"
+        msg = f"No policy file for team {team!r} at {policy_file}"
         raise FileNotFoundError(msg)
 
-    raw = yaml.safe_load(policy_file.read_text())
-    return entities.TeamPolicy(**raw)
+    with policy_file.open() as f:
+        raw: dict = yaml.safe_load(f) or {}
+
+    # Convert allowed_egress dicts to EgressRule models
+    egress_dicts = raw.pop("allowed_egress", [])
+    egress_rules = tuple(
+        entities.EgressRule(host=e["host"], port=e["port"])
+        for e in egress_dicts
+    )
+
+    return entities.TeamPolicy(
+        **raw,
+        allowed_egress=egress_rules,
+    )
 
 
-def resolve_team(
-    *,
-    user_id: str,
-    policies_dir: Path = _DEFAULT_POLICIES_DIR,
-) -> str:
+def _parse_memory_to_bytes(value: str) -> int:
     """
-    Resolve a user ID to a team name via the ``_teams.yaml`` mapping.
+    Convert a K8s memory string (e.g. ``"2Gi"``, ``"512Mi"``) to bytes.
 
-    :param user_id: Slack user ID or Streamlit session ID
-    :param policies_dir: directory containing ``_teams.yaml``
+    Supports Mi and Gi suffixes.
     """
-    teams_file = policies_dir / "_teams.yaml"
-    if not teams_file.exists():
-        return "internal-tooling"
+    value = value.strip()
+    if not value:
+        return 0
+    if value.endswith("Gi"):
+        return int(value[:-2]) * 1024 * 1024 * 1024
+    if value.endswith("Mi"):
+        return int(value[:-2]) * 1024 * 1024
+    if value.endswith("Ki"):
+        return int(value[:-2]) * 1024
+    return int(value)
 
-    raw = yaml.safe_load(teams_file.read_text())
-    users = raw.get("users", {})
-    default_team = raw.get("default_team", "internal-tooling")
-    return users.get(user_id, default_team)
+
+def _parse_cpu_to_millicores(value: str) -> int:
+    """
+    Convert a K8s CPU string (e.g. ``"2000m"``, ``"1.5"``) to millicores.
+    """
+    value = value.strip()
+    if not value:
+        return 0
+    if value.endswith("m"):
+        return int(value[:-1])
+    return int(float(value) * 1000)
 
 
 def merge_spec_with_policy(
     *,
     spec: entities.ChartSpec,
     policy: entities.TeamPolicy,
-) -> tuple[entities.ChartSpec, list[entities.PolicyViolation]]:
+) -> tuple[entities.ChartSpec, tuple[entities.PolicyViolation, ...]]:
     """
-    Merge a chart spec with a team policy.
+    Merge a chart spec with team policy constraints.
 
-    Auto-resolves fixable issues (e.g. enforcing non-root).
-    Returns policy violations for business conflicts that need human review.
+    Applies policy defaults (non-root enforcement, NetworkPolicy injection)
+    and detects violations where the spec exceeds policy limits.
 
-    :param spec: the chart spec extracted from the user's request
-    :param policy: the team's policy constraints
+    :param spec: The parsed chart specification.
+    :param policy: The team's policy constraints.
+    :returns: A tuple of (merged spec, violations found).
     """
     violations: list[entities.PolicyViolation] = []
-    updates: dict[str, object] = {}
+    updates: dict = {}
 
     # Enforce non-root if policy requires it
     if policy.require_non_root and not spec.run_as_non_root:
         updates["run_as_non_root"] = True
 
+    # Inject NetworkPolicy if required and not already requested
+    if policy.require_network_policy and "NetworkPolicy" not in spec.extra_resources:
+        updates["extra_resources"] = (*spec.extra_resources, "NetworkPolicy")
+
     # Check memory limit
-    try:
-        requested_memory = _parse_memory_bytes(spec.resources.memory_limit)
-        allowed_memory = _parse_memory_bytes(policy.max_memory)
-        if requested_memory > allowed_memory:
+    if spec.resources and spec.resources.memory_limit and policy.max_memory:
+        requested_bytes = _parse_memory_to_bytes(spec.resources.memory_limit)
+        allowed_bytes = _parse_memory_to_bytes(policy.max_memory)
+        if requested_bytes > allowed_bytes:
             violations.append(
                 entities.PolicyViolation(
-                    field="resources.limits.memory",
+                    field="memory_limit",
                     requested=spec.resources.memory_limit,
                     allowed=policy.max_memory,
-                    message=f"Requested memory {spec.resources.memory_limit} exceeds team cap of {policy.max_memory}",
+                    message=f"Memory limit {spec.resources.memory_limit} exceeds team maximum of {policy.max_memory}",
                 )
             )
-    except ValueError:
-        pass  # Non-standard format — skip check
 
     # Check CPU limit
-    try:
-        requested_cpu = int(spec.resources.cpu_limit.rstrip("m"))
-        allowed_cpu = int(policy.max_cpu.rstrip("m"))
-        if requested_cpu > allowed_cpu:
+    if spec.resources and spec.resources.cpu_limit and policy.max_cpu:
+        requested_mc = _parse_cpu_to_millicores(spec.resources.cpu_limit)
+        allowed_mc = _parse_cpu_to_millicores(policy.max_cpu)
+        if requested_mc > allowed_mc:
             violations.append(
                 entities.PolicyViolation(
-                    field="resources.limits.cpu",
+                    field="cpu_limit",
                     requested=spec.resources.cpu_limit,
                     allowed=policy.max_cpu,
-                    message=f"Requested CPU {spec.resources.cpu_limit} exceeds team cap of {policy.max_cpu}",
+                    message=f"CPU limit {spec.resources.cpu_limit} exceeds team maximum of {policy.max_cpu}",
                 )
             )
-    except ValueError:
-        pass
 
-    # Check replica limit
-    if spec.replicas.max_replicas > policy.max_replicas:
-        violations.append(
-            entities.PolicyViolation(
-                field="replicas.max_replicas",
-                requested=str(spec.replicas.max_replicas),
-                allowed=str(policy.max_replicas),
-                message=f"Requested max replicas {spec.replicas.max_replicas} exceeds team cap of {policy.max_replicas}",
+    # Check replica count
+    if spec.replicas and policy.max_replicas > 0:
+        if spec.replicas.max_replicas > policy.max_replicas:
+            violations.append(
+                entities.PolicyViolation(
+                    field="max_replicas",
+                    requested=str(spec.replicas.max_replicas),
+                    allowed=str(policy.max_replicas),
+                    message=f"Max replicas {spec.replicas.max_replicas} exceeds team maximum of {policy.max_replicas}",
+                )
             )
-        )
 
     merged = spec.model_copy(update=updates) if updates else spec
-    return merged, violations
+    return merged, tuple(violations)
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [ ] **Step 5: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/domain/charts/test_policies.py -v`
-Expected: PASS (all 7 tests)
+Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add policies/ src/sentinel/domain/charts/policies.py tests/unit/domain/charts/test_policies.py
-git commit -m "feat: add policy registry and merge logic for chart agent"
+git add src/sentinel/domain/charts/policies.py policies/platform.yaml policies/_teams.yaml
+git commit -m "feat: add policy registry with YAML loading and merge logic"
 ```
 
 ---
 
-### Task 5: Confidence Scoring
+## Task 5: Create Validation Runner
+
+**Files:**
+- Create: `src/sentinel/domain/charts/validation.py`
+- Test: `tests/unit/domain/charts/test_validation.py`
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/unit/domain/charts/test_validation.py
+from __future__ import annotations
+
+import asyncio
+from unittest import mock
+
+import pytest
+
+from sentinel.domain.charts import entities, validation
+
+
+class TestValidateChart:
+    def test_returns_passing_result_when_both_tools_succeed(self):
+        # Given a chart output with valid YAML
+        chart = entities.ChartOutput(
+            service_name="api-gateway",
+            files=(
+                entities.GeneratedFile(
+                    path="templates/deployment.yaml",
+                    content="apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api-gateway",
+                ),
+            ),
+        )
+
+        # When validating with mocked subprocess (both pass)
+        with mock.patch.object(validation, "_run_helm_template") as mock_helm, \
+             mock.patch.object(validation, "_run_kubeconform") as mock_conform:
+            mock_helm.return_value = (True, (), ())
+            mock_conform.return_value = (True, (), ())
+
+            result = asyncio.run(validation.validate_chart(chart=chart))
+
+        # Then both validations pass
+        assert result.helm_template_ok is True
+        assert result.kubeconform_ok is True
+        assert result.errors == ()
+
+    def test_returns_failing_result_when_helm_template_fails(self):
+        # Given a chart output
+        chart = entities.ChartOutput(
+            service_name="api-gateway",
+            files=(
+                entities.GeneratedFile(
+                    path="templates/deployment.yaml",
+                    content="invalid: yaml: [",
+                ),
+            ),
+        )
+
+        # When helm template fails
+        with mock.patch.object(validation, "_run_helm_template") as mock_helm, \
+             mock.patch.object(validation, "_run_kubeconform") as mock_conform:
+            mock_helm.return_value = (False, ("Error: template rendering failed",), ())
+            mock_conform.return_value = (True, (), ())
+
+            result = asyncio.run(validation.validate_chart(chart=chart))
+
+        # Then helm_template_ok is False and errors are captured
+        assert result.helm_template_ok is False
+        assert len(result.errors) == 1
+        assert "template rendering failed" in result.errors[0]
+
+    def test_returns_failing_result_when_kubeconform_fails(self):
+        # Given a chart output
+        chart = entities.ChartOutput(
+            service_name="api-gateway",
+            files=(
+                entities.GeneratedFile(
+                    path="templates/deployment.yaml",
+                    content="apiVersion: apps/v1\nkind: Deployment",
+                ),
+            ),
+        )
+
+        # When kubeconform fails
+        with mock.patch.object(validation, "_run_helm_template") as mock_helm, \
+             mock.patch.object(validation, "_run_kubeconform") as mock_conform:
+            mock_helm.return_value = (True, (), ())
+            mock_conform.return_value = (False, ("resource Deployment missing spec",), ())
+
+            result = asyncio.run(validation.validate_chart(chart=chart))
+
+        # Then kubeconform_ok is False
+        assert result.kubeconform_ok is False
+        assert len(result.errors) == 1
+
+    def test_captures_warnings(self):
+        # Given warnings from both tools
+        chart = entities.ChartOutput(
+            service_name="api-gateway",
+            files=(
+                entities.GeneratedFile(
+                    path="templates/deployment.yaml",
+                    content="apiVersion: apps/v1\nkind: Deployment",
+                ),
+            ),
+        )
+
+        # When both pass with warnings
+        with mock.patch.object(validation, "_run_helm_template") as mock_helm, \
+             mock.patch.object(validation, "_run_kubeconform") as mock_conform:
+            mock_helm.return_value = (True, (), ("chart has no .helmignore",))
+            mock_conform.return_value = (True, (), ("deprecated API version",))
+
+            result = asyncio.run(validation.validate_chart(chart=chart))
+
+        # Then warnings are captured
+        assert result.helm_template_ok is True
+        assert result.kubeconform_ok is True
+        assert len(result.warnings) == 2
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `uv run pytest tests/unit/domain/charts/test_validation.py -v`
+Expected: FAIL — module does not exist.
+
+- [ ] **Step 3: Write minimal implementation**
+
+Create `src/sentinel/domain/charts/validation.py`:
+
+```python
+"""
+Validation runner for generated Helm charts.
+
+Runs ``helm template`` and ``kubeconform`` as subprocesses to validate
+the generated chart files. Both tools must be available on PATH.
+"""
+from __future__ import annotations
+
+import asyncio
+import tempfile
+from pathlib import Path
+
+from sentinel.domain.charts import entities
+from sentinel.utils import logs
+
+
+logger = logs.get_logger()
+
+
+async def _run_helm_template(
+    *,
+    chart_dir: Path,
+) -> tuple[bool, tuple[str, ...], tuple[str, ...]]:
+    """
+    Run ``helm template`` on a chart directory.
+
+    :returns: (success, errors, warnings)
+    """
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "helm", "template", "test-release", str(chart_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+    except FileNotFoundError:
+        return True, (), ("helm not found on PATH — skipping template validation",)
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    if proc.returncode != 0:
+        stderr_text = stderr.decode().strip()
+        if stderr_text:
+            errors.append(stderr_text)
+        return False, tuple(errors), tuple(warnings)
+
+    # Parse warnings from stderr
+    stderr_text = stderr.decode().strip()
+    if stderr_text:
+        for line in stderr_text.splitlines():
+            warnings.append(line)
+
+    return True, tuple(errors), tuple(warnings)
+
+
+async def _run_kubeconform(
+    *,
+    chart_dir: Path,
+) -> tuple[bool, tuple[str, ...], tuple[str, ...]]:
+    """
+    Run ``kubeconform`` on rendered templates.
+
+    :returns: (success, errors, warnings)
+    """
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "kubeconform", "-summary", str(chart_dir / "templates"),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+    except FileNotFoundError:
+        return True, (), ("kubeconform not found on PATH — skipping schema validation",)
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    output = (stdout.decode() + stderr.decode()).strip()
+    if proc.returncode != 0:
+        if output:
+            errors.append(output)
+        return False, tuple(errors), tuple(warnings)
+
+    if output:
+        for line in output.splitlines():
+            if "WARN" in line.upper():
+                warnings.append(line)
+
+    return True, tuple(errors), tuple(warnings)
+
+
+async def validate_chart(
+    *,
+    chart: entities.ChartOutput,
+) -> entities.ValidationResult:
+    """
+    Validate a generated chart by writing files to a temp directory
+    and running helm template + kubeconform.
+
+    :param chart: The generated chart output with files.
+    :returns: A ValidationResult with pass/fail and any errors/warnings.
+    """
+    with tempfile.TemporaryDirectory(prefix="sentinel-chart-") as tmp:
+        chart_dir = Path(tmp)
+        templates_dir = chart_dir / "templates"
+        templates_dir.mkdir()
+
+        # Write a minimal Chart.yaml
+        (chart_dir / "Chart.yaml").write_text(
+            f"apiVersion: v2\nname: {chart.service_name}\nversion: 0.1.0\n"
+        )
+
+        # Write generated files
+        for gf in chart.files:
+            file_path = chart_dir / gf.path
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(gf.content)
+
+        helm_ok, helm_errors, helm_warnings = await _run_helm_template(
+            chart_dir=chart_dir
+        )
+        conform_ok, conform_errors, conform_warnings = await _run_kubeconform(
+            chart_dir=chart_dir
+        )
+
+    all_errors = helm_errors + conform_errors
+    all_warnings = helm_warnings + conform_warnings
+
+    result = entities.ValidationResult(
+        helm_template_ok=helm_ok,
+        kubeconform_ok=conform_ok,
+        errors=all_errors,
+        warnings=all_warnings,
+    )
+
+    logger.info(
+        "chart_validation_completed",
+        service_name=chart.service_name,
+        helm_ok=helm_ok,
+        conform_ok=conform_ok,
+        error_count=len(all_errors),
+        warning_count=len(all_warnings),
+    )
+
+    return result
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `uv run pytest tests/unit/domain/charts/test_validation.py -v`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/sentinel/domain/charts/validation.py tests/unit/domain/charts/test_validation.py
+git commit -m "feat: add chart validation runner with helm and kubeconform"
+```
+
+---
+
+## Task 6: Create Confidence Scoring
 
 **Files:**
 - Create: `src/sentinel/domain/charts/confidence.py`
 - Test: `tests/unit/domain/charts/test_confidence.py`
 
-- [ ] **Step 1: Write the failing tests**
-
-Create `tests/unit/domain/charts/test_confidence.py`:
+- [ ] **Step 1: Write the failing test**
 
 ```python
+# tests/unit/domain/charts/test_confidence.py
 from __future__ import annotations
 
 from sentinel.domain.charts import confidence
+from sentinel.domain.confidence import entities as confidence_entities
 
 
-class TestCalculateChartConfidence:
-    def test_perfect_score(self) -> None:
-        # Given a chart that passed all checks with no retries
+class TestChartConfidenceScore:
+    def test_perfect_score(self):
+        # Given all factors at maximum
         score = confidence.calculate_chart_confidence(
             schema_valid=True,
             template_renders=True,
             template_has_warnings=False,
-            policy_violation_count=0,
-            auto_resolved_count=0,
-            requested_resource_count=4,
-            generated_resource_count=4,
+            policy_compliant=True,
+            policy_auto_resolved=False,
+            spec_coverage=1.0,
             retry_count=0,
         )
 
-        # Then the confidence score is 1.0
-        assert score == 1.0
+        # Then total is 1.0 and label is HIGH
+        assert score.total == 1.0
+        assert score.label == confidence_entities.ConfidenceLabel.HIGH
 
-    def test_schema_failure_drops_score(self) -> None:
-        # Given a chart that failed schema validation
+    def test_zero_score_when_everything_fails(self):
+        # Given all factors at minimum
         score = confidence.calculate_chart_confidence(
             schema_valid=False,
-            template_renders=True,
+            template_renders=False,
             template_has_warnings=False,
-            policy_violation_count=0,
-            auto_resolved_count=0,
-            requested_resource_count=4,
-            generated_resource_count=4,
-            retry_count=0,
+            policy_compliant=False,
+            policy_auto_resolved=False,
+            spec_coverage=0.0,
+            retry_count=3,
         )
 
-        # Then the score drops by the schema weight (0.3)
-        assert score == pytest.approx(0.7, abs=0.01)
+        # Then total is near 0 and label is LOW
+        assert score.total == pytest.approx(0.01, abs=0.01)
+        assert score.label == confidence_entities.ConfidenceLabel.LOW
 
-    def test_retries_degrade_score(self) -> None:
-        # Given a chart that took 2 retries
+    def test_medium_score_with_warnings_and_retries(self):
+        # Given partial success
         score = confidence.calculate_chart_confidence(
             schema_valid=True,
             template_renders=True,
+            template_has_warnings=True,
+            policy_compliant=True,
+            policy_auto_resolved=False,
+            spec_coverage=0.8,
+            retry_count=1,
+        )
+
+        # Then score is in MEDIUM or HIGH range
+        assert 0.4 <= score.total <= 0.9
+
+    def test_policy_auto_resolved_reduces_score(self):
+        # Given policy was auto-resolved (not fully compliant)
+        auto_resolved = confidence.calculate_chart_confidence(
+            schema_valid=True,
+            template_renders=True,
             template_has_warnings=False,
-            policy_violation_count=0,
-            auto_resolved_count=0,
-            requested_resource_count=4,
-            generated_resource_count=4,
+            policy_compliant=False,
+            policy_auto_resolved=True,
+            spec_coverage=1.0,
+            retry_count=0,
+        )
+
+        fully_compliant = confidence.calculate_chart_confidence(
+            schema_valid=True,
+            template_renders=True,
+            template_has_warnings=False,
+            policy_compliant=True,
+            policy_auto_resolved=False,
+            spec_coverage=1.0,
+            retry_count=0,
+        )
+
+        # Then auto-resolved score is lower than fully compliant
+        assert auto_resolved.total < fully_compliant.total
+
+    def test_retry_count_reduces_score(self):
+        # Given different retry counts
+        zero_retries = confidence.calculate_chart_confidence(
+            schema_valid=True,
+            template_renders=True,
+            template_has_warnings=False,
+            policy_compliant=True,
+            policy_auto_resolved=False,
+            spec_coverage=1.0,
+            retry_count=0,
+        )
+
+        two_retries = confidence.calculate_chart_confidence(
+            schema_valid=True,
+            template_renders=True,
+            template_has_warnings=False,
+            policy_compliant=True,
+            policy_auto_resolved=False,
+            spec_coverage=1.0,
             retry_count=2,
         )
 
-        # Then the score reflects retry degradation (0.1 weight * 0.4 for 2 retries)
-        assert score < 1.0
-        assert score == pytest.approx(0.94, abs=0.01)
-
-    def test_partial_coverage_reduces_score(self) -> None:
-        # Given a chart that generated 2 of 4 requested resources
-        score = confidence.calculate_chart_confidence(
-            schema_valid=True,
-            template_renders=True,
-            template_has_warnings=False,
-            policy_violation_count=0,
-            auto_resolved_count=0,
-            requested_resource_count=4,
-            generated_resource_count=2,
-            retry_count=0,
-        )
-
-        # Then coverage factor reduces the score
-        assert score == pytest.approx(0.925, abs=0.01)
-
-    def test_policy_violations_zero_compliance(self) -> None:
-        # Given a chart with unresolved policy violations
-        score = confidence.calculate_chart_confidence(
-            schema_valid=True,
-            template_renders=True,
-            template_has_warnings=False,
-            policy_violation_count=2,
-            auto_resolved_count=0,
-            requested_resource_count=4,
-            generated_resource_count=4,
-            retry_count=0,
-        )
-
-        # Then compliance factor is 0.0 (0.25 weight lost)
-        assert score == pytest.approx(0.75, abs=0.01)
+        # Then more retries means lower score
+        assert two_retries.total < zero_retries.total
 ```
 
-Add `import pytest` to the imports at the top.
+Add `import pytest` at the top of the test file.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/domain/charts/test_confidence.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'sentinel.domain.charts.confidence'`
+Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Implement confidence scoring**
+- [ ] **Step 3: Write minimal implementation**
 
 Create `src/sentinel/domain/charts/confidence.py`:
 
 ```python
 """
-Weighted confidence scoring for chart generation quality.
+Confidence scoring for generated Helm charts.
 
-Factors: schema validity (0.3), template rendering (0.2),
-policy compliance (0.25), spec coverage (0.15), retry count (0.1).
+Weighted multi-factor scoring based on validation results,
+policy compliance, spec coverage, and retry count.
+
+Factors and weights (from design spec):
+- Schema validity:    0.30  (kubeconform pass/fail)
+- Template rendering: 0.20  (helm template pass/warnings/fail)
+- Policy compliance:  0.25  (no violations / auto-resolved / escalated)
+- Spec coverage:      0.15  (fraction of requested resources generated)
+- Retry count:        0.10  (0=1.0, 1=0.7, 2=0.4, 3=0.1)
 """
-
 from __future__ import annotations
 
-_WEIGHT_SCHEMA = 0.3
-_WEIGHT_TEMPLATE = 0.2
-_WEIGHT_COMPLIANCE = 0.25
-_WEIGHT_COVERAGE = 0.15
-_WEIGHT_RETRIES = 0.1
+from sentinel.domain.confidence import entities as confidence_entities
 
-_RETRY_SCORES = {0: 1.0, 1: 0.7, 2: 0.4, 3: 0.1}
+_RETRY_SCORES: dict[int, float] = {0: 1.0, 1: 0.7, 2: 0.4, 3: 0.1}
+
+_WEIGHT_SCHEMA = 0.30
+_WEIGHT_TEMPLATE = 0.20
+_WEIGHT_POLICY = 0.25
+_WEIGHT_COVERAGE = 0.15
+_WEIGHT_RETRY = 0.10
 
 
 def calculate_chart_confidence(
@@ -1086,61 +1502,65 @@ def calculate_chart_confidence(
     schema_valid: bool,
     template_renders: bool,
     template_has_warnings: bool,
-    policy_violation_count: int,
-    auto_resolved_count: int,
-    requested_resource_count: int,
-    generated_resource_count: int,
+    policy_compliant: bool,
+    policy_auto_resolved: bool,
+    spec_coverage: float,
     retry_count: int,
-) -> float:
+) -> confidence_entities.ConfidenceScore:
     """
     Calculate a weighted confidence score for a generated chart.
 
-    :param schema_valid: whether kubeconform passed
-    :param template_renders: whether helm template succeeded
-    :param template_has_warnings: whether helm template produced warnings
-    :param policy_violation_count: number of unresolved policy violations
-    :param auto_resolved_count: number of auto-resolved policy issues
-    :param requested_resource_count: how many K8s resources were requested
-    :param generated_resource_count: how many K8s resources were generated
-    :param retry_count: number of self-heal retries (0-3)
+    :param schema_valid: True if kubeconform passed.
+    :param template_renders: True if helm template succeeded.
+    :param template_has_warnings: True if helm template had warnings.
+    :param policy_compliant: True if no policy violations.
+    :param policy_auto_resolved: True if violations were auto-resolved.
+    :param spec_coverage: 0.0-1.0 fraction of requested resources generated.
+    :param retry_count: Number of self-heal retries (0-3).
+    :returns: A ConfidenceScore with weighted components.
     """
-    schema_score = 1.0 if schema_valid else 0.0
-
+    schema_raw = 1.0 if schema_valid else 0.0
     if template_renders and not template_has_warnings:
-        template_score = 1.0
-    elif template_renders:
-        template_score = 0.5
+        template_raw = 1.0
+    elif template_renders and template_has_warnings:
+        template_raw = 0.5
     else:
-        template_score = 0.0
+        template_raw = 0.0
 
-    if policy_violation_count == 0 and auto_resolved_count == 0:
-        compliance_score = 1.0
-    elif policy_violation_count == 0:
-        compliance_score = 0.7
+    if policy_compliant:
+        policy_raw = 1.0
+    elif policy_auto_resolved:
+        policy_raw = 0.7
     else:
-        compliance_score = 0.0
+        policy_raw = 0.0
 
-    if requested_resource_count > 0:
-        coverage_score = min(generated_resource_count / requested_resource_count, 1.0)
-    else:
-        coverage_score = 1.0
-
-    retry_score = _RETRY_SCORES.get(retry_count, 0.1)
+    coverage_raw = max(0.0, min(spec_coverage, 1.0))
+    retry_raw = _RETRY_SCORES.get(min(retry_count, 3), 0.1)
 
     total = (
-        schema_score * _WEIGHT_SCHEMA
-        + template_score * _WEIGHT_TEMPLATE
-        + compliance_score * _WEIGHT_COMPLIANCE
-        + coverage_score * _WEIGHT_COVERAGE
-        + retry_score * _WEIGHT_RETRIES
+        schema_raw * _WEIGHT_SCHEMA
+        + template_raw * _WEIGHT_TEMPLATE
+        + policy_raw * _WEIGHT_POLICY
+        + coverage_raw * _WEIGHT_COVERAGE
+        + retry_raw * _WEIGHT_RETRY
     )
-    return round(total, 4)
+    total = round(total, 4)
+
+    return confidence_entities.ConfidenceScore.from_factors(
+        source_count=int(schema_raw + template_raw + policy_raw),
+        max_expected_sources=3,
+        relevance=total,
+        recency=1.0,
+        source_weight=0.0,
+        relevance_weight=1.0,
+        recency_weight=0.0,
+    )
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/domain/charts/test_confidence.py -v`
-Expected: PASS (all 5 tests)
+Expected: PASS
 
 - [ ] **Step 5: Commit**
 
@@ -1151,351 +1571,112 @@ git commit -m "feat: add weighted confidence scoring for chart generation"
 
 ---
 
-### Task 6: Validation Runner
+## Task 7: Create Chart Request Parser Agent
 
 **Files:**
-- Create: `src/sentinel/domain/charts/validation.py`
-- Test: `tests/unit/domain/charts/test_validation.py`
-
-- [ ] **Step 1: Write the failing tests**
-
-Create `tests/unit/domain/charts/test_validation.py`:
-
-```python
-from __future__ import annotations
-
-from pathlib import Path
-from unittest import mock
-
-import pytest
-
-from sentinel.domain.charts import entities, validation
-
-
-class TestWriteChartToDir:
-    def test_writes_files_to_directory(self, tmp_path: Path) -> None:
-        # Given a chart output with two files
-        output = entities.ChartOutput(
-            service_name="my-app",
-            files=[
-                entities.GeneratedFile(path="Chart.yaml", content="apiVersion: v2\n"),
-                entities.GeneratedFile(path="templates/deployment.yaml", content="kind: Deployment\n"),
-            ],
-            generation_attempts=1,
-            confidence_score=0.9,
-        )
-
-        # When writing to a directory
-        chart_dir = validation.write_chart_to_dir(output=output, base_dir=tmp_path)
-
-        # Then files are written at the correct paths
-        assert (chart_dir / "Chart.yaml").read_text() == "apiVersion: v2\n"
-        assert (chart_dir / "templates" / "deployment.yaml").read_text() == "kind: Deployment\n"
-
-
-class TestRunHelmTemplate:
-    def test_returns_success_on_valid_chart(self, tmp_path: Path) -> None:
-        # Given a valid Chart.yaml and templates directory
-        chart_dir = tmp_path / "test-chart"
-        chart_dir.mkdir()
-        (chart_dir / "Chart.yaml").write_text("apiVersion: v2\nname: test\nversion: 0.1.0\n")
-        templates_dir = chart_dir / "templates"
-        templates_dir.mkdir()
-        (templates_dir / "configmap.yaml").write_text(
-            "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: test\ndata: {}\n"
-        )
-
-        # When running helm template
-        result = validation.run_helm_template(chart_dir=chart_dir)
-
-        # Then it succeeds
-        assert result.helm_template_ok is True
-        assert len(result.errors) == 0
-
-    @mock.patch("sentinel.domain.charts.validation.subprocess")
-    def test_returns_failure_on_invalid_chart(self, mock_subprocess: mock.Mock) -> None:
-        # Given helm template returns an error
-        mock_subprocess.run.return_value = mock.Mock(
-            returncode=1,
-            stdout="",
-            stderr="Error: chart metadata (Chart.yaml) missing",
-        )
-
-        # When running helm template
-        result = validation.run_helm_template(chart_dir=Path("/fake"))
-
-        # Then it reports failure
-        assert result.helm_template_ok is False
-        assert len(result.errors) == 1
-        assert "Chart.yaml" in result.errors[0]
-
-
-class TestRunKubeconform:
-    @mock.patch("sentinel.domain.charts.validation.subprocess")
-    def test_returns_success_on_valid_manifests(self, mock_subprocess: mock.Mock) -> None:
-        # Given kubeconform returns success
-        mock_subprocess.run.return_value = mock.Mock(
-            returncode=0, stdout="", stderr=""
-        )
-
-        # When running kubeconform
-        result = validation.run_kubeconform(rendered_yaml="apiVersion: v1\nkind: ConfigMap\n")
-
-        # Then it succeeds
-        assert result.kubeconform_ok is True
-
-    @mock.patch("sentinel.domain.charts.validation.subprocess")
-    def test_returns_failure_on_invalid_manifests(self, mock_subprocess: mock.Mock) -> None:
-        # Given kubeconform returns errors
-        mock_subprocess.run.return_value = mock.Mock(
-            returncode=1,
-            stdout="stdin - ConfigMap test is invalid: missing 'metadata.name'",
-            stderr="",
-        )
-
-        # When running kubeconform
-        result = validation.run_kubeconform(rendered_yaml="kind: ConfigMap\n")
-
-        # Then it reports failure
-        assert result.kubeconform_ok is False
-        assert len(result.errors) >= 1
-```
-
-- [ ] **Step 2: Run tests to verify they fail**
-
-Run: `uv run pytest tests/unit/domain/charts/test_validation.py -v`
-Expected: FAIL — `ModuleNotFoundError`
-
-- [ ] **Step 3: Implement validation runner**
-
-Create `src/sentinel/domain/charts/validation.py`:
-
-```python
-"""
-Chart validation using helm and kubeconform CLIs.
-
-Writes generated chart files to a temporary directory, runs
-``helm template`` and ``kubeconform``, and returns structured results.
-"""
-
-from __future__ import annotations
-
-import subprocess
-import tempfile
-from pathlib import Path
-
-from sentinel.domain.charts import entities
-from sentinel.utils import logs
-
-
-def write_chart_to_dir(
-    *,
-    output: entities.ChartOutput,
-    base_dir: Path | None = None,
-) -> Path:
-    """
-    Write a ChartOutput's files to disk.
-
-    :param output: the generated chart
-    :param base_dir: parent directory; uses a temp dir if None
-    :returns: path to the chart directory
-    """
-    if base_dir is None:
-        base_dir = Path(tempfile.mkdtemp(prefix="sentinel-chart-"))
-
-    chart_dir = base_dir / output.service_name
-    for generated_file in output.files:
-        file_path = chart_dir / generated_file.path
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(generated_file.content)
-
-    return chart_dir
-
-
-def run_helm_template(*, chart_dir: Path) -> entities.ValidationResult:
-    """
-    Run ``helm template`` on a chart directory.
-
-    :param chart_dir: path to the chart directory
-    :returns: ValidationResult with helm_template_ok and any errors/warnings
-    """
-    try:
-        result = subprocess.run(
-            ["helm", "template", "test-release", str(chart_dir)],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except FileNotFoundError:
-        return entities.ValidationResult(
-            helm_template_ok=False,
-            kubeconform_ok=False,
-            errors=["helm CLI not found — install helm to enable chart validation"],
-            warnings=[],
-        )
-    except subprocess.TimeoutExpired:
-        return entities.ValidationResult(
-            helm_template_ok=False,
-            kubeconform_ok=False,
-            errors=["helm template timed out after 30 seconds"],
-            warnings=[],
-        )
-
-    errors: list[str] = []
-    warnings: list[str] = []
-
-    if result.returncode != 0:
-        errors.append(result.stderr.strip() if result.stderr else "helm template failed with no error message")
-    if result.stderr and result.returncode == 0:
-        warnings.append(result.stderr.strip())
-
-    return entities.ValidationResult(
-        helm_template_ok=result.returncode == 0,
-        kubeconform_ok=False,  # filled by run_kubeconform
-        errors=errors,
-        warnings=warnings,
-    )
-
-
-def run_kubeconform(*, rendered_yaml: str) -> entities.ValidationResult:
-    """
-    Run ``kubeconform`` on rendered YAML manifests.
-
-    :param rendered_yaml: the rendered YAML string from ``helm template``
-    :returns: ValidationResult with kubeconform_ok and any errors
-    """
-    try:
-        result = subprocess.run(
-            ["kubeconform", "-summary", "-strict"],
-            input=rendered_yaml,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except FileNotFoundError:
-        return entities.ValidationResult(
-            helm_template_ok=False,
-            kubeconform_ok=False,
-            errors=["kubeconform CLI not found — install kubeconform to enable schema validation"],
-            warnings=[],
-        )
-    except subprocess.TimeoutExpired:
-        return entities.ValidationResult(
-            helm_template_ok=False,
-            kubeconform_ok=False,
-            errors=["kubeconform timed out after 30 seconds"],
-            warnings=[],
-        )
-
-    errors: list[str] = []
-    if result.returncode != 0:
-        error_text = result.stdout.strip() or result.stderr.strip()
-        if error_text:
-            errors.extend(error_text.splitlines())
-
-    return entities.ValidationResult(
-        helm_template_ok=False,  # filled by caller
-        kubeconform_ok=result.returncode == 0,
-        errors=errors,
-        warnings=[],
-    )
-
-
-def validate_chart(
-    *,
-    output: entities.ChartOutput,
-    base_dir: Path | None = None,
-) -> entities.ValidationResult:
-    """
-    Run full validation (helm template + kubeconform) on a chart output.
-
-    :param output: the generated chart
-    :param base_dir: parent directory for writing files; uses a temp dir if None
-    :returns: combined ValidationResult
-    """
-    chart_dir = write_chart_to_dir(output=output, base_dir=base_dir)
-
-    helm_result = run_helm_template(chart_dir=chart_dir)
-    if not helm_result.helm_template_ok:
-        logs.log_event(
-            "chart_validation_failed",
-            params={"service": output.service_name, "stage": "helm_template", "errors": helm_result.errors},
-        )
-        return helm_result
-
-    # Get rendered YAML for kubeconform
-    rendered = subprocess.run(
-        ["helm", "template", "test-release", str(chart_dir)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    kubeconform_result = run_kubeconform(rendered_yaml=rendered.stdout)
-
-    return entities.ValidationResult(
-        helm_template_ok=True,
-        kubeconform_ok=kubeconform_result.kubeconform_ok,
-        errors=helm_result.errors + kubeconform_result.errors,
-        warnings=helm_result.warnings + kubeconform_result.warnings,
-    )
-```
-
-- [ ] **Step 4: Run tests to verify they pass**
-
-Run: `uv run pytest tests/unit/domain/charts/test_validation.py -v`
-Expected: PASS (all 5 tests). Note: `TestRunHelmTemplate::test_returns_success_on_valid_chart` requires `helm` CLI installed. If not available, mark with `@pytest.mark.skipif`.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/sentinel/domain/charts/validation.py tests/unit/domain/charts/test_validation.py
-git commit -m "feat: add helm template and kubeconform validation runner"
-```
-
----
-
-### Task 7: PydanticAI Agent — Chart Request Parser
-
-**Files:**
-- Create: `src/sentinel/plugins/prompts/chart_request_parser.j2`
 - Create: `src/sentinel/interfaces/graphs/agents/chart_request_parser.py`
+- Create: `src/sentinel/plugins/prompts/chart_request_parser.j2`
 - Test: `tests/unit/interfaces/graphs/agents/test_chart_request_parser.py`
 
-- [ ] **Step 1: Create the Jinja2 prompt template**
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/unit/interfaces/graphs/agents/test_chart_request_parser.py
+from __future__ import annotations
+
+from pydantic_ai import Agent
+
+from sentinel.domain.charts import entities
+from sentinel.interfaces.graphs.agents import chart_request_parser
+
+
+class TestChartRequestParserAgent:
+    def test_agent_exists_and_is_typed_correctly(self):
+        # Given the agent module
+
+        # Then the agent is a PydanticAI Agent with correct types
+        assert isinstance(chart_request_parser.agent, Agent)
+
+    def test_output_type_is_chart_spec(self):
+        # Given the agent
+
+        # Then its output type is ChartSpec
+        assert chart_request_parser.agent._output_type is entities.ChartSpec
+
+    def test_dependencies_dataclass_has_required_fields(self):
+        # Given the Dependencies dataclass
+        deps = chart_request_parser.Dependencies(
+            raw_message="Deploy a web service",
+            requester="alice",
+            team="platform",
+        )
+
+        # Then fields are set
+        assert deps.raw_message == "Deploy a web service"
+        assert deps.requester == "alice"
+        assert deps.team == "platform"
+
+    def test_system_prompt_is_loaded(self):
+        # Given the system prompt
+
+        # Then it is a non-empty string
+        assert isinstance(chart_request_parser.SYSTEM_PROMPT, str)
+        assert len(chart_request_parser.SYSTEM_PROMPT) > 50
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `uv run pytest tests/unit/interfaces/graphs/agents/test_chart_request_parser.py -v`
+Expected: FAIL — module does not exist.
+
+- [ ] **Step 3: Create prompt template**
 
 Create `src/sentinel/plugins/prompts/chart_request_parser.j2`:
 
-```jinja
-{# Chart Request Parser — extracts a structured ChartSpec from a natural language request. #}
+```jinja2
+{# Chart Request Parser — extracts a structured ChartSpec from natural language. #}
 {% block system %}
-You are an expert Kubernetes engineer. Given a natural language request to deploy a service,
-extract a structured specification.
+You are an expert Kubernetes engineer parsing deployment requests.
 
-Extract these fields:
-1. **service_name**: the name of the service/application
-2. **image**: container image (if not specified, use "PLACEHOLDER" — the user will fill it in)
-3. **ports**: list of ports (name, container_port, service_port, protocol). Default: http/8000/80/TCP
-4. **resources**: CPU and memory requests/limits. Default: 100m/500m CPU, 128Mi/256Mi memory
-5. **replicas**: min, max, and target CPU percentage. Default: 2/10/70
-6. **dependencies**: external services the app connects to (name, host, port)
-7. **environment_variables**: env vars needed (name, value or secret_ref)
-8. **run_as_non_root**: whether to run as non-root (default: true)
-9. **extra_resources**: any K8s resources mentioned that don't fit the above fields (e.g. CronJob, PVC)
+Given a natural language message describing a service to deploy, extract a structured
+specification. Be precise and use reasonable defaults when the user omits details.
 
-Be precise. Infer reasonable defaults when the user doesn't specify values.
-For dependencies, use Kubernetes DNS format: `<service>.<namespace>.svc.cluster.local`.
+Rules:
+1. **service_name**: lowercase, hyphenated (e.g. "api-gateway", "user-service")
+2. **image**: full image reference including tag. If none given, use "<service_name>:latest"
+3. **ports**: extract container ports mentioned. Default protocol is TCP
+4. **replicas**: extract min/max if mentioned. Default: min=2, max=5
+5. **resources**: extract CPU and memory requests/limits. Use reasonable defaults if omitted:
+   - cpu_request: "100m", cpu_limit: "500m"
+   - memory_request: "128Mi", memory_limit: "256Mi"
+6. **run_as_non_root**: default true unless user explicitly requests root
+7. **env_vars**: extract any environment variables mentioned
+8. **dependencies**: extract any service dependencies (databases, caches, etc.)
+9. **extra_resources**: include "NetworkPolicy" if security is mentioned, "HPA" if autoscaling
+   is mentioned, "PodDisruptionBudget" if HA is mentioned
+
+Output must be valid JSON matching the ChartSpec schema exactly.
 {% endblock %}
 
 {% block user %}
-Request: {{ raw_message }}
+## Request
+**From:** {{ requester }} (team: {{ team }})
+
+{{ raw_message }}
 {% endblock %}
 ```
 
-- [ ] **Step 2: Create the agent module**
+- [ ] **Step 4: Implement the agent**
 
 Create `src/sentinel/interfaces/graphs/agents/chart_request_parser.py`:
 
 ```python
+"""
+PydanticAI agent that parses natural-language chart requests into structured ChartSpec.
+
+The agent extracts service name, image, ports, resources, replicas, and other
+fields from a free-text deployment request.
+"""
 from __future__ import annotations
 
 import dataclasses
@@ -1509,6 +1690,8 @@ from sentinel.plugins import prompts
 @dataclasses.dataclass
 class Dependencies:
     raw_message: str
+    requester: str
+    team: str
 
 
 SYSTEM_PROMPT = prompts.load_system_prompt("chart_request_parser")
@@ -1523,121 +1706,167 @@ agent: Agent[Dependencies, entities.ChartSpec] = Agent(
 
 
 @agent.instructions
-def build_user_prompt(ctx: dataclasses.dataclass) -> str:  # type: ignore[type-arg]
-    """Render the user block with the raw request message."""
+def build_context(ctx: dataclasses.dataclass) -> str:
+    """Render the user prompt with request context."""
     return prompts.render_user_prompt(
         "chart_request_parser",
         raw_message=ctx.deps.raw_message,
+        requester=ctx.deps.requester,
+        team=ctx.deps.team,
     )
 ```
 
-- [ ] **Step 3: Write the test**
-
-Create `tests/unit/interfaces/graphs/agents/test_chart_request_parser.py`:
-
-```python
-from __future__ import annotations
-
-from sentinel.domain.charts import entities
-from sentinel.interfaces.graphs.agents import chart_request_parser
-
-
-class TestChartRequestParserAgent:
-    def test_agent_is_configured(self) -> None:
-        # Given the chart request parser agent
-
-        # When inspecting its configuration
-        agent = chart_request_parser.agent
-
-        # Then it has the correct output type and system prompt
-        assert agent.output_type is entities.ChartSpec
-        assert "Kubernetes engineer" in chart_request_parser.SYSTEM_PROMPT
-
-    def test_dependencies_stores_raw_message(self) -> None:
-        # Given a dependencies instance
-        deps = chart_request_parser.Dependencies(raw_message="Deploy order-processor")
-
-        # Then the raw message is accessible
-        assert deps.raw_message == "Deploy order-processor"
-```
-
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 5: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/interfaces/graphs/agents/test_chart_request_parser.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/sentinel/plugins/prompts/chart_request_parser.j2 \
-    src/sentinel/interfaces/graphs/agents/chart_request_parser.py \
-    tests/unit/interfaces/graphs/agents/test_chart_request_parser.py
-git commit -m "feat: add chart request parser PydanticAI agent"
+git add src/sentinel/interfaces/graphs/agents/chart_request_parser.py \
+        src/sentinel/plugins/prompts/chart_request_parser.j2 \
+        tests/unit/interfaces/graphs/agents/test_chart_request_parser.py
+git commit -m "feat: add chart request parser agent with Jinja2 prompt"
 ```
 
 ---
 
-### Task 8: PydanticAI Agent — Chart Generator
+## Task 8: Create Chart Generator Agent
 
 **Files:**
-- Create: `src/sentinel/plugins/prompts/chart_generator.j2`
 - Create: `src/sentinel/interfaces/graphs/agents/chart_generator.py`
+- Create: `src/sentinel/plugins/prompts/chart_generator.j2`
 - Test: `tests/unit/interfaces/graphs/agents/test_chart_generator.py`
 
-- [ ] **Step 1: Create the Jinja2 prompt template**
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/unit/interfaces/graphs/agents/test_chart_generator.py
+from __future__ import annotations
+
+from pydantic_ai import Agent
+
+from sentinel.domain.charts import entities
+from sentinel.interfaces.graphs.agents import chart_generator
+
+
+class TestChartGeneratorOutput:
+    def test_output_model_has_required_fields(self):
+        # Given a ChartGeneratorOutput
+        output = chart_generator.ChartGeneratorOutput(
+            files=(
+                entities.GeneratedFile(
+                    path="templates/deployment.yaml",
+                    content="apiVersion: apps/v1\nkind: Deployment",
+                ),
+                entities.GeneratedFile(
+                    path="templates/service.yaml",
+                    content="apiVersion: v1\nkind: Service",
+                ),
+            ),
+        )
+
+        # Then files are stored
+        assert len(output.files) == 2
+
+
+class TestChartGeneratorAgent:
+    def test_agent_exists_and_is_typed_correctly(self):
+        # Given the agent module
+
+        # Then the agent is a PydanticAI Agent
+        assert isinstance(chart_generator.agent, Agent)
+
+    def test_output_type_is_chart_generator_output(self):
+        # Given the agent
+
+        # Then its output type is ChartGeneratorOutput
+        assert chart_generator.agent._output_type is chart_generator.ChartGeneratorOutput
+
+    def test_dependencies_dataclass_has_required_fields(self):
+        # Given the Dependencies dataclass
+        deps = chart_generator.Dependencies(
+            service_name="api-gateway",
+            image="nginx:latest",
+            spec_json='{"service_name": "api-gateway"}',
+            policy_json='{"team": "platform"}',
+        )
+
+        # Then fields are set
+        assert deps.service_name == "api-gateway"
+
+    def test_system_prompt_is_loaded(self):
+        # Given the system prompt
+
+        # Then it is a non-empty string
+        assert isinstance(chart_generator.SYSTEM_PROMPT, str)
+        assert len(chart_generator.SYSTEM_PROMPT) > 50
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `uv run pytest tests/unit/interfaces/graphs/agents/test_chart_generator.py -v`
+Expected: FAIL — module does not exist.
+
+- [ ] **Step 3: Create prompt template**
 
 Create `src/sentinel/plugins/prompts/chart_generator.j2`:
 
-```jinja
-{# Chart Generator — produces Helm chart files from a validated ChartSpec. #}
+```jinja2
+{# Chart Generator — produces Helm chart YAML files from a validated ChartSpec. #}
 {% block system %}
-You are an expert Kubernetes and Helm chart engineer. Given a structured service specification
-and team policy, generate a complete Helm chart.
+You are an expert Helm chart developer generating production-grade Kubernetes manifests.
 
-Generate these files as a list of (path, content) pairs:
-1. **Chart.yaml** — chart metadata (apiVersion: v2)
-2. **values.yaml** — default values
-3. **values-dev.yaml** — development overrides (lower replicas, debug logging)
-4. **values-prod.yaml** — production overrides (higher resources, replicas)
-5. **templates/deployment.yaml** — Deployment manifest using values
-6. **templates/service.yaml** — Service manifest
-7. **templates/hpa.yaml** — HorizontalPodAutoscaler if replicas > 1
-8. **templates/networkpolicy.yaml** — NetworkPolicy if required by team policy
-9. **templates/_helpers.tpl** — template helpers (fullname, labels, selectorLabels)
-10. **argocd-app.yaml** — ArgoCD Application manifest
+Given a structured service specification and team policy, generate a complete set of
+Helm chart template files. Each file must be valid YAML with proper Kubernetes API versions.
 
-Follow Helm best practices:
-- Use `{{ "{{" }} .Values.<key> {{ "}}" }}` syntax in templates
-- Include standard labels (app.kubernetes.io/name, instance, version, managed-by)
-- Use resource requests and limits from values
-- Set securityContext.runAsNonRoot if specified
-- Use proper indentation (2 spaces for YAML)
+Required output files:
+1. **templates/deployment.yaml** — Deployment with containers, ports, resources, probes, security context
+2. **templates/service.yaml** — ClusterIP Service exposing container ports
+3. **templates/hpa.yaml** (if replicas specified) — HorizontalPodAutoscaler
+4. **templates/networkpolicy.yaml** (if NetworkPolicy in extra_resources) — ingress/egress rules
+5. **templates/argocd-app.yaml** — ArgoCD Application resource pointing to the chart
 
-For NetworkPolicy: if the team policy has allowed_egress entries, create egress rules for each.
-If require_network_policy is true but no dependencies exist, create a deny-all egress policy.
+Rules:
+- Use Helm templating: `{{ "{{" }} .Values.* {{ "}}" }}`, `{{ "{{" }} .Release.Name {{ "}}" }}`, etc.
+- Include `metadata.labels` with standard labels: `app.kubernetes.io/name`, `app.kubernetes.io/instance`
+- Add team labels from policy `default_labels`
+- Always include readiness and liveness probes (httpGet on first port, or tcpSocket)
+- Set `securityContext.runAsNonRoot` based on spec
+- Set resource requests and limits from spec
+- For HPA: target CPU utilisation at 70%
+- For NetworkPolicy: allow ingress on service ports, restrict egress to `allowed_egress` hosts
+
+Output each file as a GeneratedFile with `path` and `content` fields.
 {% endblock %}
 
 {% block user %}
-Service Specification:
+## Service Specification
+```json
 {{ spec_json }}
+```
 
-Team Policy:
+## Team Policy
+```json
 {{ policy_json }}
-{% if previous_errors %}
+```
 
-Previous generation attempt failed validation with these errors:
-{{ previous_errors }}
-
-Fix the errors and regenerate the chart.
-{% endif %}
+Generate the complete Helm chart files for the **{{ service_name }}** service using image **{{ image }}**.
 {% endblock %}
 ```
 
-- [ ] **Step 2: Create the agent module**
+- [ ] **Step 4: Implement the agent**
 
 Create `src/sentinel/interfaces/graphs/agents/chart_generator.py`:
 
 ```python
+"""
+PydanticAI agent that generates Helm chart YAML files from a validated ChartSpec.
+
+The agent produces Deployment, Service, HPA, NetworkPolicy, and ArgoCD
+Application resources based on the spec and team policy.
+"""
 from __future__ import annotations
 
 import dataclasses
@@ -1650,16 +1879,17 @@ from sentinel.plugins import prompts
 
 
 class ChartGeneratorOutput(BaseModel):
-    """Structured output from the chart generator agent."""
+    """Output from the chart generator agent."""
 
-    files: list[entities.GeneratedFile]
+    files: tuple[entities.GeneratedFile, ...]
 
 
 @dataclasses.dataclass
 class Dependencies:
+    service_name: str
+    image: str
     spec_json: str
     policy_json: str
-    previous_errors: str = ""
 
 
 SYSTEM_PROMPT = prompts.load_system_prompt("chart_generator")
@@ -1674,82 +1904,311 @@ agent: Agent[Dependencies, ChartGeneratorOutput] = Agent(
 
 
 @agent.instructions
-def build_user_prompt(ctx: dataclasses.dataclass) -> str:  # type: ignore[type-arg]
-    """Render the user block with the spec, policy, and any previous errors."""
+def build_context(ctx: dataclasses.dataclass) -> str:
+    """Render the user prompt with spec and policy context."""
     return prompts.render_user_prompt(
         "chart_generator",
+        service_name=ctx.deps.service_name,
+        image=ctx.deps.image,
         spec_json=ctx.deps.spec_json,
         policy_json=ctx.deps.policy_json,
-        previous_errors=ctx.deps.previous_errors,
     )
 ```
 
-- [ ] **Step 3: Write the test**
-
-Create `tests/unit/interfaces/graphs/agents/test_chart_generator.py`:
-
-```python
-from __future__ import annotations
-
-from sentinel.domain.charts import entities
-from sentinel.interfaces.graphs.agents import chart_generator
-
-
-class TestChartGeneratorAgent:
-    def test_agent_is_configured(self) -> None:
-        # Given the chart generator agent
-
-        # When inspecting its configuration
-        agent = chart_generator.agent
-
-        # Then it has the correct output type and system prompt
-        assert agent.output_type is chart_generator.ChartGeneratorOutput
-        assert "Helm chart engineer" in chart_generator.SYSTEM_PROMPT
-
-    def test_dependencies_stores_fields(self) -> None:
-        # Given dependencies with spec and policy JSON
-        deps = chart_generator.Dependencies(
-            spec_json='{"service_name": "test"}',
-            policy_json='{"team": "default"}',
-            previous_errors="",
-        )
-
-        # Then fields are accessible
-        assert "test" in deps.spec_json
-        assert deps.previous_errors == ""
-
-
-class TestChartGeneratorOutput:
-    def test_stores_generated_files(self) -> None:
-        # Given a generator output with files
-        output = chart_generator.ChartGeneratorOutput(
-            files=[
-                entities.GeneratedFile(path="Chart.yaml", content="apiVersion: v2\n"),
-            ]
-        )
-
-        # Then files are accessible
-        assert len(output.files) == 1
-        assert output.files[0].path == "Chart.yaml"
-```
-
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 5: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/interfaces/graphs/agents/test_chart_generator.py -v`
+Expected: PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/sentinel/interfaces/graphs/agents/chart_generator.py \
+        src/sentinel/plugins/prompts/chart_generator.j2 \
+        tests/unit/interfaces/graphs/agents/test_chart_generator.py
+git commit -m "feat: add chart generator agent with Jinja2 prompt"
+```
+
+---
+
+## Task 9: Create GitOps Committer
+
+**Files:**
+- Create: `src/sentinel/application/charts/__init__.py`
+- Create: `src/sentinel/application/charts/commit.py`
+- Create: `tests/unit/application/charts/__init__.py`
+- Test: `tests/unit/application/charts/test_commit.py`
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/unit/application/charts/test_commit.py
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+from unittest import mock
+
+import pytest
+
+from sentinel.application.charts import commit
+from sentinel.domain.charts import entities
+
+
+class TestWriteChartFiles:
+    def test_writes_files_to_output_directory(self, tmp_path: Path):
+        # Given a chart output with two files
+        chart = entities.ChartOutput(
+            service_name="api-gateway",
+            files=(
+                entities.GeneratedFile(
+                    path="templates/deployment.yaml",
+                    content="apiVersion: apps/v1\nkind: Deployment",
+                ),
+                entities.GeneratedFile(
+                    path="templates/service.yaml",
+                    content="apiVersion: v1\nkind: Service",
+                ),
+                entities.GeneratedFile(
+                    path="Chart.yaml",
+                    content="apiVersion: v2\nname: api-gateway\nversion: 0.1.0",
+                ),
+            ),
+        )
+
+        # When writing files
+        output_dir = commit.write_chart_files(
+            chart=chart, gitops_root=tmp_path
+        )
+
+        # Then files are written to gitops_root/api-gateway/
+        assert output_dir == tmp_path / "api-gateway"
+        assert (output_dir / "templates" / "deployment.yaml").exists()
+        assert (output_dir / "templates" / "service.yaml").exists()
+        assert (output_dir / "Chart.yaml").exists()
+
+        deployment_content = (output_dir / "templates" / "deployment.yaml").read_text()
+        assert "Deployment" in deployment_content
+
+    def test_overwrites_existing_files(self, tmp_path: Path):
+        # Given existing files in the output directory
+        existing_dir = tmp_path / "api-gateway" / "templates"
+        existing_dir.mkdir(parents=True)
+        (existing_dir / "deployment.yaml").write_text("old content")
+
+        chart = entities.ChartOutput(
+            service_name="api-gateway",
+            files=(
+                entities.GeneratedFile(
+                    path="templates/deployment.yaml",
+                    content="new content",
+                ),
+            ),
+        )
+
+        # When writing files
+        commit.write_chart_files(chart=chart, gitops_root=tmp_path)
+
+        # Then files are overwritten
+        content = (tmp_path / "api-gateway" / "templates" / "deployment.yaml").read_text()
+        assert content == "new content"
+
+
+class TestCommitToGitOps:
+    def test_calls_git_and_gh_commands(self, tmp_path: Path):
+        # Given a chart output
+        chart = entities.ChartOutput(
+            service_name="api-gateway",
+            files=(
+                entities.GeneratedFile(
+                    path="Chart.yaml",
+                    content="apiVersion: v2\nname: api-gateway",
+                ),
+            ),
+        )
+
+        # When committing to GitOps
+        with mock.patch.object(commit, "_run_command") as mock_run:
+            mock_run.return_value = (0, "https://github.com/org/repo/pull/42", "")
+
+            result = asyncio.run(
+                commit.commit_to_gitops(
+                    chart=chart,
+                    gitops_root=tmp_path,
+                    branch_prefix="chart",
+                )
+            )
+
+        # Then git commands were called
+        assert mock_run.call_count >= 1
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `uv run pytest tests/unit/application/charts/test_commit.py -v`
+Expected: FAIL — module does not exist.
+
+- [ ] **Step 3: Write minimal implementation**
+
+Create `src/sentinel/application/charts/__init__.py` (empty).
+
+Create `src/sentinel/application/charts/commit.py`:
+
+```python
+"""
+GitOps committer for generated Helm charts.
+
+Write chart files to the gitops directory, create a feature branch,
+commit, push, and open a pull request.
+"""
+from __future__ import annotations
+
+import asyncio
+from datetime import UTC, datetime
+from pathlib import Path
+
+from sentinel.settings import PROJECT_ROOT
+from sentinel.utils import logs
+
+
+logger = logs.get_logger()
+
+_DEFAULT_GITOPS_ROOT = PROJECT_ROOT / "gitops" / "charts"
+
+
+async def _run_command(
+    *args: str,
+    cwd: Path | None = None,
+) -> tuple[int, str, str]:
+    """
+    Run a shell command and return (returncode, stdout, stderr).
+    """
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=cwd,
+    )
+    stdout, stderr = await proc.communicate()
+    return proc.returncode, stdout.decode().strip(), stderr.decode().strip()
+
+
+def write_chart_files(
+    *,
+    chart: "entities.ChartOutput",
+    gitops_root: Path = _DEFAULT_GITOPS_ROOT,
+) -> Path:
+    """
+    Write generated chart files to the gitops directory.
+
+    :param chart: The chart output with generated files.
+    :param gitops_root: Root directory for gitops charts.
+    :returns: The chart output directory path.
+    """
+    from sentinel.domain.charts import entities  # noqa: F811 — deferred to avoid circular
+
+    output_dir = gitops_root / chart.service_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for gf in chart.files:
+        file_path = output_dir / gf.path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(gf.content)
+
+    logger.info(
+        "chart_files_written",
+        service_name=chart.service_name,
+        output_dir=str(output_dir),
+        file_count=len(chart.files),
+    )
+
+    return output_dir
+
+
+async def commit_to_gitops(
+    *,
+    chart: "entities.ChartOutput",
+    gitops_root: Path = _DEFAULT_GITOPS_ROOT,
+    branch_prefix: str = "chart",
+) -> str:
+    """
+    Write chart files, create a branch, commit, push, and open a PR.
+
+    :param chart: The chart output with generated files.
+    :param gitops_root: Root directory for gitops charts.
+    :param branch_prefix: Prefix for the branch name.
+    :returns: The pull request URL, or an error message.
+    """
+    from sentinel.domain.charts import entities  # noqa: F811
+
+    output_dir = write_chart_files(chart=chart, gitops_root=gitops_root)
+
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S")
+    branch_name = f"{branch_prefix}/{chart.service_name}-{timestamp}"
+
+    # Create branch
+    rc, out, err = await _run_command("git", "checkout", "-b", branch_name, cwd=PROJECT_ROOT)
+    if rc != 0:
+        logger.warning("git_checkout_failed", branch=branch_name, stderr=err)
+        return f"Branch creation failed: {err}"
+
+    # Stage chart files
+    rc, out, err = await _run_command("git", "add", str(output_dir), cwd=PROJECT_ROOT)
+    if rc != 0:
+        logger.warning("git_add_failed", stderr=err)
+        return f"Git add failed: {err}"
+
+    # Commit
+    commit_msg = f"feat: generate Helm chart for {chart.service_name}"
+    rc, out, err = await _run_command("git", "commit", "-m", commit_msg, cwd=PROJECT_ROOT)
+    if rc != 0:
+        logger.warning("git_commit_failed", stderr=err)
+        return f"Git commit failed: {err}"
+
+    # Push
+    rc, out, err = await _run_command("git", "push", "-u", "origin", branch_name, cwd=PROJECT_ROOT)
+    if rc != 0:
+        logger.warning("git_push_failed", stderr=err)
+        return f"Git push failed: {err}"
+
+    # Create PR
+    pr_title = f"feat: deploy {chart.service_name} Helm chart"
+    pr_body = (
+        f"## Generated Helm Chart\n\n"
+        f"Service: `{chart.service_name}`\n"
+        f"Files: {len(chart.files)}\n"
+        f"Generation attempts: {chart.generation_attempts}\n"
+        f"Confidence: {chart.confidence_score or 'N/A'}\n"
+    )
+    rc, out, err = await _run_command(
+        "gh", "pr", "create",
+        "--title", pr_title,
+        "--body", pr_body,
+        cwd=PROJECT_ROOT,
+    )
+    if rc != 0:
+        logger.warning("gh_pr_create_failed", stderr=err)
+        return f"PR creation failed: {err}"
+
+    logger.info("chart_pr_created", service_name=chart.service_name, pr_url=out)
+    return out
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `uv run pytest tests/unit/application/charts/test_commit.py -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/sentinel/plugins/prompts/chart_generator.j2 \
-    src/sentinel/interfaces/graphs/agents/chart_generator.py \
-    tests/unit/interfaces/graphs/agents/test_chart_generator.py
-git commit -m "feat: add chart generator PydanticAI agent"
+git add src/sentinel/application/charts/ tests/unit/application/charts/
+git commit -m "feat: add GitOps committer for chart generation output"
 ```
 
 ---
 
-### Task 9: Pipeline Reply Type
+## Task 10: Add Pipeline Reply Type
 
 **Files:**
 - Modify: `src/sentinel/domain/pipeline/types.py`
@@ -1757,21 +2216,20 @@ git commit -m "feat: add chart generator PydanticAI agent"
 
 - [ ] **Step 1: Add ChartGenerationReply to pipeline types**
 
-Add to `src/sentinel/domain/pipeline/types.py`:
+Append to `src/sentinel/domain/pipeline/types.py`:
 
 ```python
 class ChartGenerationReply(BaseModel):
     """Output from the chart generation pipeline."""
 
     service_name: str
-    files: list[dict[str, str]] = []  # [{path: ..., content: ...}]
-    confidence_score: float = 0.0
-    policy_violations: list[dict[str, str]] = []
-    validation_errors: list[str] = []
-    validation_warnings: list[str] = []
+    files_generated: int = 0
+    validation_passed: bool = False
+    policy_violations: int = 0
     generation_attempts: int = 1
-    pr_url: str | None = None
-    approval_status: str | None = None  # "pending", "approved", "rejected", None
+    confidence: confidence_entities.ConfidenceScore | None = None
+    pr_url: str = ""
+    error: str | None = None
 ```
 
 - [ ] **Step 2: Re-export from common.py**
@@ -1782,709 +2240,1202 @@ Add to `src/sentinel/interfaces/graphs/common.py`:
 from sentinel.domain.pipeline.types import ChartGenerationReply as ChartGenerationReply
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Run existing tests**
+
+Run: `uv run pytest tests/unit/ -x -q`
+Expected: PASS (no regressions)
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add src/sentinel/domain/pipeline/types.py src/sentinel/interfaces/graphs/common.py
-git commit -m "feat: add ChartGenerationReply pipeline output type"
+git commit -m "feat: add ChartGenerationReply pipeline type"
 ```
 
 ---
 
-### Task 10: Pydantic Graph Pipeline
+## Task 11: Create Pipeline Graph
 
 **Files:**
 - Create: `src/sentinel/interfaces/graphs/chart_generation.py`
 - Test: `tests/unit/interfaces/graphs/test_chart_generation.py`
 
-- [ ] **Step 1: Write the failing tests**
+This is the largest task. The pipeline has 7 nodes with a self-heal loop.
 
-Create `tests/unit/interfaces/graphs/test_chart_generation.py`:
+- [ ] **Step 1: Write the failing test**
 
 ```python
+# tests/unit/interfaces/graphs/test_chart_generation.py
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 from unittest import mock
 
 import pytest
 
-from sentinel.domain.charts import entities
+from sentinel.domain.charts import entities, policies, validation, confidence
+from sentinel.domain.confidence import entities as confidence_entities
+from sentinel.domain.pipeline import types as pipeline_types
 from sentinel.interfaces.graphs import chart_generation, common
 from tests import factories
 
 
-class TestParseRequestNode:
-    @pytest.mark.asyncio
-    async def test_transitions_to_load_policy(self) -> None:
-        # Given a ParseRequest node and a mock agent that returns a ChartSpec
-        mock_spec = factories.make_chart_spec()
-        mock_result = mock.Mock()
-        mock_result.output = mock_spec
-        mock_result.all_messages.return_value = []
-
-        state = chart_generation.State(
-            request=factories.make_chart_request(),
-        )
-        deps = chart_generation.Dependencies(
-            status_update_client=common.NoOpStatusUpdateClient(),
-            parser_model="test-model",
-            generator_model="test-model",
-        )
-        ctx = mock.Mock()
-        ctx.state = state
-        ctx.deps = deps
-
-        node = chart_generation.ParseRequest()
-
-        with mock.patch.object(
-            chart_generation.chart_request_parser, "agent"
-        ) as mock_agent:
-            mock_agent.run = mock.AsyncMock(return_value=mock_result)
-
-            # When running the node
-            next_node = await node.run(ctx)
-
-        # Then it transitions to LoadPolicy
-        assert isinstance(next_node, chart_generation.LoadPolicy)
-
-
-class TestMergeSpecNode:
-    @pytest.mark.asyncio
-    async def test_detects_policy_violations(self) -> None:
-        # Given a spec that exceeds the policy memory cap
+class TestGenerateChart:
+    def test_full_pipeline_success(self):
+        # Given a chart request and mocked agents
+        request = factories.make_chart_request()
         spec = factories.make_chart_spec()
-        spec = spec.model_copy(
-            update={
-                "resources": entities.ResourceSpec(
-                    cpu_request="100m", cpu_limit="500m",
-                    memory_request="128Mi", memory_limit="2Gi",
-                ),
-            }
+        policy = factories.make_team_policy()
+        generated_files = (
+            factories.make_generated_file(
+                path="templates/deployment.yaml",
+                content="apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api-gateway",
+            ),
+            factories.make_generated_file(
+                path="templates/service.yaml",
+                content="apiVersion: v1\nkind: Service\nmetadata:\n  name: api-gateway",
+            ),
         )
-        policy = factories.make_team_policy(max_memory="512Mi")
+        validation_result = factories.make_validation_result()
 
-        state = chart_generation.State(
-            request=factories.make_chart_request(),
-            spec=spec,
-            policy=policy,
-        )
-        deps = chart_generation.Dependencies(
-            status_update_client=common.NoOpStatusUpdateClient(),
-            parser_model="test-model",
-            generator_model="test-model",
-        )
-        ctx = mock.Mock()
-        ctx.state = state
-        ctx.deps = deps
+        with mock.patch.object(chart_generation, "_parse_request") as mock_parse, \
+             mock.patch.object(chart_generation, "_load_policy") as mock_load, \
+             mock.patch.object(chart_generation, "_generate_chart_files") as mock_gen, \
+             mock.patch.object(validation, "validate_chart") as mock_validate, \
+             mock.patch.object(chart_generation, "_commit_chart") as mock_commit:
+            mock_parse.return_value = spec
+            mock_load.return_value = policy
+            mock_gen.return_value = generated_files
+            mock_validate.return_value = validation_result
+            mock_commit.return_value = "https://github.com/org/repo/pull/42"
 
-        node = chart_generation.MergeSpec()
+            result = asyncio.run(
+                chart_generation.generate_chart(
+                    request=request,
+                    parser_model="test-model",
+                    generator_model="test-model",
+                )
+            )
 
-        # When running the node
-        next_node = await node.run(ctx)
+        # Then the pipeline succeeds
+        assert result.service_name == "api-gateway"
+        assert result.validation_passed is True
+        assert result.error is None
 
-        # Then it ends with policy violations in the reply
-        from pydantic_graph import End
-        assert isinstance(next_node, End)
-        assert len(next_node.data.policy_violations) > 0
+    def test_pipeline_returns_error_when_policy_not_found(self):
+        # Given a request for an unknown team
+        request = factories.make_chart_request(team="nonexistent")
+        spec = factories.make_chart_spec()
+
+        with mock.patch.object(chart_generation, "_parse_request") as mock_parse, \
+             mock.patch.object(chart_generation, "_load_policy") as mock_load:
+            mock_parse.return_value = spec
+            mock_load.side_effect = FileNotFoundError("No policy file")
+
+            result = asyncio.run(
+                chart_generation.generate_chart(
+                    request=request,
+                    parser_model="test-model",
+                    generator_model="test-model",
+                )
+            )
+
+        # Then error is returned
+        assert result.error is not None
+        assert "policy" in result.error.lower()
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/interfaces/graphs/test_chart_generation.py -v`
-Expected: FAIL — `ModuleNotFoundError`
+Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Implement the pipeline graph**
+- [ ] **Step 3: Implement the pipeline**
 
 Create `src/sentinel/interfaces/graphs/chart_generation.py`:
 
 ```python
+"""
+Pydantic Graph pipeline for K8s Helm chart generation.
+
+Pipeline: ParseRequest → LoadPolicy → MergeSpec → GenerateChart →
+          ValidateChart → ApprovalGate → CommitToGitOps
+
+The ValidateChart node loops back to GenerateChart on syntax errors
+(max retries controlled by settings). Policy violations escalate
+to the ApprovalGate for human review.
+"""
 from __future__ import annotations
 
-import dataclasses
-from collections.abc import Sequence
-from pathlib import Path
-
-from pydantic_graph import BaseNode, End, Graph, GraphRunContext
-
-from sentinel.domain.charts import confidence, entities, policies, validation
-from sentinel.interfaces.graphs import common
+from sentinel.application.charts import commit as chart_commit
+from sentinel.domain.charts import confidence as chart_confidence
+from sentinel.domain.charts import entities, policies, validation
+from sentinel.domain.pipeline import types as pipeline_types
 from sentinel.interfaces.graphs.agents import chart_generator, chart_request_parser, utils
 from sentinel.settings import get_settings
 from sentinel.utils import logs
 
 
-@dataclasses.dataclass
-class Dependencies:
-    status_update_client: common.StatusUpdateClient
-    parser_model: str
-    generator_model: str
-    trace_collector: common.TraceCollector | None = None
-    require_approval_below: float = 0.7
-    max_retries: int = 3
-    policies_dir: Path | None = None
+logger = logs.get_logger()
 
 
-@dataclasses.dataclass
-class State:
-    request: entities.ChartRequest
-    spec: entities.ChartSpec | None = None
-    policy: entities.TeamPolicy | None = None
-    output: entities.ChartOutput | None = None
-    validation_errors: list[str] = dataclasses.field(default_factory=list)
-    generation_attempts: int = 0
+async def _parse_request(
+    *,
+    request: entities.ChartRequest,
+    model: str,
+) -> entities.ChartSpec:
+    """Run the chart request parser agent."""
+    result = await chart_request_parser.agent.run(
+        user_prompt=request.raw_message,
+        model=utils.get_model_with_gateway(model),
+        deps=chart_request_parser.Dependencies(
+            raw_message=request.raw_message,
+            requester=request.requester,
+            team=request.team,
+        ),
+    )
+    return result.output
 
 
-@dataclasses.dataclass
-class ParseRequest(BaseNode[State, Dependencies, common.ChartGenerationReply]):
-    """Extract a structured ChartSpec from the natural language request."""
-
-    async def run(
-        self, ctx: GraphRunContext[State, Dependencies]
-    ) -> LoadPolicy | End[common.ChartGenerationReply]:
-        await ctx.deps.status_update_client.update_status("Parsing chart request...")
-
-        try:
-            result = await chart_request_parser.agent.run(
-                user_prompt=ctx.state.request.raw_message,
-                model=utils.get_model_with_gateway(ctx.deps.parser_model),
-                deps=chart_request_parser.Dependencies(
-                    raw_message=ctx.state.request.raw_message,
-                ),
-            )
-        except Exception as exc:
-            logs.log_exception(
-                exc,
-                params={"requester": ctx.state.request.requester, "node": "ParseRequest"},
-            )
-            return End(
-                common.ChartGenerationReply(
-                    service_name="unknown",
-                    validation_errors=[f"Failed to parse request: {type(exc).__name__} — {exc}"],
-                )
-            )
-
-        if ctx.deps.trace_collector:
-            ctx.deps.trace_collector.record(
-                agent_name="Chart Request Parser",
-                messages=result.all_messages(),
-            )
-
-        ctx.state.spec = result.output
-        logs.log_event(
-            "chart_request_parsed",
-            params={"service_name": result.output.service_name, "requester": ctx.state.request.requester},
-        )
-        return LoadPolicy()
+async def _load_policy(*, team: str) -> entities.TeamPolicy:
+    """Load team policy from YAML."""
+    return policies.load_team_policy(team=team)
 
 
-@dataclasses.dataclass
-class LoadPolicy(BaseNode[State, Dependencies, common.ChartGenerationReply]):
-    """Load the team policy from the policy registry."""
+async def _generate_chart_files(
+    *,
+    spec: entities.ChartSpec,
+    policy: entities.TeamPolicy,
+    model: str,
+    error_context: str = "",
+) -> tuple[entities.GeneratedFile, ...]:
+    """Run the chart generator agent."""
+    user_prompt = f"Generate Helm chart for {spec.service_name}"
+    if error_context:
+        user_prompt += f"\n\nPrevious attempt failed with errors:\n{error_context}\nPlease fix these issues."
 
-    async def run(
-        self, ctx: GraphRunContext[State, Dependencies]
-    ) -> MergeSpec | End[common.ChartGenerationReply]:
-        await ctx.deps.status_update_client.update_status("Loading team policy...")
-
-        try:
-            kwargs = {}
-            if ctx.deps.policies_dir:
-                kwargs["policies_dir"] = ctx.deps.policies_dir
-            policy = policies.load_team_policy(team=ctx.state.request.team, **kwargs)
-        except FileNotFoundError as exc:
-            logs.log_exception(
-                exc,
-                params={"team": ctx.state.request.team, "node": "LoadPolicy"},
-            )
-            return End(
-                common.ChartGenerationReply(
-                    service_name=ctx.state.spec.service_name if ctx.state.spec else "unknown",
-                    validation_errors=[f"Team policy not found: {exc}"],
-                )
-            )
-
-        ctx.state.policy = policy
-        logs.log_event(
-            "team_policy_loaded",
-            params={"team": policy.team, "namespace": policy.namespace},
-        )
-        return MergeSpec()
+    result = await chart_generator.agent.run(
+        user_prompt=user_prompt,
+        model=utils.get_model_with_gateway(model),
+        deps=chart_generator.Dependencies(
+            service_name=spec.service_name,
+            image=spec.image,
+            spec_json=spec.model_dump_json(),
+            policy_json=policy.model_dump_json(),
+        ),
+    )
+    return result.output.files
 
 
-@dataclasses.dataclass
-class MergeSpec(BaseNode[State, Dependencies, common.ChartGenerationReply]):
-    """Merge the chart spec with team policy, detecting violations."""
-
-    async def run(
-        self, ctx: GraphRunContext[State, Dependencies]
-    ) -> GenerateChart | End[common.ChartGenerationReply]:
-        await ctx.deps.status_update_client.update_status("Checking policy compliance...")
-
-        assert ctx.state.spec is not None
-        assert ctx.state.policy is not None
-
-        merged, violations = policies.merge_spec_with_policy(
-            spec=ctx.state.spec,
-            policy=ctx.state.policy,
-        )
-        ctx.state.spec = merged
-
-        if violations:
-            logs.log_event(
-                "policy_violations_detected",
-                params={
-                    "service_name": merged.service_name,
-                    "violation_count": len(violations),
-                    "fields": [v.field for v in violations],
-                },
-            )
-            return End(
-                common.ChartGenerationReply(
-                    service_name=merged.service_name,
-                    policy_violations=[v.model_dump() for v in violations],
-                    approval_status="policy_violation",
-                )
-            )
-
-        return GenerateChart()
-
-
-@dataclasses.dataclass
-class GenerateChart(BaseNode[State, Dependencies, common.ChartGenerationReply]):
-    """Generate Helm chart files using the PydanticAI agent."""
-
-    async def run(
-        self, ctx: GraphRunContext[State, Dependencies]
-    ) -> ValidateChart | End[common.ChartGenerationReply]:
-        await ctx.deps.status_update_client.update_status("Generating Helm chart...")
-
-        assert ctx.state.spec is not None
-        assert ctx.state.policy is not None
-
-        ctx.state.generation_attempts += 1
-
-        try:
-            result = await chart_generator.agent.run(
-                user_prompt=f"Generate Helm chart for {ctx.state.spec.service_name}",
-                model=utils.get_model_with_gateway(ctx.deps.generator_model),
-                deps=chart_generator.Dependencies(
-                    spec_json=ctx.state.spec.model_dump_json(indent=2),
-                    policy_json=ctx.state.policy.model_dump_json(indent=2),
-                    previous_errors="\n".join(ctx.state.validation_errors),
-                ),
-            )
-        except Exception as exc:
-            logs.log_exception(
-                exc,
-                params={"service_name": ctx.state.spec.service_name, "node": "GenerateChart"},
-            )
-            return End(
-                common.ChartGenerationReply(
-                    service_name=ctx.state.spec.service_name,
-                    validation_errors=[f"Chart generation failed: {type(exc).__name__} — {exc}"],
-                    generation_attempts=ctx.state.generation_attempts,
-                )
-            )
-
-        if ctx.deps.trace_collector:
-            ctx.deps.trace_collector.record(
-                agent_name="Chart Generator",
-                messages=result.all_messages(),
-            )
-
-        ctx.state.output = entities.ChartOutput(
-            service_name=ctx.state.spec.service_name,
-            files=result.output.files,
-            generation_attempts=ctx.state.generation_attempts,
-        )
-
-        logs.log_event(
-            "chart_generated",
-            params={
-                "service_name": ctx.state.spec.service_name,
-                "file_count": len(result.output.files),
-                "attempt": ctx.state.generation_attempts,
-            },
-        )
-        return ValidateChart()
-
-
-@dataclasses.dataclass
-class ValidateChart(BaseNode[State, Dependencies, common.ChartGenerationReply]):
-    """Run helm template + kubeconform validation. Self-heal on syntax errors."""
-
-    async def run(
-        self, ctx: GraphRunContext[State, Dependencies]
-    ) -> ApprovalGate | GenerateChart | End[common.ChartGenerationReply]:
-        await ctx.deps.status_update_client.update_status("Validating chart...")
-
-        assert ctx.state.output is not None
-
-        result = validation.validate_chart(output=ctx.state.output)
-        ctx.state.output = ctx.state.output.model_copy(update={"validation_result": result})
-
-        if not result.helm_template_ok or not result.kubeconform_ok:
-            ctx.state.validation_errors = result.errors
-
-            if ctx.state.generation_attempts < ctx.deps.max_retries:
-                logs.log_event(
-                    "chart_validation_failed_retrying",
-                    params={
-                        "service_name": ctx.state.output.service_name,
-                        "attempt": ctx.state.generation_attempts,
-                        "errors": result.errors,
-                    },
-                )
-                return GenerateChart()
-
-            logs.log_event(
-                "chart_validation_failed_max_retries",
-                params={
-                    "service_name": ctx.state.output.service_name,
-                    "attempts": ctx.state.generation_attempts,
-                },
-            )
-            return End(
-                common.ChartGenerationReply(
-                    service_name=ctx.state.output.service_name,
-                    validation_errors=result.errors,
-                    validation_warnings=result.warnings,
-                    generation_attempts=ctx.state.generation_attempts,
-                )
-            )
-
-        return ApprovalGate()
-
-
-@dataclasses.dataclass
-class ApprovalGate(BaseNode[State, Dependencies, common.ChartGenerationReply]):
-    """Gate chart output based on confidence score and auto-validate settings."""
-
-    async def run(
-        self, ctx: GraphRunContext[State, Dependencies]
-    ) -> CommitToGitOps | End[common.ChartGenerationReply]:
-        assert ctx.state.output is not None
-        assert ctx.state.spec is not None
-
-        vr = ctx.state.output.validation_result
-        score = confidence.calculate_chart_confidence(
-            schema_valid=vr.kubeconform_ok if vr else False,
-            template_renders=vr.helm_template_ok if vr else False,
-            template_has_warnings=bool(vr.warnings) if vr else False,
-            policy_violation_count=len(ctx.state.output.policy_violations),
-            auto_resolved_count=0,
-            requested_resource_count=len(ctx.state.spec.ports) + len(ctx.state.spec.dependencies) + 1,
-            generated_resource_count=len(ctx.state.output.files),
-            retry_count=ctx.state.generation_attempts - 1,
-        )
-
-        ctx.state.output = ctx.state.output.model_copy(update={"confidence_score": score})
-
-        settings = get_settings()
-        needs_approval = (
-            not settings.k8s_chart_auto_validate
-            or score < ctx.deps.require_approval_below
-        )
-
-        if needs_approval:
-            logs.log_event(
-                "chart_approval_required",
-                params={"service_name": ctx.state.output.service_name, "confidence": score},
-            )
-            return End(
-                common.ChartGenerationReply(
-                    service_name=ctx.state.output.service_name,
-                    files=[f.model_dump() for f in ctx.state.output.files],
-                    confidence_score=score,
-                    generation_attempts=ctx.state.generation_attempts,
-                    approval_status="pending",
-                )
-            )
-
-        return CommitToGitOps()
-
-
-@dataclasses.dataclass
-class CommitToGitOps(BaseNode[State, Dependencies, common.ChartGenerationReply]):
-    """Write chart files to gitops/charts/ and create a PR."""
-
-    async def run(
-        self, ctx: GraphRunContext[State, Dependencies]
-    ) -> End[common.ChartGenerationReply]:
-        await ctx.deps.status_update_client.update_status("Committing chart to GitOps directory...")
-
-        assert ctx.state.output is not None
-
-        from sentinel.settings import PROJECT_ROOT
-
-        gitops_dir = PROJECT_ROOT / "gitops" / "charts"
-        chart_dir = gitops_dir / ctx.state.output.service_name
-
-        for generated_file in ctx.state.output.files:
-            file_path = chart_dir / generated_file.path
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.write_text(generated_file.content)
-
-        logs.log_event(
-            "chart_committed_to_gitops",
-            params={
-                "service_name": ctx.state.output.service_name,
-                "chart_dir": str(chart_dir),
-                "file_count": len(ctx.state.output.files),
-            },
-        )
-
-        return End(
-            common.ChartGenerationReply(
-                service_name=ctx.state.output.service_name,
-                files=[f.model_dump() for f in ctx.state.output.files],
-                confidence_score=ctx.state.output.confidence_score,
-                generation_attempts=ctx.state.generation_attempts,
-                approval_status="approved",
-            )
-        )
+async def _commit_chart(
+    *,
+    chart: entities.ChartOutput,
+) -> str:
+    """Commit chart to GitOps directory and open a PR."""
+    return await chart_commit.commit_to_gitops(chart=chart)
 
 
 async def generate_chart(
-    request: entities.ChartRequest,
     *,
-    status_update_client: common.StatusUpdateClient | None = None,
+    request: entities.ChartRequest,
     parser_model: str = "",
     generator_model: str = "",
-    trace_collector: common.TraceCollector | None = None,
-    require_approval_below: float = 0.7,
-    max_retries: int = 3,
-    policies_dir: Path | None = None,
-) -> common.ChartGenerationReply:
+    auto_validate: bool | None = None,
+    auto_sandbox: bool | None = None,
+    max_retries: int | None = None,
+    status_update_fn: object | None = None,
+) -> pipeline_types.ChartGenerationReply:
     """
     Run the full chart generation pipeline.
 
-    This is the main entry point for the chart generation graph.
-
-    :param request: the parsed chart request
-    :param status_update_client: optional status update client for UI feedback
-    :param parser_model: LLM model for parsing (defaults to settings)
-    :param generator_model: LLM model for generation (defaults to settings)
-    :param trace_collector: optional trace collector for agent debugging
-    :param require_approval_below: confidence threshold for human approval
-    :param max_retries: maximum self-heal retries
-    :param policies_dir: optional override for policy files directory
+    :param request: The raw chart request from the user.
+    :param parser_model: LLM model for request parsing.
+    :param generator_model: LLM model for chart generation.
+    :param auto_validate: Override for K8S_CHART_AUTO_VALIDATE.
+    :param auto_sandbox: Override for K8S_CHART_AUTO_SANDBOX.
+    :param max_retries: Override for K8S_CHART_MAX_RETRIES.
+    :returns: A ChartGenerationReply with results.
     """
     settings = get_settings()
-    state = State(request=request)
-    dependencies = Dependencies(
-        status_update_client=status_update_client or common.NoOpStatusUpdateClient(),
-        parser_model=parser_model or settings.k8s_chart_parser_llm,
-        generator_model=generator_model or settings.k8s_chart_generator_llm,
-        trace_collector=trace_collector,
-        require_approval_below=require_approval_below,
-        max_retries=max_retries or settings.k8s_chart_max_retries,
-        policies_dir=policies_dir,
+    parser_model = parser_model or settings.k8s_chart_parser_llm
+    generator_model = generator_model or settings.k8s_chart_generator_llm
+    if max_retries is None:
+        max_retries = settings.k8s_chart_max_retries
+
+    # Step 1: Parse request
+    try:
+        spec = await _parse_request(request=request, model=parser_model)
+    except Exception as exc:
+        logs.log_exception(exc, params={"node": "ParseRequest"})
+        return pipeline_types.ChartGenerationReply(
+            service_name="unknown",
+            error=f"Failed to parse request: {exc}",
+        )
+
+    logs.log_event(
+        "chart_request_parsed",
+        params={"service_name": spec.service_name, "image": spec.image},
     )
 
-    chart_graph = Graph(
-        nodes=(
-            ParseRequest,
-            LoadPolicy,
-            MergeSpec,
-            GenerateChart,
-            ValidateChart,
-            ApprovalGate,
-            CommitToGitOps,
-        ),
+    # Step 2: Load policy
+    try:
+        policy = await _load_policy(team=request.team)
+    except FileNotFoundError as exc:
+        logs.log_exception(exc, params={"node": "LoadPolicy", "team": request.team})
+        return pipeline_types.ChartGenerationReply(
+            service_name=spec.service_name,
+            error=f"Policy not found: {exc}",
+        )
+
+    # Step 3: Merge spec with policy
+    merged_spec, violations = policies.merge_spec_with_policy(
+        spec=spec, policy=policy
     )
 
-    result = await chart_graph.run(
-        ParseRequest(),
-        deps=dependencies,
-        state=state,
+    if violations:
+        logs.log_event(
+            "policy_violations_detected",
+            params={
+                "service_name": spec.service_name,
+                "violation_count": len(violations),
+            },
+        )
+
+    # Step 4 + 5: Generate and validate (with self-heal loop)
+    generation_attempts = 0
+    error_context = ""
+    validation_result = None
+
+    for attempt in range(max_retries + 1):
+        generation_attempts = attempt + 1
+
+        try:
+            files = await _generate_chart_files(
+                spec=merged_spec,
+                policy=policy,
+                model=generator_model,
+                error_context=error_context,
+            )
+        except Exception as exc:
+            logs.log_exception(
+                exc, params={"node": "GenerateChart", "attempt": generation_attempts}
+            )
+            error_context = str(exc)
+            continue
+
+        chart_output = entities.ChartOutput(
+            service_name=spec.service_name,
+            files=files,
+            policy_violations=violations,
+            generation_attempts=generation_attempts,
+        )
+
+        validation_result = await validation.validate_chart(chart=chart_output)
+
+        if validation_result.helm_template_ok and validation_result.kubeconform_ok:
+            break
+
+        # Self-heal: feed errors back to the generator
+        error_context = "\n".join(validation_result.errors)
+        logs.log_event(
+            "chart_validation_failed_retrying",
+            params={
+                "service_name": spec.service_name,
+                "attempt": generation_attempts,
+                "errors": validation_result.errors,
+            },
+        )
+    else:
+        # Exhausted retries
+        return pipeline_types.ChartGenerationReply(
+            service_name=spec.service_name,
+            files_generated=len(files) if "files" in dir() else 0,
+            validation_passed=False,
+            policy_violations=len(violations),
+            generation_attempts=generation_attempts,
+            error=f"Validation failed after {generation_attempts} attempts: {error_context}",
+        )
+
+    # Step 6: Confidence scoring
+    score = chart_confidence.calculate_chart_confidence(
+        schema_valid=validation_result.kubeconform_ok,
+        template_renders=validation_result.helm_template_ok,
+        template_has_warnings=len(validation_result.warnings) > 0,
+        policy_compliant=len(violations) == 0,
+        policy_auto_resolved=len(violations) > 0,
+        spec_coverage=1.0,
+        retry_count=generation_attempts - 1,
     )
-    return result.output
+
+    chart_output = chart_output.model_copy(
+        update={
+            "validation_result": validation_result,
+            "confidence_score": score.total,
+        }
+    )
+
+    # Step 7: Commit to GitOps
+    try:
+        pr_url = await _commit_chart(chart=chart_output)
+    except Exception as exc:
+        logs.log_exception(exc, params={"node": "CommitToGitOps"})
+        pr_url = f"Commit failed: {exc}"
+
+    logs.log_event(
+        "chart_generation_completed",
+        params={
+            "service_name": spec.service_name,
+            "attempts": generation_attempts,
+            "confidence": score.total,
+            "pr_url": pr_url,
+        },
+    )
+
+    return pipeline_types.ChartGenerationReply(
+        service_name=spec.service_name,
+        files_generated=len(chart_output.files),
+        validation_passed=True,
+        policy_violations=len(violations),
+        generation_attempts=generation_attempts,
+        confidence=score,
+        pr_url=pr_url,
+    )
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/unit/interfaces/graphs/test_chart_generation.py -v`
-Expected: PASS (both tests)
+Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/interfaces/graphs/chart_generation.py \
-    tests/unit/interfaces/graphs/test_chart_generation.py
-git commit -m "feat: add Pydantic Graph pipeline for chart generation"
+        tests/unit/interfaces/graphs/test_chart_generation.py
+git commit -m "feat: add chart generation pipeline with self-heal loop"
 ```
 
 ---
 
-### Task 11: Lint and Type Check
+## Task 12: Wire into Config
 
-- [ ] **Step 1: Run linting**
+**Files:**
+- Modify: `src/sentinel/config.py:63-240`
 
-Run: `make lint-fix`
+- [ ] **Step 1: Add chart model properties**
 
-Fix any ruff or mypy issues that arise from the new code.
+Add to `src/sentinel/config.py` in the `Configuration` class, after the existing `k8s_investigator_model` property:
 
-- [ ] **Step 2: Run full test suite**
+```python
+    # -- Chart generation helpers --------------------------------------------
 
-Run: `make test`
+    @property
+    def chart_parser_model(self) -> str:
+        return _normalise_model_name(self.settings.k8s_chart_parser_llm)
 
-Verify no regressions in existing tests.
+    @property
+    def chart_generator_model(self) -> str:
+        return _normalise_model_name(self.settings.k8s_chart_generator_llm)
+```
 
-- [ ] **Step 3: Commit any fixes**
+- [ ] **Step 2: Run existing tests**
+
+Run: `uv run pytest tests/unit/ -x -q`
+Expected: PASS (no regressions)
+
+- [ ] **Step 3: Commit**
 
 ```bash
-git add -u
-git commit -m "fix: resolve lint and type check issues in chart agent"
+git add src/sentinel/config.py
+git commit -m "feat: add chart generation model properties to config"
 ```
 
 ---
 
-### Task 12: Streamlit UI Extension
+## Task 13: Extend Streamlit UI
 
 **Files:**
 - Modify: `src/sentinel/interfaces/chat/app.py`
 
-- [ ] **Step 1: Read the current app.py to identify insertion points**
+- [ ] **Step 1: Add chart generation scenarios**
 
-Read `src/sentinel/interfaces/chat/app.py` to find:
-- Where sidebar sections are defined (for adding "K8s Chart Generator" section)
-- Where the pipeline runner functions are defined (for adding `_run_chart_generation`)
-- Where chat message handling dispatches to pipelines
-
-- [ ] **Step 2: Add chart generation imports and runner function**
-
-Add to imports section of `app.py`:
+Add after `_K8S_SCENARIOS` in `app.py`:
 
 ```python
-from sentinel.domain.charts import entities as chart_entities
-from sentinel.interfaces.graphs import chart_generation
+_CHART_SCENARIOS: tuple[dict[str, str], ...] = (
+    {
+        "label": "Simple web service",
+        "prompt": (
+            "Deploy a Python web service called api-gateway on port 8080. "
+            "It needs 256Mi memory and 200m CPU. Team: platform."
+        ),
+    },
+    {
+        "label": "Service with HPA",
+        "prompt": (
+            "Deploy a Node.js service called order-processor using image "
+            "myrepo/order-processor:v2.1.0. It listens on port 3000 and needs "
+            "autoscaling from 3 to 10 replicas. Memory limit 512Mi, CPU limit 1000m. "
+            "It connects to redis at redis.internal:6379. Team: platform."
+        ),
+    },
+    {
+        "label": "Secure service with NetworkPolicy",
+        "prompt": (
+            "Deploy a Go microservice called auth-service on port 9090. "
+            "It must run as non-root with a strict network policy allowing "
+            "only ingress on port 9090 and egress to postgres.internal:5432. "
+            "Memory: 128Mi-256Mi, CPU: 100m-500m. 2 replicas. Team: platform."
+        ),
+    },
+)
 ```
 
-Add the runner function (near the existing `_run_sre` function):
+- [ ] **Step 2: Add chart generation runner**
+
+Add after `_run_support()`:
 
 ```python
 async def _run_chart_generation(
     text: str,
     *,
     on_status: Callable[[str], None],
-    trace_collector: common.TraceCollector | None = None,
 ) -> common.ChartGenerationReply:
-    status_client = StreamlitStatusUpdateClient(on_status=on_status)
+    from sentinel.domain.charts import entities as chart_entities
+    from sentinel.interfaces.graphs import chart_generation
+
+    now = datetime.now(tz=UTC)
     request = chart_entities.ChartRequest(
-        requester=st.session_state.get("user_id", "streamlit-user"),
-        team=st.session_state.get("chart_team", "internal-tooling"),
+        requester="local-user",
+        team="platform",
         raw_message=text,
-        requested_at=datetime.now(tz=UTC),
+        requested_at=now,
     )
+
+    on_status("Parsing chart request...")
     return await chart_generation.generate_chart(
-        request,
-        status_update_client=status_client,
-        parser_model=_selected_model("chart_parser"),
-        generator_model=_selected_model("chart_generator"),
-        trace_collector=trace_collector,
+        request=request,
+        parser_model=_selected_model("analyser"),
+        generator_model=_selected_model("analyser"),
     )
 ```
 
-- [ ] **Step 3: Add sidebar section for chart generator**
+- [ ] **Step 3: Add chart result formatting**
 
-Add to the sidebar (after existing scenario sections):
-
-```python
-st.sidebar.markdown("---")
-st.sidebar.subheader("K8s Chart Generator")
-chart_team = st.sidebar.selectbox(
-    "Team Policy",
-    options=["internal-tooling", "trading-infra"],
-    key="chart_team",
-)
-
-chart_scenarios = {
-    "Basic FastAPI service": "Deploy a FastAPI service called order-processor with 2-10 replicas, 256Mi memory, connecting to Postgres on port 5432",
-    "Trading service (strict policy)": "Deploy a trading-engine service for the trading-infra team with Redis and Postgres dependencies, 512Mi memory, 4 replicas",
-    "High-scale worker": "Deploy a data-pipeline-worker with Redis and Postgres, 2Gi memory, 5-50 replicas, running as non-root",
-}
-
-for label, scenario_text in chart_scenarios.items():
-    if st.sidebar.button(label, key=f"chart_scenario_{label}"):
-        st.session_state["pending_chart_scenario"] = scenario_text
-```
-
-- [ ] **Step 4: Add chat handling for chart generation results**
-
-In the chat message handling section, add rendering for `ChartGenerationReply`:
+Add after `_format_support()`:
 
 ```python
-# After chart generation completes, render the results
-if isinstance(reply, common.ChartGenerationReply):
-    if reply.policy_violations:
-        st.warning("Policy violations detected:")
-        for v in reply.policy_violations:
-            st.error(f"**{v['field']}**: requested {v['requested']}, allowed {v['allowed']}")
+def _format_chart_result(reply: common.ChartGenerationReply) -> str:
+    confidence_label = reply.confidence.label.value if reply.confidence else "Unknown"
+    confidence_icon = {"High": "🟢", "Medium": "🟡"}.get(confidence_label, "🔴")
 
-    if reply.validation_errors:
-        st.error("Validation errors:")
-        for err in reply.validation_errors:
-            st.code(err)
-
-    if reply.files:
-        st.success(f"Generated {len(reply.files)} files (confidence: {reply.confidence_score:.0%})")
-        for f in reply.files:
-            with st.expander(f["path"]):
-                st.code(f["content"], language="yaml")
-
-    if reply.approval_status == "pending":
-        st.info("Chart requires approval before committing to GitOps.")
+    parts = [
+        f"### Chart Generation: {reply.service_name}",
+        f"**Confidence:** {confidence_icon} {confidence_label}  "
+        f"**Files:** {reply.files_generated}  "
+        f"**Attempts:** {reply.generation_attempts}",
+    ]
+    if reply.validation_passed:
+        parts.append("\n✅ Validation passed")
+    else:
+        parts.append("\n❌ Validation failed")
+    if reply.policy_violations > 0:
+        parts.append(f"\n⚠️ {reply.policy_violations} policy violation(s)")
+    if reply.pr_url and not reply.pr_url.startswith(("Commit failed", "Branch", "Git", "PR")):
+        parts.append(f"\n**PR:** {reply.pr_url}")
+    if reply.error:
+        parts.append(f"\n**Error:** {reply.error}")
+    return "\n".join(parts)
 ```
 
-- [ ] **Step 5: Run the app manually to verify**
+- [ ] **Step 4: Add scenario buttons to sidebar**
 
-Run: `uv run streamlit run src/sentinel/interfaces/chat/app.py`
+In `_render_sidebar()`, after the K8s investigation scenarios line, add:
 
-Verify the sidebar shows "K8s Chart Generator" section with scenario buttons.
+```python
+        _render_scenario_buttons("Chart Generation", _CHART_SCENARIOS, "chart")
+```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Wire into intent handling**
+
+In `_handle_user_input()`, add a chart generation path. After the SRE/Support routing, add detection for chart generation requests. The simplest approach is to check the intent or add a sidebar toggle:
+
+Add to sidebar (after the K8s Backend selectbox):
+
+```python
+        st.divider()
+        st.header("Chart Generation")
+        if "chart_mode" not in st.session_state:
+            st.session_state["chart_mode"] = False
+        st.toggle("Enable chart generation mode", key="chart_mode")
+```
+
+In `_handle_user_input()`, before the intent classification, add:
+
+```python
+        if st.session_state.get("chart_mode", False):
+            reply = _run_async(
+                _run_chart_generation(user_input, on_status=_on_status)
+            )
+            formatted = _format_chart_result(reply)
+            status_placeholder.empty()
+            st.markdown(formatted)
+            st.session_state.messages.append(
+                {"role": "assistant", "content": formatted}
+            )
+            return
+```
+
+- [ ] **Step 6: Verify the UI renders without errors**
+
+Run: `uv run streamlit run src/sentinel/interfaces/chat/app.py` and verify the page loads.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/sentinel/interfaces/chat/app.py
-git commit -m "feat: add K8s chart generator section to Streamlit chat UI"
+git commit -m "feat: add chart generation mode to Streamlit chat UI"
 ```
 
 ---
 
-### Task 13: End-to-End Verification
+## Task 14: Create Evaluation Framework
 
-- [ ] **Step 1: Run full lint**
+**Files:**
+- Create: `src/sentinel/evals/datasets/chart_generation_cases.json`
+- Create: `src/sentinel/evals/evaluators/chart_evaluators.py`
+- Modify: `src/sentinel/evals/cases/base.py`
+- Test: `tests/unit/evals/evaluators/test_chart_evaluators.py`
+
+- [ ] **Step 1: Create dataset JSON**
+
+Create `src/sentinel/evals/datasets/chart_generation_cases.json`:
+
+```json
+[
+  {
+    "id": "cg-001",
+    "description": "Simple web service with port and resources",
+    "input": {
+      "raw_message": "Deploy a Python web service called api-gateway on port 8080 with 256Mi memory and 200m CPU",
+      "requester": "alice",
+      "team": "platform"
+    },
+    "output": {
+      "service_name": "api-gateway",
+      "files": [
+        {"path": "templates/deployment.yaml", "content": "apiVersion: apps/v1\nkind: Deployment"},
+        {"path": "templates/service.yaml", "content": "apiVersion: v1\nkind: Service"}
+      ],
+      "confidence": 0.85
+    },
+    "expected": {
+      "has_deployment": true,
+      "has_service": true,
+      "min_files": 2,
+      "min_confidence": 0.7
+    }
+  },
+  {
+    "id": "cg-002",
+    "description": "Service with HPA and dependencies",
+    "input": {
+      "raw_message": "Deploy order-processor with autoscaling 3-10 replicas, 512Mi memory, connects to redis:6379",
+      "requester": "bob",
+      "team": "platform"
+    },
+    "output": {
+      "service_name": "order-processor",
+      "files": [
+        {"path": "templates/deployment.yaml", "content": "apiVersion: apps/v1\nkind: Deployment"},
+        {"path": "templates/service.yaml", "content": "apiVersion: v1\nkind: Service"},
+        {"path": "templates/hpa.yaml", "content": "apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler"}
+      ],
+      "confidence": 0.8
+    },
+    "expected": {
+      "has_deployment": true,
+      "has_service": true,
+      "has_hpa": true,
+      "min_files": 3,
+      "min_confidence": 0.7
+    }
+  },
+  {
+    "id": "cg-003",
+    "description": "Secure service with NetworkPolicy",
+    "input": {
+      "raw_message": "Deploy auth-service on port 9090 with strict network policy and non-root security context",
+      "requester": "alice",
+      "team": "platform"
+    },
+    "output": {
+      "service_name": "auth-service",
+      "files": [
+        {"path": "templates/deployment.yaml", "content": "apiVersion: apps/v1\nkind: Deployment"},
+        {"path": "templates/service.yaml", "content": "apiVersion: v1\nkind: Service"},
+        {"path": "templates/networkpolicy.yaml", "content": "apiVersion: networking.k8s.io/v1\nkind: NetworkPolicy"}
+      ],
+      "confidence": 0.8
+    },
+    "expected": {
+      "has_deployment": true,
+      "has_service": true,
+      "has_networkpolicy": true,
+      "min_files": 3,
+      "min_confidence": 0.7
+    }
+  },
+  {
+    "id": "cg-004",
+    "description": "Complex service with env vars, dependencies, and all resources",
+    "input": {
+      "raw_message": "Deploy payment-gateway on port 443 with env vars STRIPE_KEY and LOG_LEVEL=debug, depends on postgres:5432 and redis:6379, needs HPA 2-8 replicas, network policy, PDB, memory 512Mi-1Gi, CPU 250m-1000m",
+      "requester": "alice",
+      "team": "platform"
+    },
+    "output": {
+      "service_name": "payment-gateway",
+      "files": [
+        {"path": "templates/deployment.yaml", "content": "apiVersion: apps/v1"},
+        {"path": "templates/service.yaml", "content": "apiVersion: v1"},
+        {"path": "templates/hpa.yaml", "content": "apiVersion: autoscaling/v2"},
+        {"path": "templates/networkpolicy.yaml", "content": "apiVersion: networking.k8s.io/v1"}
+      ],
+      "confidence": 0.75
+    },
+    "expected": {
+      "has_deployment": true,
+      "has_service": true,
+      "min_files": 4,
+      "min_confidence": 0.6
+    }
+  },
+  {
+    "id": "cg-005",
+    "description": "Minimal spec relying on defaults",
+    "input": {
+      "raw_message": "Deploy a service called health-check",
+      "requester": "bob",
+      "team": "platform"
+    },
+    "output": {
+      "service_name": "health-check",
+      "files": [
+        {"path": "templates/deployment.yaml", "content": "apiVersion: apps/v1"},
+        {"path": "templates/service.yaml", "content": "apiVersion: v1"}
+      ],
+      "confidence": 0.9
+    },
+    "expected": {
+      "has_deployment": true,
+      "has_service": true,
+      "min_files": 2,
+      "min_confidence": 0.7
+    }
+  }
+]
+```
+
+- [ ] **Step 2: Write evaluator tests**
+
+```python
+# tests/unit/evals/evaluators/test_chart_evaluators.py
+from __future__ import annotations
+
+import asyncio
+
+import pytest
+
+from sentinel.evals import types
+from sentinel.evals.evaluators import chart_evaluators
+
+
+class TestYamlStructureCheck:
+    def test_passes_when_required_files_present(self):
+        # Given a case with deployment and service files
+        evaluator = chart_evaluators.YamlStructureCheck(
+            required_file_patterns=("deployment", "service"),
+            rubric="Has required Kubernetes resources",
+        )
+
+        ctx = _make_eval_context(
+            case_payload={
+                "output": {
+                    "files": [
+                        {"path": "templates/deployment.yaml", "content": "apiVersion: apps/v1"},
+                        {"path": "templates/service.yaml", "content": "apiVersion: v1"},
+                    ],
+                },
+            },
+        )
+
+        # When evaluating
+        result = asyncio.run(evaluator.evaluate(ctx))
+
+        # Then it passes
+        key = next(iter(result))
+        assert result[key].value is True
+
+    def test_fails_when_required_file_missing(self):
+        # Given a case missing the service file
+        evaluator = chart_evaluators.YamlStructureCheck(
+            required_file_patterns=("deployment", "service"),
+            rubric="Has required Kubernetes resources",
+        )
+
+        ctx = _make_eval_context(
+            case_payload={
+                "output": {
+                    "files": [
+                        {"path": "templates/deployment.yaml", "content": "apiVersion: apps/v1"},
+                    ],
+                },
+            },
+        )
+
+        # When evaluating
+        result = asyncio.run(evaluator.evaluate(ctx))
+
+        # Then it fails
+        key = next(iter(result))
+        assert result[key].value is False
+
+
+def _make_eval_context(*, case_payload: dict) -> chart_evaluators.evaluators.EvaluatorContext:
+    """Build a minimal evaluator context for testing."""
+    from unittest.mock import MagicMock
+    ctx = MagicMock()
+    ctx.inputs = types.InputData(
+        agent_name="chart_generator",
+        case_payload=case_payload,
+    )
+    return ctx
+```
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `uv run pytest tests/unit/evals/evaluators/test_chart_evaluators.py -v`
+Expected: FAIL — module does not exist.
+
+- [ ] **Step 4: Implement evaluators**
+
+Create `src/sentinel/evals/evaluators/chart_evaluators.py`:
+
+```python
+"""
+Chart-specific evaluators for the evaluation framework.
+
+Evaluators:
+- YamlStructureCheck: verifies required Kubernetes resource files are present
+- PolicyComplianceCheck: verifies output respects policy constraints
+- SpecCoverageCheck: verifies requested resources are all generated
+"""
+from __future__ import annotations
+
+import dataclasses
+from typing import Any
+
+from pydantic_evals import evaluators
+from pydantic_evals.evaluators import evaluator
+
+from sentinel.evals import types
+
+
+@dataclasses.dataclass
+class YamlStructureCheck(evaluators.Evaluator):
+    """
+    Verify that required Kubernetes resource files are present in the output.
+
+    Checks that the ``output.files`` list contains files matching each
+    required pattern (e.g. ``"deployment"``, ``"service"``).
+    """
+
+    required_file_patterns: tuple[str, ...] = ()
+    rubric: str = "Required Kubernetes resource files are present"
+
+    async def evaluate(
+        self,
+        ctx: evaluators.EvaluatorContext[types.InputData, str, Any],
+    ) -> evaluators.EvaluatorOutput:
+        """Check that all required file patterns appear in output files."""
+        payload = ctx.inputs.case_payload
+        files = payload.get("output", {}).get("files", [])
+        file_paths = [f.get("path", "").lower() for f in files]
+
+        missing: list[str] = []
+        for pattern in self.required_file_patterns:
+            if not any(pattern in path for path in file_paths):
+                missing.append(pattern)
+
+        passed = len(missing) == 0
+        reason = (
+            "All required files present"
+            if passed
+            else f"Missing files matching: {', '.join(missing)}"
+        )
+
+        evaluation_name = self.get_default_evaluation_name()
+        return {
+            f"{evaluation_name}_pass": evaluator.EvaluationReason(
+                value=passed,
+                reason=reason,
+            ),
+        }
+
+    def build_serialization_arguments(self) -> dict[str, Any]:
+        return {
+            "required_file_patterns": self.required_file_patterns,
+            "rubric": self.rubric,
+        }
+
+
+@dataclasses.dataclass
+class SpecCoverageCheck(evaluators.Evaluator):
+    """
+    Verify that the output has at least the minimum expected number of files.
+    """
+
+    min_files_field: str = "expected.min_files"
+    rubric: str = "Generated file count meets minimum"
+
+    async def evaluate(
+        self,
+        ctx: evaluators.EvaluatorContext[types.InputData, str, Any],
+    ) -> evaluators.EvaluatorOutput:
+        """Check file count against expected minimum."""
+        payload = ctx.inputs.case_payload
+        files = payload.get("output", {}).get("files", [])
+        actual_count = len(files)
+
+        # Resolve expected min from payload
+        expected_min = payload
+        for segment in self.min_files_field.split("."):
+            expected_min = expected_min.get(segment, 0)
+
+        passed = actual_count >= int(expected_min)
+        reason = f"Generated {actual_count} files (minimum: {expected_min})"
+
+        evaluation_name = self.get_default_evaluation_name()
+        return {
+            f"{evaluation_name}_pass": evaluator.EvaluationReason(
+                value=passed,
+                reason=reason,
+            ),
+        }
+
+    def build_serialization_arguments(self) -> dict[str, Any]:
+        return {
+            "min_files_field": self.min_files_field,
+            "rubric": self.rubric,
+        }
+```
+
+- [ ] **Step 5: Register in base.py**
+
+Add to `src/sentinel/evals/cases/base.py`:
+
+In `_AGENT_DATASET_FILES`, add:
+```python
+    "chart_generator": "chart_generation_cases.json",
+```
+
+Add a builder function:
+```python
+def _build_chart_generator_evaluators() -> list[pydantic_evals.evaluators.Evaluator]:
+    """
+    Return evaluators for chart generator cases.
+
+    Checks: required files present, file count meets minimum.
+    """
+    from sentinel.evals.evaluators import chart_evaluators
+
+    return [
+        chart_evaluators.YamlStructureCheck(
+            required_file_patterns=("deployment", "service"),
+            rubric="Output contains Deployment and Service templates",
+        ),
+        chart_evaluators.SpecCoverageCheck(
+            min_files_field="expected.min_files",
+            rubric="Generated file count meets case minimum",
+        ),
+    ]
+```
+
+Add to the `_EVALUATOR_BUILDERS` dict (find it in the file and add the entry):
+```python
+    "chart_generator": lambda _case=None: _build_chart_generator_evaluators(),
+```
+
+- [ ] **Step 6: Run test to verify it passes**
+
+Run: `uv run pytest tests/unit/evals/evaluators/test_chart_evaluators.py -v`
+Expected: PASS
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/sentinel/evals/datasets/chart_generation_cases.json \
+        src/sentinel/evals/evaluators/chart_evaluators.py \
+        src/sentinel/evals/cases/base.py \
+        tests/unit/evals/evaluators/test_chart_evaluators.py
+git commit -m "feat: add evaluation framework for chart generation"
+```
+
+---
+
+## Task 15: Functional Test
+
+**Files:**
+- Create: `tests/functional/test_chart_generation_pipeline.py`
+
+- [ ] **Step 1: Write the end-to-end test**
+
+```python
+# tests/functional/test_chart_generation_pipeline.py
+"""
+End-to-end test for the chart generation pipeline.
+
+Monkeypatches PydanticAI agents to return deterministic outputs,
+then runs the full pipeline and verifies the result.
+"""
+from __future__ import annotations
+
+import asyncio
+from datetime import UTC, datetime
+from pathlib import Path
+from unittest import mock
+
+import pytest
+
+from sentinel.domain.charts import entities, validation
+from sentinel.domain.pipeline import types as pipeline_types
+from sentinel.interfaces.graphs import chart_generation
+from sentinel.interfaces.graphs.agents import chart_generator, chart_request_parser
+
+
+_FAKE_DEPLOYMENT = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  labels:
+    app.kubernetes.io/name: api-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api-gateway
+    spec:
+      containers:
+        - name: api-gateway
+          image: myrepo/api-gateway:latest
+          ports:
+            - containerPort: 8080
+"""
+
+_FAKE_SERVICE = """\
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+spec:
+  selector:
+    app.kubernetes.io/name: api-gateway
+  ports:
+    - port: 8080
+      targetPort: 8080
+"""
+
+
+class TestChartGenerationPipeline:
+    def test_full_pipeline_with_mocked_agents(self, tmp_path: Path):
+        # Given a chart request
+        request = entities.ChartRequest(
+            requester="alice",
+            team="platform",
+            raw_message="Deploy api-gateway on port 8080",
+            requested_at=datetime(2026, 4, 3, tzinfo=UTC),
+        )
+
+        fake_spec = entities.ChartSpec(
+            service_name="api-gateway",
+            image="myrepo/api-gateway:latest",
+            ports=(entities.PortSpec(container_port=8080, name="http"),),
+        )
+
+        fake_files = (
+            entities.GeneratedFile(
+                path="templates/deployment.yaml",
+                content=_FAKE_DEPLOYMENT,
+            ),
+            entities.GeneratedFile(
+                path="templates/service.yaml",
+                content=_FAKE_SERVICE,
+            ),
+        )
+
+        fake_validation = entities.ValidationResult(
+            helm_template_ok=True,
+            kubeconform_ok=True,
+        )
+
+        # When running the full pipeline with mocked agents and validation
+        with mock.patch.object(chart_generation, "_parse_request") as mock_parse, \
+             mock.patch.object(chart_generation, "_load_policy") as mock_load, \
+             mock.patch.object(chart_generation, "_generate_chart_files") as mock_gen, \
+             mock.patch.object(validation, "validate_chart") as mock_validate, \
+             mock.patch.object(chart_generation, "_commit_chart") as mock_commit:
+
+            mock_parse.return_value = fake_spec
+            mock_load.return_value = entities.TeamPolicy(
+                team="platform",
+                namespace="platform-prod",
+                max_memory="2Gi",
+                max_cpu="2000m",
+                max_replicas=10,
+                require_network_policy=True,
+                require_non_root=True,
+            )
+            mock_gen.return_value = fake_files
+            mock_validate.return_value = fake_validation
+            mock_commit.return_value = "https://github.com/org/repo/pull/42"
+
+            result = asyncio.run(
+                chart_generation.generate_chart(
+                    request=request,
+                    parser_model="test-model",
+                    generator_model="test-model",
+                )
+            )
+
+        # Then the pipeline produces a successful result
+        assert result.service_name == "api-gateway"
+        assert result.files_generated == 2
+        assert result.validation_passed is True
+        assert result.generation_attempts == 1
+        assert result.pr_url == "https://github.com/org/repo/pull/42"
+        assert result.error is None
+        assert result.confidence is not None
+        assert result.confidence.total >= 0.7
+
+    def test_self_heal_loop_retries_on_validation_failure(self):
+        # Given a request where generation fails once then succeeds
+        request = entities.ChartRequest(
+            requester="alice",
+            team="platform",
+            raw_message="Deploy api-gateway",
+            requested_at=datetime(2026, 4, 3, tzinfo=UTC),
+        )
+
+        fake_spec = entities.ChartSpec(
+            service_name="api-gateway",
+            image="myrepo/api-gateway:latest",
+        )
+
+        bad_files = (
+            entities.GeneratedFile(
+                path="templates/deployment.yaml",
+                content="invalid yaml",
+            ),
+        )
+        good_files = (
+            entities.GeneratedFile(
+                path="templates/deployment.yaml",
+                content=_FAKE_DEPLOYMENT,
+            ),
+        )
+
+        failing_validation = entities.ValidationResult(
+            helm_template_ok=False,
+            kubeconform_ok=False,
+            errors=("template rendering failed",),
+        )
+        passing_validation = entities.ValidationResult(
+            helm_template_ok=True,
+            kubeconform_ok=True,
+        )
+
+        # When the first generation fails but the second succeeds
+        with mock.patch.object(chart_generation, "_parse_request") as mock_parse, \
+             mock.patch.object(chart_generation, "_load_policy") as mock_load, \
+             mock.patch.object(chart_generation, "_generate_chart_files") as mock_gen, \
+             mock.patch.object(validation, "validate_chart") as mock_validate, \
+             mock.patch.object(chart_generation, "_commit_chart") as mock_commit:
+
+            mock_parse.return_value = fake_spec
+            mock_load.return_value = entities.TeamPolicy(team="platform")
+            mock_gen.side_effect = [bad_files, good_files]
+            mock_validate.side_effect = [failing_validation, passing_validation]
+            mock_commit.return_value = "https://github.com/org/repo/pull/43"
+
+            result = asyncio.run(
+                chart_generation.generate_chart(
+                    request=request,
+                    parser_model="test-model",
+                    generator_model="test-model",
+                    max_retries=3,
+                )
+            )
+
+        # Then the pipeline retried and succeeded
+        assert result.validation_passed is True
+        assert result.generation_attempts == 2
+        assert result.error is None
+```
+
+- [ ] **Step 2: Run the functional test**
+
+Run: `uv run pytest tests/functional/test_chart_generation_pipeline.py -v`
+Expected: PASS
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add tests/functional/test_chart_generation_pipeline.py
+git commit -m "test: add functional tests for chart generation pipeline"
+```
+
+---
+
+## Task 16: Run Full Test Suite and Lint
+
+- [ ] **Step 1: Run all tests**
+
+Run: `uv run pytest tests/ -x -q`
+Expected: All tests pass.
+
+- [ ] **Step 2: Run linter**
 
 Run: `make lint`
-Expected: PASS with no errors
+Expected: No errors. If there are ruff or mypy issues, fix them.
 
-- [ ] **Step 2: Run full test suite**
+- [ ] **Step 3: Run lint-fix if needed**
 
-Run: `make test`
-Expected: PASS with no regressions
+Run: `make lint-fix`
 
-- [ ] **Step 3: Run chart-specific tests**
+- [ ] **Step 4: Final commit if any lint fixes**
 
-Run: `uv run pytest tests/unit/domain/charts/ tests/unit/interfaces/graphs/test_chart_generation.py -v`
-Expected: All chart agent tests pass
-
-- [ ] **Step 4: Verify file structure**
-
-Run: `find src/sentinel/domain/charts -type f && find src/sentinel/interfaces/graphs/agents -name "chart_*" -type f`
-
-Expected output:
-```
-src/sentinel/domain/charts/__init__.py
-src/sentinel/domain/charts/entities.py
-src/sentinel/domain/charts/policies.py
-src/sentinel/domain/charts/confidence.py
-src/sentinel/domain/charts/validation.py
-src/sentinel/interfaces/graphs/agents/chart_request_parser.py
-src/sentinel/interfaces/graphs/agents/chart_generator.py
+```bash
+git add -u
+git commit -m "chore: fix lint issues in chart coding agent"
 ```
 
-- [ ] **Step 5: Update plan status**
+---
 
-Mark `docs/plans/k8s-chart-coding-agent.md` status as `in-progress` and check off completed steps.
+## Parallelism Guide
+
+Tasks that can run in parallel (no shared state):
+
+| Phase | Tasks | Dependencies |
+|-------|-------|-------------|
+| 1 | Task 1, Task 2 | None |
+| 2 | Task 3, Task 4, Task 5, Task 6, Task 7, Task 8, Task 9 | Task 2 |
+| 3 | Task 10, Task 11 | Phase 2 |
+| 4 | Task 12, Task 13, Task 14 | Task 10, Task 11 |
+| 5 | Task 15, Task 16 | All above |

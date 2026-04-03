@@ -35,7 +35,7 @@ async def _run_command(
         cwd=cwd,
     )
     stdout, stderr = await proc.communicate()
-    return proc.returncode, stdout.decode().strip(), stderr.decode().strip()
+    return proc.returncode or 0, stdout.decode().strip(), stderr.decode().strip()
 
 
 def write_chart_files(
