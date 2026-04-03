@@ -627,27 +627,82 @@ _CHART_SCENARIOS: tuple[dict[str, str], ...] = (
 
 
 def _render_audit_trail(audit_trail: list[dict[str, Any]]) -> None:
-    """Render investigation audit trail as a timeline."""
+    """Render an audit trail as an expandable timeline."""
     if not audit_trail:
+        st.caption("No audit trail entries.")
         return
 
-    with st.expander("Audit Trail", expanded=False):
-        for entry in audit_trail:
-            status = entry.get("status", "unknown")
-            status_icon = {"success": "\u2705", "error": "\u274c", "timeout": "\u26a0\ufe0f"}.get(
-                status, "\u2753"
-            )
-            tool = entry.get("tool_name") or entry.get("action", "unknown")
-            duration = entry.get("duration_ms", 0)
+    for entry in audit_trail:
+        status = entry.get("status", "unknown")
+        if status == "success":
+            badge = ":green[OK]"
+        elif status == "error":
+            badge = ":red[ERR]"
+        else:
+            badge = ":orange[???]"
 
-            st.markdown(
-                f"{status_icon} **{tool}** — {duration}ms — `{entry.get('adapter_name', '')}`"
-            )
-            if entry.get("error_code"):
-                st.error(f"Error: {entry['error_code']}")
-            if entry.get("payload"):
-                with st.expander(f"Payload: {tool}", expanded=False):
-                    st.json(entry["payload"])
+        tool = entry.get("tool_name") or entry.get("action", "unknown")
+        duration = entry.get("duration_ms", 0)
+        timestamp = entry.get("timestamp", "")
+
+        st.markdown(f"{badge} **{tool}** — {duration}ms | {timestamp}")
+
+        payload = entry.get("payload")
+        if payload:
+            with st.expander("Payload", expanded=False):
+                st.json(payload)
+
+
+def _render_comparison(
+    holmes_reply: common.InvestigationReply,
+    k8s_data: dict[str, Any],
+) -> None:
+    """Render side-by-side comparison of two investigation backends."""
+    st.subheader("Backend Comparison")
+
+    col_left, col_right = st.columns(2)
+
+    with col_left:
+        st.markdown("### Holmes (baseline)")
+        confidence_val = holmes_reply.confidence.total if holmes_reply.confidence else "N/A"
+        st.metric("Confidence", f"{confidence_val}")
+        st.markdown(f"**Sources:** {', '.join(holmes_reply.sources_queried)}")
+        if holmes_reply.findings_summary:
+            st.markdown("**Findings:**")
+            st.markdown(holmes_reply.findings_summary)
+
+    with col_right:
+        adapter = k8s_data.get("adapter_name", "K8s")
+        st.markdown(f"### {adapter} (challenger)")
+        duration = k8s_data.get("duration_ms", 0)
+        st.metric("Duration", f"{duration}ms")
+        sources = k8s_data.get("sources_queried", [])
+        st.markdown(f"**Sources:** {', '.join(sources)}")
+        findings = k8s_data.get("findings", [])
+        if findings:
+            st.markdown("**Findings:**")
+            for finding in findings:
+                st.markdown(f"- {finding}")
+
+    # Summary row
+    st.divider()
+    holmes_sources = len(holmes_reply.sources_queried)
+    k8s_sources = len(k8s_data.get("sources_queried", []))
+    k8s_duration = k8s_data.get("duration_ms", 0)
+
+    summary_parts: list[str] = []
+    if k8s_duration > 0:
+        summary_parts.append(f"**Faster:** {adapter} ({k8s_duration}ms)")
+    if holmes_sources != k8s_sources:
+        more_sources = (
+            "Holmes"
+            if holmes_sources > k8s_sources
+            else k8s_data.get("adapter_name", "K8s")
+        )
+        summary_parts.append(f"**More sources:** {more_sources}")
+
+    if summary_parts:
+        st.markdown(" | ".join(summary_parts))
 
 
 # ---------------------------------------------------------------------------
@@ -746,28 +801,36 @@ def _render_sidebar() -> None:
         )
 
 
-def _render_k8s_result() -> None:
-    """Show K8s investigation result if a K8s backend was active."""
-    k8s_result = st.session_state.pop("last_k8s_result", None)
-    if not k8s_result:
+def _render_k8s_result(
+    reply: common.InvestigationReply | None = None,
+) -> None:
+    """
+    Show K8s investigation result if a K8s backend was active.
+
+    When the backend is "Both (comparison)" and a *reply* is provided,
+    renders a side-by-side comparison instead of a simple expander.
+    """
+    k8s_data = st.session_state.pop("last_k8s_result", None)
+    if not k8s_data:
         return
 
-    with st.expander(
-        f"K8s Investigation ({k8s_result['adapter_name']}) — {k8s_result['duration_ms']}ms",
-        expanded=True,
-    ):
-        if k8s_result["findings"]:
-            st.markdown("**Findings:**")
-            for finding in k8s_result["findings"]:
+    backend = st.session_state.get("k8s_backend", "Disabled")
+
+    # Side-by-side comparison mode
+    if backend == "Both (comparison)" and reply is not None:
+        _render_comparison(holmes_reply=reply, k8s_data=k8s_data)
+    else:
+        with st.expander(
+            f"K8s Investigation ({k8s_data['adapter_name']})",
+            expanded=False,
+        ):
+            for finding in k8s_data.get("findings", []):
                 st.markdown(f"- {finding}")
-        else:
-            st.info(
-                "No findings (K8s client not configured — connect a cluster to get real results)"
-            )
-        if k8s_result["sources_queried"]:
-            st.caption(f"Sources: {', '.join(k8s_result['sources_queried'])}")
-        if k8s_result["audit_trail"]:
-            _render_audit_trail(k8s_result["audit_trail"])
+
+    # Always show audit trail when K8s data exists
+    if k8s_data:
+        with st.expander("K8s Audit Trail", expanded=False):
+            _render_audit_trail(k8s_data.get("audit_trail", []))
 
 
 def _handle_user_input(user_input: str) -> None:
@@ -809,7 +872,7 @@ def _handle_user_input(user_input: str) -> None:
 
             status_placeholder.empty()
             st.markdown(formatted)
-            _render_k8s_result()
+            _render_k8s_result(reply=reply if is_sre else None)
 
             st.session_state.messages.append(
                 {"role": "assistant", "content": formatted, "traces": collector.traces}
