@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from sentinel.domain.charts import entities as chart_entities
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre import holmes_adapter
@@ -156,3 +157,118 @@ class MockHolmesAdapter(holmes_adapter.BaseHolmesAdapter):
         context: holmes_adapter.investigation.InvestigationContext | None = None,
     ) -> holmes_adapter.HolmesInvestigationResult:
         return self._result
+
+
+def make_chart_request(
+    *,
+    requester: str = "alice",
+    team: str = "platform",
+    raw_message: str = "Deploy a Python web service called api-gateway on port 8080 with 256Mi memory",
+    requested_at: datetime | None = None,
+) -> chart_entities.ChartRequest:
+    return chart_entities.ChartRequest(
+        requester=requester,
+        team=team,
+        raw_message=raw_message,
+        requested_at=requested_at or datetime(2026, 4, 1, tzinfo=UTC),
+    )
+
+
+def make_chart_spec(
+    *,
+    service_name: str = "api-gateway",
+    image: str = "myrepo/api-gateway:latest",
+    ports: tuple[chart_entities.PortSpec, ...] = (
+        chart_entities.PortSpec(container_port=8080, name="http"),
+    ),
+    replicas: chart_entities.ReplicaSpec | None = None,
+    resources: chart_entities.ResourceSpec | None = None,
+    run_as_non_root: bool = True,
+    env_vars: tuple[chart_entities.EnvVarSpec, ...] = (),
+    dependencies: tuple[chart_entities.DependencySpec, ...] = (),
+    extra_resources: tuple[str, ...] = (),
+) -> chart_entities.ChartSpec:
+    return chart_entities.ChartSpec(
+        service_name=service_name,
+        image=image,
+        ports=ports,
+        replicas=replicas or chart_entities.ReplicaSpec(min_replicas=2, max_replicas=5),
+        resources=resources
+        or chart_entities.ResourceSpec(
+            cpu_request="100m",
+            cpu_limit="500m",
+            memory_request="128Mi",
+            memory_limit="256Mi",
+        ),
+        run_as_non_root=run_as_non_root,
+        env_vars=env_vars,
+        dependencies=dependencies,
+        extra_resources=extra_resources,
+    )
+
+
+def make_team_policy(
+    *,
+    team: str = "platform",
+    namespace: str = "platform-prod",
+    max_memory: str = "2Gi",
+    max_cpu: str = "2000m",
+    max_replicas: int = 10,
+    require_network_policy: bool = True,
+    require_non_root: bool = True,
+    allowed_egress: tuple[chart_entities.EgressRule, ...] = (),
+    default_labels: dict[str, str] | None = None,
+) -> chart_entities.TeamPolicy:
+    return chart_entities.TeamPolicy(
+        team=team,
+        namespace=namespace,
+        max_memory=max_memory,
+        max_cpu=max_cpu,
+        max_replicas=max_replicas,
+        require_network_policy=require_network_policy,
+        require_non_root=require_non_root,
+        allowed_egress=allowed_egress,
+        default_labels=default_labels or {"team": team},
+    )
+
+
+def make_generated_file(
+    *,
+    path: str = "templates/deployment.yaml",
+    content: str = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api-gateway",
+) -> chart_entities.GeneratedFile:
+    return chart_entities.GeneratedFile(path=path, content=content)
+
+
+def make_validation_result(
+    *,
+    helm_template_ok: bool = True,
+    kubeconform_ok: bool = True,
+    errors: tuple[str, ...] = (),
+    warnings: tuple[str, ...] = (),
+) -> chart_entities.ValidationResult:
+    return chart_entities.ValidationResult(
+        helm_template_ok=helm_template_ok,
+        kubeconform_ok=kubeconform_ok,
+        errors=errors,
+        warnings=warnings,
+    )
+
+
+def make_chart_output(
+    *,
+    service_name: str = "api-gateway",
+    files: tuple[chart_entities.GeneratedFile, ...] | None = None,
+    validation_result: chart_entities.ValidationResult | None = None,
+    policy_violations: tuple[chart_entities.PolicyViolation, ...] = (),
+    generation_attempts: int = 1,
+    confidence_score: float | None = None,
+) -> chart_entities.ChartOutput:
+    return chart_entities.ChartOutput(
+        service_name=service_name,
+        files=files or (make_generated_file(),),
+        validation_result=validation_result,
+        policy_violations=policy_violations,
+        generation_attempts=generation_attempts,
+        confidence_score=confidence_score,
+    )
