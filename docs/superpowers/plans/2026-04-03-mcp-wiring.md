@@ -37,7 +37,7 @@
 - Modify: `src/sentinel/config.py:159-183`
 - Create: `tests/unit/test_config_mcp_wiring.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_config_mcp_wiring.py
@@ -112,12 +112,12 @@ class TestBuildK8sInvestigationAdapterMcpWiring:
         assert len(adapter._mcp_toolsets) == 0
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `just test tests/unit/test_config_mcp_wiring.py -v`
 Expected: FAIL — `Config` doesn't read `mcp_servers` in `build_k8s_investigation_adapter` yet.
 
-- [ ] **Step 3: Implement MCP toolset injection in config.py**
+- [x] **Step 3: Implement MCP toolset injection in config.py**
 
 In `src/sentinel/config.py`, replace the `build_k8s_investigation_adapter` method (lines 159-183):
 
@@ -162,12 +162,12 @@ In `src/sentinel/config.py`, replace the `build_k8s_investigation_adapter` metho
         return None  # kagent adapter wired separately
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `just test tests/unit/test_config_mcp_wiring.py -v`
 Expected: All 3 tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/config.py tests/unit/test_config_mcp_wiring.py
@@ -182,7 +182,7 @@ git commit -m "feat: wire MCP client toolsets into K8s investigation adapter"
 - Modify: `src/sentinel/interfaces/mcp/tools/investigation.py`
 - Modify: `tests/unit/interfaces/mcp/test_server.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Replace the two existing investigation tool tests in `tests/unit/interfaces/mcp/test_server.py` with tests for the new database-backed implementations:
 
@@ -266,12 +266,12 @@ class TestMcpInvestigationTools:
         assert "not available" in result.lower()
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `just test tests/unit/interfaces/mcp/test_server.py::TestMcpInvestigationTools -v`
 Expected: FAIL — functions don't accept `db` parameter yet.
 
-- [ ] **Step 3: Implement real investigation tools**
+- [x] **Step 3: Implement real investigation tools**
 
 Replace `src/sentinel/interfaces/mcp/tools/investigation.py` entirely:
 
@@ -391,12 +391,12 @@ async def get_investigation_status(
     return f"Investigation {investigation_id}: status={status}, type={job_type}, created={created}"
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `just test tests/unit/interfaces/mcp/test_server.py::TestMcpInvestigationTools -v`
 Expected: All 5 tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/interfaces/mcp/tools/investigation.py tests/unit/interfaces/mcp/test_server.py
@@ -410,7 +410,7 @@ git commit -m "feat: wire investigation MCP tools to real database operations"
 **Files:**
 - Modify: `src/sentinel/interfaces/mcp/server.py`
 
-- [ ] **Step 1: Update configure() and tool wiring**
+- [x] **Step 1: Update configure() and tool wiring**
 
 In `src/sentinel/interfaces/mcp/server.py`, make these changes:
 
@@ -464,17 +464,17 @@ async def get_investigation_status(investigation_id: str) -> str:
     return await inv_tools.get_investigation_status(db=_db, investigation_id=investigation_id)
 ```
 
-- [ ] **Step 2: Verify the module imports cleanly**
+- [x] **Step 2: Verify the module imports cleanly**
 
 Run: `python -c "from sentinel.interfaces.mcp import server; print('OK')"`
 Expected: `OK`
 
-- [ ] **Step 3: Run all MCP tests**
+- [x] **Step 3: Run all MCP tests**
 
 Run: `just test tests/unit/interfaces/mcp/ -v`
 Expected: All tests PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/sentinel/interfaces/mcp/server.py
@@ -485,28 +485,28 @@ git commit -m "feat: add database injection to MCP server configure()"
 
 ## Task 4: Full Verification
 
-- [ ] **Step 1: Run full unit test suite**
+- [x] **Step 1: Run full unit test suite**
 
 Run: `just test`
 Expected: All tests PASS.
 
-- [ ] **Step 2: Run linter**
+- [x] **Step 2: Run linter**
 
 Run: `just lint`
 Expected: No errors.
 
-- [ ] **Step 3: Fix any lint issues**
+- [x] **Step 3: Fix any lint issues**
 
 Run: `just lint-fix` if formatting needed, then re-run `just lint`.
 
-- [ ] **Step 4: Commit any fixes**
+- [x] **Step 4: Commit any fixes**
 
 ```bash
 git add -u
 git commit -m "fix: resolve lint issues from MCP wiring"
 ```
 
-- [ ] **Step 5: Update plan checkboxes**
+- [x] **Step 5: Update plan checkboxes**
 
 In `docs/plans/k8s-agent-and-mcp-integration.md`, check off Step 18:
 

@@ -308,7 +308,7 @@ The local testing chat app (`interfaces/chat/app.py`) gains:
 - [x] Step 15: Add `fastmcp` dependency to `pyproject.toml`
 - [x] Step 16: Create `interfaces/mcp/server.py` FastMCP app with observability, documentation, investigation tools
 - [x] Step 17: Create `plugins/toolsets/mcp.py` MCP client toolset builder
-- [ ] Step 18: Wire MCP client into K8s native agent (optional kubectl MCP server) — MCP tool implementations are stubs ("not yet wired")
+- [x] Step 18: Wire MCP client into K8s native agent (optional kubectl MCP server) — config.py builds toolsets from MCP_SERVERS + K8S_MCP_SERVER_URL, investigation tools wired to real DB
 - [x] Step 19: Add `MCP_SERVERS` and `K8S_MCP_SERVER_URL` config vars
 - [x] Step 20: Unit tests for MCP server tools and client builder
 
