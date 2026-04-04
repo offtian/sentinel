@@ -33,6 +33,7 @@ class TestPostInvestigationSummary:
         mock_slack_client.chat_postMessage = AsyncMock(return_value={"ok": True})
 
         with (
+            patch.object(slack, "_client", None),
             patch("sentinel.vendors.slack.get_settings") as mock_gs,
             patch("sentinel.vendors.slack.logs"),
             patch("sentinel.vendors.slack.AsyncWebClient", return_value=mock_slack_client),
@@ -62,6 +63,7 @@ class TestPostInvestigationSummary:
         mock_slack_client.chat_postMessage = AsyncMock(return_value={"ok": True})
 
         with (
+            patch.object(slack, "_client", None),
             patch("sentinel.vendors.slack.get_settings") as mock_gs,
             patch("sentinel.vendors.slack.logs"),
             patch("sentinel.vendors.slack.AsyncWebClient", return_value=mock_slack_client),
@@ -90,6 +92,7 @@ class TestPostInvestigationSummary:
         mock_slack_client.chat_postMessage = AsyncMock(side_effect=Exception("Slack API down"))
 
         with (
+            patch.object(slack, "_client", None),
             patch("sentinel.vendors.slack.get_settings") as mock_gs,
             patch("sentinel.vendors.slack.logs") as mock_logs,
             patch("sentinel.vendors.slack.AsyncWebClient", return_value=mock_slack_client),
@@ -135,6 +138,7 @@ class TestPostSupportSuggestion:
         mock_slack_client.chat_postMessage = AsyncMock(return_value={"ok": True})
 
         with (
+            patch.object(slack, "_client", None),
             patch("sentinel.vendors.slack.get_settings") as mock_gs,
             patch("sentinel.vendors.slack.logs"),
             patch("sentinel.vendors.slack.AsyncWebClient", return_value=mock_slack_client),
