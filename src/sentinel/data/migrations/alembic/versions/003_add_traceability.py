@@ -2,7 +2,7 @@
 Add pipeline traceability tables and trace_id correlation columns.
 
 Revision ID: 003
-Revises: 002
+Revises: 002a
 Create Date: 2026-04-04
 
 Adds:
@@ -17,7 +17,7 @@ from alembic import op
 
 
 revision = "003"
-down_revision = "002"
+down_revision = "002a"
 branch_labels = None
 depends_on = None
 
@@ -108,6 +108,6 @@ def downgrade() -> None:
     op.drop_table("agent_calls")
     op.drop_table("node_executions")
     op.drop_table("pipeline_runs")
-    op.remove_column("job_requests", "trace_id")
-    op.remove_column("ticket_review_records", "trace_id")
-    op.remove_column("investigation_records", "trace_id")
+    op.drop_column("job_requests", "trace_id")
+    op.drop_column("ticket_review_records", "trace_id")
+    op.drop_column("investigation_records", "trace_id")
