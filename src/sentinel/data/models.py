@@ -33,6 +33,7 @@ class InvestigationRecord(SQLModel, table=True):
         default_factory=lambda: datetime.now(tz=UTC),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
+    trace_id: uuid.UUID | None = Field(default=None, index=True)
 
 
 class TicketReviewRecord(SQLModel, table=True):
@@ -53,3 +54,4 @@ class TicketReviewRecord(SQLModel, table=True):
     reviewed_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
+    trace_id: uuid.UUID | None = Field(default=None, index=True)

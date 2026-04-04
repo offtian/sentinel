@@ -39,6 +39,7 @@ class JobRequestRecord(SQLModel, table=True):
         default_factory=lambda: datetime.now(tz=UTC),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
+    trace_id: uuid.UUID | None = Field(default=None, index=True)
 
 
 class JobResultRecord(SQLModel, table=True):
