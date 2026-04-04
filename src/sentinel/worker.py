@@ -25,6 +25,7 @@ from sentinel.application.sre import persist as sre_persist
 from sentinel.application.support import persist as support_persist
 from sentinel.config import get_config
 from sentinel.data import database, job_models
+from sentinel.data import db as async_db
 from sentinel.domain.jobs import entities
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.support import entities as support_entities
@@ -283,6 +284,7 @@ async def _main() -> None:
 
     if get_settings().database_url:
         database.get_engine()
+        await async_db.connect_db()
         logs.log_event("worker.database_initialised")
 
     try:
@@ -291,6 +293,8 @@ async def _main() -> None:
         else:
             await _poll_loop(worker_id=worker_id)
     finally:
+        if get_settings().database_url:
+            await async_db.disconnect_db()
         await database.close_engine()
 
 

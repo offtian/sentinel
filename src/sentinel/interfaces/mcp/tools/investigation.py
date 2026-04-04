@@ -7,6 +7,7 @@ When the database is not configured, returns fallback messages.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from typing import Any
@@ -24,7 +25,7 @@ async def trigger_investigation(
     description: str = "",
 ) -> str:
     """
-    Trigger an SRE investigation by inserting a job request.
+    Trigger an SRE investigation by enqueuing a job request.
 
     :param db: The async database connection (None when unconfigured).
     :param alert_source: Source of the alert (e.g. "pagerduty", "datadog").
@@ -36,13 +37,14 @@ async def trigger_investigation(
         return "Database not available. Cannot enqueue investigation."
 
     job_id = uuid.uuid4()
-    payload = json.dumps(
+    payload_json = json.dumps(
         {
             "alert_source": alert_source,
             "alert_id": alert_id,
             "description": description,
         }
     )
+    payload_hash = hashlib.sha256(payload_json.encode()).hexdigest()
     idempotency_key = f"mcp:sre:{alert_source}:{alert_id}"
 
     try:
@@ -60,8 +62,8 @@ async def trigger_investigation(
             values={
                 "id": job_id,
                 "job_type": "SRE_INVESTIGATION",
-                "payload_json": payload,
-                "payload_hash": str(uuid.uuid4())[:16],
+                "payload_json": payload_json,
+                "payload_hash": payload_hash,
                 "status": "pending",
                 "priority": 1,
                 "requested_by": f"mcp:{alert_source}",

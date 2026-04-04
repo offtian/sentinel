@@ -7,6 +7,7 @@ import fastapi
 
 from sentinel import bootstrap
 from sentinel.data import database
+from sentinel.data import db as async_db
 from sentinel.interfaces.api.routers.automations.router import router as automations_router
 from sentinel.interfaces.api.routers.jobs.router import router as jobs_router
 from sentinel.interfaces.api.routers.sre.router import router as sre_router
@@ -22,11 +23,14 @@ async def lifespan(app: fastapi.FastAPI) -> AsyncGenerator[None]:
     # Initialise the database engine on startup (if configured)
     if get_settings().database_url:
         database.get_engine()
+        await async_db.connect_db()
         logs.log_event("database_engine_initialised")
 
     yield
 
     # Shutdown: close the database engine
+    if get_settings().database_url:
+        await async_db.disconnect_db()
     await database.close_engine()
     logs.log_event("database_engine_closed")
 

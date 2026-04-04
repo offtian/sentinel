@@ -19,9 +19,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-import databases
 from fastmcp import FastMCP
 
+from sentinel.data import db as async_db
 from sentinel.interfaces.mcp.tools import documentation as doc_tools
 from sentinel.interfaces.mcp.tools import investigation as inv_tools
 from sentinel.interfaces.mcp.tools import observability as obs_tools
@@ -41,24 +41,21 @@ logger = logs.get_logger()
 
 _obs_client: obs_base.BaseObservabilityClient | None = None
 _doc_searcher_builder: Callable[[], searcher.BaseDocumentSearcher | None] | None = None
-_db: databases.Database | None = None
 
 
 def configure(
     *,
     observability_client: obs_base.BaseObservabilityClient | None = None,
     document_searcher_builder: Callable[[], searcher.BaseDocumentSearcher | None] | None = None,
-    db: databases.Database | None = None,
 ) -> None:
     """
     Inject runtime dependencies from a higher layer (config/main).
 
     Must be called before the MCP server handles any tool requests.
     """
-    global _obs_client, _doc_searcher_builder, _db  # noqa: PLW0603
+    global _obs_client, _doc_searcher_builder  # noqa: PLW0603
     _obs_client = observability_client
     _doc_searcher_builder = document_searcher_builder
-    _db = db
 
 
 # ---------------------------------------------------------------------------
@@ -121,8 +118,12 @@ async def search_documentation(query: str, max_results: int = 5) -> str:
 @mcp.tool()
 async def trigger_investigation(alert_source: str, alert_id: str, description: str = "") -> str:
     """Trigger an SRE investigation for an alert. Returns a job ID."""
+    try:
+        db = async_db.get_db()
+    except RuntimeError:
+        db = None
     return await inv_tools.trigger_investigation(
-        db=_db,
+        db=db,
         alert_source=alert_source,
         alert_id=alert_id,
         description=description,
@@ -132,7 +133,11 @@ async def trigger_investigation(alert_source: str, alert_id: str, description: s
 @mcp.tool()
 async def get_investigation_status(investigation_id: str) -> str:
     """Check the status of a running investigation."""
-    return await inv_tools.get_investigation_status(db=_db, investigation_id=investigation_id)
+    try:
+        db = async_db.get_db()
+    except RuntimeError:
+        db = None
+    return await inv_tools.get_investigation_status(db=db, investigation_id=investigation_id)
 
 
 if __name__ == "__main__":
