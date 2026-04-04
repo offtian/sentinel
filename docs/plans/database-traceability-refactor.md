@@ -52,11 +52,11 @@
 ### Deleted After Migration (final cleanup task)
 | File | Replaced By | Status |
 |------|-------------|--------|
-| `src/sentinel/application/sre/persist.py` | `domain/sre/{queries,operations}.py` | Still exists — pending Task 12 |
-| `src/sentinel/application/support/persist.py` | `domain/support/{queries,operations}.py` | Still exists — pending Task 12 |
-| `src/sentinel/application/audit/persist.py` | `domain/audit/operations.py` | Still exists — pending Task 12 |
-| `src/sentinel/application/jobs/enqueue.py` | `domain/jobs/operations.py` | Still exists — pending Task 12 |
-| `src/sentinel/application/jobs/dequeue.py` | `domain/jobs/{queries,operations}.py` | Still exists — pending Task 12 |
+| `src/sentinel/application/sre/persist.py` | `domain/sre/{queries,operations}.py` | Deleted in Task 12 |
+| `src/sentinel/application/support/persist.py` | `domain/support/{queries,operations}.py` | Deleted in Task 12 |
+| `src/sentinel/application/audit/persist.py` | `domain/audit/operations.py` | Deleted in Task 12 |
+| `src/sentinel/application/jobs/enqueue.py` | `domain/jobs/operations.py` | Deleted in Task 12 |
+| `src/sentinel/application/jobs/dequeue.py` | `domain/jobs/{queries,operations}.py` | Deleted in Task 12 |
 
 ---
 
@@ -3064,7 +3064,7 @@ git commit -m "feat: add trace_id column to SQLModel investigation, ticket, and 
 
 ---
 
-### Task 12: Cleanup — Remove Old SQLAlchemy Persistence Modules
+### Task 12: Cleanup — Remove Old SQLAlchemy Persistence Modules ✅
 
 **Files:**
 - Modify: `src/sentinel/worker.py` (remove old imports)
@@ -3079,7 +3079,7 @@ git commit -m "feat: add trace_id column to SQLModel investigation, ticket, and 
 
 > **Pattern alignment:** All replacements must use domain layer imports (import modules not objects per AGENT.md). The new modules use `db: databases.Database` as their first kwarg instead of `session: AsyncSession`. Use `_get_optional_db()` helper where the database may not be configured.
 
-- [ ] **Step 1: Search for all imports of old persistence modules**
+- [x] **Step 1: Search for all imports of old persistence modules**
 
 Use Grep tool (not bash `rg`) to find all imports:
 
@@ -3094,7 +3094,7 @@ Use Grep tool (not bash `rg`) to find all imports:
 
 Document every file that imports these modules.
 
-- [ ] **Step 2: Update each caller to use the new domain layer modules**
+- [x] **Step 2: Update each caller to use the new domain layer modules**
 
 For each file found in Step 1:
 - Replace `from sentinel.application.sre import persist` → `from sentinel.domain.sre import operations as sre_ops`
@@ -3109,7 +3109,7 @@ For each file found in Step 1:
   - `dequeue.fetch_job_record(session, ...)` → `job_queries.fetch_job(db=db, ...)`
   - `dequeue.complete_job(session, ...)` → `job_ops.complete_job(db=db, ...)`
 
-- [ ] **Step 3: Update test imports**
+- [x] **Step 3: Update test imports**
 
 Search `tests/` for old imports and update them to match new module paths.
 
@@ -3123,12 +3123,12 @@ Use Grep tool to search:
 
 Update mock targets to patch the domain layer modules instead.
 
-- [ ] **Step 4: Run full test suite**
+- [x] **Step 4: Run full test suite**
 
 Run: `just test -v`
 Expected: All tests PASS with new imports
 
-- [ ] **Step 5: Delete old persistence modules**
+- [x] **Step 5: Delete old persistence modules**
 
 ```bash
 rm src/sentinel/application/sre/persist.py
@@ -3138,12 +3138,12 @@ rm src/sentinel/application/jobs/enqueue.py
 rm src/sentinel/application/jobs/dequeue.py
 ```
 
-- [ ] **Step 6: Run full test suite and lint**
+- [x] **Step 6: Run full test suite and lint**
 
 Run: `just test -v && just lint`
 Expected: All tests PASS, no lint errors (no dangling imports, import-linter contracts satisfied)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
