@@ -3154,22 +3154,22 @@ git commit -m "refactor: remove old SQLAlchemy persistence modules in favour of 
 
 ### Task 13: Final Verification and Lint
 
-- [ ] **Step 1: Run full test suite**
+- [x] **Step 1: Run full test suite**
 
 Run: `just test -v`
 Expected: All tests PASS (475+ tests)
 
-- [ ] **Step 2: Run lint**
+- [x] **Step 2: Run lint**
 
 Run: `just lint`
 Expected: No errors (ruff + mypy + import-linter contracts all pass). In particular, verify import-linter contracts are satisfied — the domain layer must not import from interfaces or application layers.
 
-- [ ] **Step 3: Verify migration applies cleanly (if DB available)**
+- [x] **Step 3: Verify migration applies cleanly (if DB available)**
 
 Run: `just run-db-migrations`
 Expected: Migrations 002a and 003 apply without errors. Tables `investigation_records`, `ticket_review_records`, `pipeline_runs`, `node_executions`, `agent_calls` all exist with `trace_id` columns.
 
-- [ ] **Step 4: Verify trace_id correlation works end-to-end**
+- [x] **Step 4: Verify trace_id correlation works end-to-end**
 
 Check that the worker creates an `ExecutionTracer`, propagates `trace_id` to investigation/ticket records, and pipeline_runs/node_executions are written. This can be verified by running a functional test or manual inspection. Key verification points:
 
@@ -3182,7 +3182,7 @@ Check that the worker creates an `ExecutionTracer`, propagates `trace_id` to inv
   - `ticket_review_records.trace_id` (via persist callback)
 - `TraceCollector` backward compat: `et.record()` still appends to `et.traces` for Streamlit UI
 
-- [ ] **Step 5: Commit any remaining fixes**
+- [x] **Step 5: Commit any remaining fixes**
 
 ```bash
 git add -A
