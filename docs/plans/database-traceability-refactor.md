@@ -2256,7 +2256,7 @@ git commit -m "feat: add pipeline tracing persistence via databases library"
 
 ---
 
-### Task 8: ExecutionTracer Domain Class
+### Task 8: ExecutionTracer Domain Class ✅
 
 **Files:**
 - Create: `src/sentinel/domain/pipeline/tracer.py`
@@ -2265,7 +2265,7 @@ git commit -m "feat: add pipeline tracing persistence via databases library"
 
 > **Pattern alignment:** The `ExecutionTracer` delegates to `domain.pipeline.operations` (SQLAlchemy Core), not `data.tracing` (raw SQL). Tests use `mock.AsyncMock()` for the `db` parameter and `mock.patch.object()` for domain layer calls, matching the existing test conventions.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/domain/pipeline/test_tracer.py
@@ -2495,12 +2495,12 @@ class TestTraceCollectorBackwardCompat:
         assert et.traces[0].agent_name == "test_agent"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `just test tests/unit/domain/pipeline/test_tracer.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # src/sentinel/domain/pipeline/tracer.py
@@ -2744,12 +2744,12 @@ class ExecutionTracer:
         )
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `just test tests/unit/domain/pipeline/test_tracer.py -v`
 Expected: All tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/domain/pipeline/tracer.py tests/unit/domain/pipeline/test_tracer.py
@@ -2758,7 +2758,7 @@ git commit -m "feat: add ExecutionTracer for database-backed pipeline tracing"
 
 ---
 
-### Task 9: Wire Database Singleton into Entry Points
+### Task 9: Wire Database Singleton into Entry Points ✅
 
 **Files:**
 - Modify: `src/sentinel/interfaces/api/app.py`
@@ -2898,7 +2898,7 @@ git commit -m "feat: wire databases.Database singleton into API, worker, and MCP
 
 ---
 
-### Task 10: Wire ExecutionTracer into Worker and Pipelines
+### Task 10: Wire ExecutionTracer into Worker and Pipelines ✅
 
 **Files:**
 - Modify: `src/sentinel/worker.py`
@@ -2909,7 +2909,7 @@ This task wires the `ExecutionTracer` into the worker's job dispatch and passes 
 
 > **Pattern alignment:** Uses `_get_optional_db()` helper (already extracted in `server.py` — extract a shared version or inline in worker). Imports domain layer modules (`domain.sre.operations`, `domain.support.operations`), not data layer. Import modules not objects per AGENT.md.
 
-- [ ] **Step 1: Update `_run_sre_investigation` in `worker.py`**
+- [x] **Step 1: Update `_run_sre_investigation` in `worker.py`**
 
 Replace the `_persist` closure with domain-layer persistence and add `ExecutionTracer`:
 
@@ -2970,7 +2970,7 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     return result.model_dump_json()
 ```
 
-- [ ] **Step 2: Update `_run_support_review` in `worker.py`**
+- [x] **Step 2: Update `_run_support_review` in `worker.py`**
 
 ```python
 # Replace _run_support_review:
@@ -3006,12 +3006,12 @@ async def _run_support_review(payload: dict[str, object]) -> str:
     return result.model_dump_json()
 ```
 
-- [ ] **Step 3: Run existing tests to verify backward compatibility**
+- [x] **Step 3: Run existing tests to verify backward compatibility**
 
 Run: `just test -v`
 Expected: All tests PASS — the `ExecutionTracer` satisfies the `TraceCollector` interface (has `.record()` and `.traces`).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/sentinel/worker.py
@@ -3020,7 +3020,7 @@ git commit -m "feat: wire ExecutionTracer into worker job dispatch"
 
 ---
 
-### Task 11: Add trace_id to SQLModel Models (for Alembic metadata)
+### Task 11: Add trace_id to SQLModel Models (for Alembic metadata) ✅
 
 **Files:**
 - Modify: `src/sentinel/data/models.py`
@@ -3030,7 +3030,7 @@ The Alembic autogenerate reads SQLModel metadata. We need the models to match th
 
 > **Pattern alignment:** Follow existing `Field` conventions in `models.py`: nullable UUID with `index=True`, placed after the last timestamp field. Use `uuid.UUID` type annotation matching `tracing_models.py` pattern.
 
-- [ ] **Step 1: Add trace_id to InvestigationRecord and TicketReviewRecord**
+- [x] **Step 1: Add trace_id to InvestigationRecord and TicketReviewRecord**
 
 In `src/sentinel/data/models.py`, add after the last field in each class:
 
@@ -3042,7 +3042,7 @@ In `src/sentinel/data/models.py`, add after the last field in each class:
     trace_id: uuid.UUID | None = Field(default=None, index=True)
 ```
 
-- [ ] **Step 2: Add trace_id to JobRequestRecord**
+- [x] **Step 2: Add trace_id to JobRequestRecord**
 
 In `src/sentinel/data/job_models.py`, add after `created_at` in `JobRequestRecord`:
 
@@ -3050,12 +3050,12 @@ In `src/sentinel/data/job_models.py`, add after `created_at` in `JobRequestRecor
     trace_id: uuid.UUID | None = Field(default=None, index=True)
 ```
 
-- [ ] **Step 3: Run existing tests**
+- [x] **Step 3: Run existing tests**
 
 Run: `just test -v`
 Expected: All tests PASS — new nullable fields with defaults don't break existing code.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/sentinel/data/models.py src/sentinel/data/job_models.py
