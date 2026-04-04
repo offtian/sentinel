@@ -70,24 +70,35 @@ sentinel/
 │   │   │   ├── holmes_adapter.py     # BaseHolmesAdapter (extends BaseInvestigationAdapter) + DirectToolsetAdapter
 │   │   │   ├── k8s_native_agent.py   # NativeK8sAgent — PydanticAI agent + K8s tools
 │   │   │   ├── kagent_adapter.py     # KagentAdapter — delegates to kagent CRDs
-│   │   │   └── operations.py         # Investigation lifecycle management
+│   │   │   ├── operations.py         # Investigation lifecycle management + persist_investigation
+│   │   │   └── queries.py            # fetch_investigation, fetch_by_alert_id, fetch_by_service
 │   │   ├── support/
 │   │   │   ├── entities.py           # Ticket, ResponseSuggestion, DocSource
-│   │   │   └── operations.py         # Ticket review lifecycle
+│   │   │   ├── operations.py         # Ticket review lifecycle + persist_ticket_review, update_review_status
+│   │   │   └── queries.py            # fetch_ticket_review, fetch_by_ticket, fetch_review_stats
 │   │   ├── confidence/               # Shared confidence scoring
 │   │   │   └── entities.py           # ConfidenceScore.from_factors(), from_total()
 │   │   ├── search/                   # Shared search abstractions
 │   │   │   └── searcher.py           # BaseDocumentSearcher, BaseMetricsSearcher
 │   │   ├── pipeline/                 # Pipeline error and state types
 │   │   │   ├── errors.py             # NodeError, PipelineNodeFailed
-│   │   │   └── types.py              # PipelineState, GraphRunResult, shared graph types
+│   │   │   ├── types.py              # PipelineState, GraphRunResult, shared graph types
+│   │   │   ├── operations.py         # persist/complete pipeline_run, node_execution, agent_call
+│   │   │   └── queries.py            # fetch_pipeline_run, fetch_node_executions, fetch_agent_calls
 │   │   ├── approval/                 # Human approval gate
 │   │   │   └── entities.py           # ApprovalRequest, ApprovalDecision
 │   │   ├── supervisor/               # Quality gate evaluation
 │   │   │   └── quality_gate.py       # evaluate_sre_quality(), evaluate_support_quality()
 │   │   ├── evaluation/               # Pipeline-agnostic evaluation metrics
 │   │   │   ├── metrics.py            # EvaluationMetrics (12 dimensions)
-│   │   │   └── comparison.py         # ComparisonResult for adapter A/B testing
+│   │   │   ├── comparison.py         # ComparisonResult for adapter A/B testing
+│   │   │   ├── operations.py         # persist_comparison_run, persist_eval_run
+│   │   │   └── queries.py            # fetch_comparison_runs, fetch_eval_runs
+│   │   ├── audit/                    # Regulatory audit trail
+│   │   │   └── operations.py         # record_audit_entry
+│   │   ├── jobs/                     # Job queue domain logic
+│   │   │   ├── operations.py         # enqueue_job, claim_next_job, complete_job, fail_job
+│   │   │   └── queries.py            # fetch_job
 │   │   ├── tools/                    # Domain tool definitions
 │   │   │   ├── documentation.py      # Documentation search tool functions
 │   │   │   ├── kubernetes.py         # K8s query tool functions (pods, deployments, events, logs)
@@ -115,8 +126,14 @@ sentinel/
 │   │   │   └── observability.py      # Observability toolset for agents
 │   │   └── prompts/                  # Jinja2 agent system prompt templates
 │   │
-│   ├── data/                         # Layer 4: Persistence
-│   │   ├── models.py                 # SQLModel table definitions
+│   ├── data/                         # Layer 4: Persistence (models only)
+│   │   ├── database.py               # SQLAlchemy async engine singleton
+│   │   ├── db.py                     # databases.Database singleton (get_db, connect_db, disconnect_db)
+│   │   ├── models.py                 # InvestigationRecord, TicketReviewRecord
+│   │   ├── job_models.py             # JobRequestRecord, JobResultRecord
+│   │   ├── audit_models.py           # AuditLogRecord
+│   │   ├── evaluation_models.py      # ComparisonRunRecord, EvalRunRecord
+│   │   ├── tracing_models.py         # PipelineRunRecord, NodeExecutionRecord, AgentCallRecord
 │   │   └── migrations/               # Alembic migrations
 │   │
 │   ├── vendors/                      # Layer 5: External SDK wrappers

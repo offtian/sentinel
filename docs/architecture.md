@@ -216,29 +216,60 @@ Key settings groups:
 
 ## Database
 
-PostgreSQL with SQLModel (async via asyncpg). Two main tables:
+PostgreSQL with SQLModel (async via asyncpg). Tables:
 
-- `investigation_records` - Persisted SRE investigations with findings, root cause, confidence
-- `ticket_review_records` - Persisted support reviews with suggested responses, sources, feedback status
+| Table | Purpose |
+|-------|---------|
+| `investigation_records` | Persisted SRE investigations with findings, root cause, confidence, trace_id |
+| `ticket_review_records` | Persisted support reviews with suggested responses, sources, feedback status, trace_id |
+| `job_requests` | PostgreSQL-backed job queue with FOR UPDATE SKIP LOCKED, trace_id |
+| `job_results` | Job execution outcomes (completed/failed/timed_out) |
+| `audit_log` | Append-only regulatory audit trail with SHA-256 input hashes |
+| `comparison_runs` | Side-by-side investigation backend comparison results |
+| `eval_runs` | Evaluation framework execution records |
+| `pipeline_runs` | Pipeline execution traces linked by trace_id |
+| `node_executions` | Per-node execution traces within a pipeline run |
+| `agent_calls` | PydanticAI agent invocation records with message history |
 
 Migrations managed by Alembic.
 
-## Session Management
+## Database Access
 
-`data/database.py` provides:
+Two async database clients coexist:
 
-- `get_engine()` / `get_session_factory()` - Lazy-initialised singletons (async engine with `pool_pre_ping`, `pool_size=5`, `max_overflow=10`)
-- `get_session()` - Async generator yielding `AsyncSession` (use in FastAPI dependencies or `async for`)
-- `close_engine()` - Called during FastAPI lifespan shutdown
+- **`data/database.py`** (SQLAlchemy AsyncSession) — Session factory with connection pooling (`pool_size=5`, `max_overflow=10`). Used by application layer.
+- **`data/db.py`** (`databases.Database` singleton) — `get_db()` returns a cached instance; `connect_db()`/`disconnect_db()` manage lifecycle. Used by domain layer queries/operations.
+
+Both are initialised during FastAPI lifespan and worker startup.
 
 ## Persistence Layer
 
-- `application/sre/persist.py` - `save_investigation()`, `get_investigation()`, `get_investigations_for_service()`, `get_investigations_by_alert_id()`
-- `application/support/persist.py` - `save_ticket_review()`, `get_ticket_review()`, `get_reviews_for_ticket()`, `update_review_status()`
+Persistence functions live in the **domain layer**, organised by category:
 
-Both use `sqlmodel.col()` for type-safe column references in WHERE and ORDER BY clauses.
+| Domain | Reads | Writes |
+|--------|-------|--------|
+| SRE | `domain/sre/queries.py` | `domain/sre/operations.py` |
+| Support | `domain/support/queries.py` | `domain/support/operations.py` |
+| Audit | — | `domain/audit/operations.py` |
+| Jobs | `domain/jobs/queries.py` | `domain/jobs/operations.py` |
+| Evaluation | `domain/evaluation/queries.py` | `domain/evaluation/operations.py` |
+| Pipeline Tracing | `domain/pipeline/queries.py` | `domain/pipeline/operations.py` |
 
-Migrations managed by Alembic.
+All functions accept `db: databases.Database` as an explicit keyword argument and use SQLAlchemy Core expressions (`select()`, `insert()`, `update()`) with SQLModel classes for type-safe queries.
+
+## Pipeline Traceability
+
+A `trace_id` UUID propagates through three levels, enabling end-to-end correlation across all tables:
+
+```
+pipeline_runs (trace_id, pipeline_type, status, duration_ms)
+  └── node_executions (trace_id, node_name, node_order, status, duration_ms)
+       └── agent_calls (trace_id, agent_name, model_id, messages_json, token_usage_json)
+```
+
+**Domain types:** `data/tracing_models.py` defines `PipelineRunRecord`, `NodeExecutionRecord`, `AgentCallRecord`.
+
+**ExecutionTracer** (`domain/pipeline/tracer.py`, pending) — DB-backed replacement for the in-memory `TraceCollector`. Satisfies the same `.record()` interface for backward compatibility with the Streamlit chat UI.
 
 ## Deployment
 
@@ -274,7 +305,7 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 
 ## Test Count
 
-320+ tests covering:
+475+ tests covering:
 
 - Domain entities and operations (SRE, Support, Confidence, Search, Pipeline errors, Approval, Supervisor)
 - Webhook parsers (PagerDuty, Datadog) with dedup handling
@@ -287,3 +318,5 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 - Pipeline node error handling tests
 - Approval gate and supervisor quality gate tests
 - Evaluation framework (pydantic_evals based)
+- Domain layer persistence (queries and operations via databases library)
+- Pipeline traceability (trace_id correlation, pipeline/node/agent recording)

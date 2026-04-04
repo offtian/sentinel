@@ -36,7 +36,7 @@ just test tests/unit/path/test_file.py::TestClass # Single test class
 
 ## Testing
 
-- 295+ tests across `tests/unit/`, `tests/integration/`, `tests/functional/`
+- 475+ tests across `tests/unit/`, `tests/integration/`, `tests/functional/`
 - Factories in `tests/factories/__init__.py`: `make_alert()`, `make_ticket()`, `make_investigation()`, `make_finding()`, `make_doc_source()`, `make_response_suggestion()`, `make_confidence_score()`
 - Functional tests monkeypatch PydanticAI agents — see `tests/functional/conftest.py`
 

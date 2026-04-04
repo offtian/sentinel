@@ -274,4 +274,4 @@ AgentGateway becomes relevant when:
 
 **Serving suggestion:** Kubernetes via Helm chart with separate API deployment (user-facing, 2 replicas) and Worker deployment (background processing, 2 replicas). PostgreSQL for state. LiteLLM sidecar or shared gateway for LLM routing.
 
-**Test suite:** 220+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.
+**Test suite:** 475+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.
