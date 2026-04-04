@@ -19,17 +19,20 @@ import json
 import os
 import signal
 
+import databases
+
 from sentinel import bootstrap
 from sentinel.application.automations import runner as automation_runner
 from sentinel.application.jobs import dequeue
-from sentinel.application.sre import persist as sre_persist
-from sentinel.application.support import persist as support_persist
 from sentinel.config import get_config
 from sentinel.data import database, job_models
 from sentinel.data import db as async_db
 from sentinel.domain.jobs import entities
+from sentinel.domain.pipeline import tracer as pipeline_tracer
 from sentinel.domain.sre import entities as sre_entities
+from sentinel.domain.sre import operations as sre_ops
 from sentinel.domain.support import entities as support_entities
+from sentinel.domain.support import operations as support_ops
 from sentinel.interfaces.graphs import common, sre_investigation, support_review
 from sentinel.settings import get_settings
 from sentinel.utils import logs
@@ -55,6 +58,14 @@ def _parse_args() -> argparse.Namespace:
         help="Claim and execute a single job, then exit. Designed for CronJob usage.",
     )
     return parser.parse_args()
+
+
+def _get_optional_db() -> databases.Database | None:
+    """Return the database connection, or None if not configured."""
+    try:
+        return async_db.get_db()
+    except RuntimeError:
+        return None
 
 
 async def _dispatch_job(job_type: str, payload: dict[str, object]) -> str:
@@ -109,28 +120,32 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     holmes = cfg.build_holmes_adapter()
     pd_client = cfg.pagerduty_client if get_settings().pagerduty_api_key else None
 
+    db = _get_optional_db()
+    et = pipeline_tracer.ExecutionTracer(db=db)
+
     async def _persist(reply: common.InvestigationReply) -> None:
-        if not get_settings().database_url:
+        if db is None:
             return
-        async with database.get_session() as session:
-            await sre_persist.save_investigation(
-                session,
-                alert_source=str(payload.get("source", "webhook")),
-                alert_id=reply.alert_id,
-                alert_title=str(payload.get("title", reply.alert_id)),
-                severity=str(payload.get("severity", "unknown")),
-                service=str(payload.get("service", "unknown")),
-                root_cause=reply.root_cause,
-                remediation=reply.remediation,
-                confidence_score=reply.confidence.total if reply.confidence else None,
-                findings_json={"summary": reply.findings_summary},
-            )
+        await sre_ops.persist_investigation(
+            db=db,
+            alert_source=str(payload.get("source", "webhook")),
+            alert_id=reply.alert_id,
+            alert_title=str(payload.get("title", reply.alert_id)),
+            severity=str(payload.get("severity", "unknown")),
+            service=str(payload.get("service", "unknown")),
+            root_cause=reply.root_cause,
+            remediation=reply.remediation,
+            confidence_score=reply.confidence.total if reply.confidence else None,
+            findings_json={"summary": reply.findings_summary},
+            trace_id=et.trace_id,
+        )
 
     result = await sre_investigation.investigate_alert(
         alert=alert,
         holmes=holmes,
         pagerduty_client=pd_client,
         persist_fn=_persist,
+        trace_collector=et,
     )
 
     return result.model_dump_json()
@@ -141,25 +156,29 @@ async def _run_support_review(payload: dict[str, object]) -> str:
     ticket = support_entities.Ticket.model_validate(payload)
     cfg = get_config()
 
+    db = _get_optional_db()
+    et = pipeline_tracer.ExecutionTracer(db=db)
+
     async def _persist(reply: common.SupportReply) -> None:
-        if not get_settings().database_url:
+        if db is None:
             return
-        async with database.get_session() as session:
-            await support_persist.save_ticket_review(
-                session,
-                ticket_id=reply.ticket_id,
-                ticket_key=reply.ticket_key,
-                suggested_response=reply.suggested_response,
-                sources_json={"sources": reply.sources} if reply.sources else None,
-                confidence_score=reply.confidence.total if reply.confidence else None,
-                category=reply.category,
-            )
+        await support_ops.persist_ticket_review(
+            db=db,
+            ticket_id=reply.ticket_id,
+            ticket_key=reply.ticket_key,
+            suggested_response=reply.suggested_response,
+            sources_json={"sources": reply.sources} if reply.sources else None,
+            confidence_score=reply.confidence.total if reply.confidence else None,
+            category=reply.category,
+            trace_id=et.trace_id,
+        )
 
     result = await support_review.review_ticket(
         ticket=ticket,
         document_searcher=cfg.build_document_searcher(),
         ticket_searcher=cfg.build_ticket_searcher(),
         persist_fn=_persist,
+        trace_collector=et,
     )
 
     return result.model_dump_json()
