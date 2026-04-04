@@ -29,6 +29,8 @@ from sentinel.utils import logs
 
 
 if TYPE_CHECKING:
+    import databases
+
     from sentinel.domain.search import searcher
     from sentinel.domain.vendor_adapters.observability import base as obs_base
 
@@ -115,15 +117,19 @@ async def search_documentation(query: str, max_results: int = 5) -> str:
     )
 
 
+def _get_optional_db() -> databases.Database | None:
+    """Return the database connection, or None if not configured."""
+    try:
+        return async_db.get_db()
+    except RuntimeError:
+        return None
+
+
 @mcp.tool()
 async def trigger_investigation(alert_source: str, alert_id: str, description: str = "") -> str:
     """Trigger an SRE investigation for an alert. Returns a job ID."""
-    try:
-        db = async_db.get_db()
-    except RuntimeError:
-        db = None
     return await inv_tools.trigger_investigation(
-        db=db,
+        db=_get_optional_db(),
         alert_source=alert_source,
         alert_id=alert_id,
         description=description,
@@ -133,11 +139,10 @@ async def trigger_investigation(alert_source: str, alert_id: str, description: s
 @mcp.tool()
 async def get_investigation_status(investigation_id: str) -> str:
     """Check the status of a running investigation."""
-    try:
-        db = async_db.get_db()
-    except RuntimeError:
-        db = None
-    return await inv_tools.get_investigation_status(db=db, investigation_id=investigation_id)
+    return await inv_tools.get_investigation_status(
+        db=_get_optional_db(),
+        investigation_id=investigation_id,
+    )
 
 
 if __name__ == "__main__":

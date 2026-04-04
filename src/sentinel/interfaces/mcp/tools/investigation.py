@@ -14,6 +14,7 @@ from typing import Any
 
 import databases
 
+from sentinel.domain.jobs import entities as job_entities
 from sentinel.utils import logs
 
 
@@ -61,7 +62,7 @@ async def trigger_investigation(
             query=query,
             values={
                 "id": job_id,
-                "job_type": "SRE_INVESTIGATION",
+                "job_type": job_entities.JobType.SRE_INVESTIGATION.value,
                 "payload_json": payload_json,
                 "payload_hash": payload_hash,
                 "status": "pending",
