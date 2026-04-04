@@ -7,6 +7,7 @@ library for clear visual output in CI and local runs.
 
 from __future__ import annotations
 
+from pydantic_evals import reporting as pydantic_reporting
 from rich import console as rich_console
 from rich import table as rich_table
 
@@ -21,9 +22,6 @@ def _get_table_row(
     """
     Build a single table row from a report case.
     """
-    # Import here to avoid circular imports at module level
-    from pydantic_evals import reporting as pydantic_reporting
-
     report_case: pydantic_reporting.ReportCase = case  # type: ignore[assignment]
     row = [
         str(report_case.name),

@@ -20,6 +20,7 @@ import os
 import signal
 
 from sentinel import bootstrap
+from sentinel.application.automations import runner as automation_runner
 from sentinel.application.jobs import dequeue
 from sentinel.application.sre import persist as sre_persist
 from sentinel.application.support import persist as support_persist
@@ -166,13 +167,11 @@ async def _run_support_review(payload: dict[str, object]) -> str:
 
 async def _run_scheduled_automation(payload: dict[str, object]) -> str:
     """Execute a scheduled automation job."""
-    from sentinel.application.automations import runner
-
     automation_name = str(payload.get("automation_name", ""))
     raw_params = payload.get("params", {}) or {}
     params: dict[str, object] = dict(raw_params) if isinstance(raw_params, dict) else {}
 
-    result = await runner.run_automation(
+    result = await automation_runner.run_automation(
         automation_name=automation_name,
         params=params,
     )

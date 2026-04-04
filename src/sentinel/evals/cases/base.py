@@ -15,7 +15,7 @@ import attrs
 import pydantic_evals
 
 from sentinel.evals import types
-from sentinel.evals.evaluators import keyword_coverage, structural
+from sentinel.evals.evaluators import chart_evaluators, keyword_coverage, structural
 
 
 _DATASETS_DIR = Path(__file__).parent.parent / "datasets"
@@ -148,8 +148,6 @@ def _build_chart_generator_evaluators() -> list[pydantic_evals.evaluators.Evalua
 
     Checks: required files present, file count meets minimum.
     """
-    from sentinel.evals.evaluators import chart_evaluators
-
     return [
         chart_evaluators.YamlStructureCheck(
             required_file_patterns=("deployment", "service"),

@@ -9,6 +9,8 @@ paths:
 - Import modules, not objects: `from django import http` not `from django.http import HttpResponse`
 - Exception: stdlib objects like `Decimal`, `Optional`, `defaultdict` can be imported directly
 - This enables `mock.patch.object(module, "collaborator")` for isolated unit tests
+- ALL imports MUST be at module level (top of file) — no inline/deferred imports inside functions
+- Exception: `if TYPE_CHECKING:` blocks and `if __name__ == "__main__":` blocks are acceptable
 
 ## Function Signatures
 - Always specify parameters explicitly with type annotations. Never use `*args`/`**kwargs` without good reason

@@ -11,6 +11,7 @@ import json
 from typing import Any
 
 import attrs
+from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
 
 from sentinel.utils import logs
 
@@ -71,8 +72,6 @@ def build_mcp_toolsets(*, config_json: str) -> tuple[Any, ...]:
     configs = parse_mcp_server_configs(config_json=config_json)
     if not configs:
         return ()
-
-    from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
 
     toolsets: list[Any] = []
     for config in configs:

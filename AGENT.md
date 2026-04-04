@@ -8,6 +8,8 @@ Conventions and coding patterns for AI agents working in this repository.
 - Import modules, not objects: `from sentinel.domain import sre_entities` not `from sentinel.domain.sre_entities import Alert`
 - Exception: stdlib objects like `Decimal`, `Optional`, `defaultdict` can be imported directly
 - This enables `mock.patch.object(module, "collaborator")` for isolated unit tests
+- ALL imports MUST be at module level (top of file) — no inline/deferred imports inside functions
+- Exception: `if TYPE_CHECKING:` blocks and `if __name__ == "__main__":` blocks are acceptable
 
 ### Data Classes
 - Prefer `@attrs.frozen` over `@attrs.define` — immutable by default

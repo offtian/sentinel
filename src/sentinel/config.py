@@ -18,12 +18,13 @@ Usage::
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
+from pydantic_ai.mcp import MCPServerSSE
 from pydantic_ai.toolsets import FunctionToolset
 
 from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
 from sentinel.domain.search import factory as search_factory
 from sentinel.domain.search import searcher
-from sentinel.domain.sre import holmes_adapter, investigation
+from sentinel.domain.sre import holmes_adapter, investigation, k8s_native_agent
 from sentinel.domain.vendor_adapters.confluence import ConfluenceClient
 from sentinel.domain.vendor_adapters.jira import JiraClient
 from sentinel.domain.vendor_adapters.observability import (
@@ -32,7 +33,9 @@ from sentinel.domain.vendor_adapters.observability import (
     GrafanaClient,
 )
 from sentinel.domain.vendor_adapters.pagerduty import PagerDutyClient
+from sentinel.interfaces.graphs.agents import k8s_runner
 from sentinel.plugins.toolsets import documentation as doc_toolsets
+from sentinel.plugins.toolsets import mcp as mcp_toolset_mod
 from sentinel.plugins.toolsets import observability as obs_toolsets
 from sentinel.settings import Settings, get_settings
 from sentinel.utils import logs
@@ -173,17 +176,11 @@ class Configuration(BaseModel):
             return None
 
         if backend in ("native", "both"):
-            from sentinel.domain.sre import k8s_native_agent
-            from sentinel.interfaces.graphs.agents import k8s_runner
-            from sentinel.plugins.toolsets import mcp as mcp_toolset_mod
-
             mcp_toolsets = list(
                 mcp_toolset_mod.build_mcp_toolsets(config_json=self.settings.mcp_servers)
             )
 
             if self.settings.k8s_mcp_server_url:
-                from pydantic_ai.mcp import MCPServerSSE
-
                 mcp_toolsets.append(MCPServerSSE(url=self.settings.k8s_mcp_server_url))
 
             return k8s_native_agent.NativeK8sAgent(

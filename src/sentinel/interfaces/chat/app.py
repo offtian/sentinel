@@ -15,6 +15,7 @@ Run with::
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -48,8 +49,6 @@ def _run_async(coro: Any) -> Any:
         loop = None
 
     if loop and loop.is_running():
-        import concurrent.futures
-
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             return pool.submit(asyncio.run, coro).result()
 
