@@ -67,6 +67,7 @@ async def persist_investigation(
         findings_json=findings_json,
         started_at=started_at,
         completed_at=completed_at,
+        trace_id=trace_id,
         created_at=created_at,
     )
     await db.execute(query)

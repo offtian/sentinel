@@ -52,6 +52,7 @@ async def persist_ticket_review(
         confidence_score=confidence_score,
         category=category,
         status=entities.ReviewStatus.DRAFTED.value,
+        trace_id=trace_id,
         created_at=created_at,
     )
     await db.execute(query)
