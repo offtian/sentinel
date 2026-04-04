@@ -2263,6 +2263,8 @@ git commit -m "feat: add pipeline tracing persistence via databases library"
 - Modify: `src/sentinel/domain/pipeline/types.py`
 - Test: `tests/unit/domain/pipeline/test_tracer.py`
 
+> **Pattern alignment:** The `ExecutionTracer` delegates to `domain.pipeline.operations` (SQLAlchemy Core), not `data.tracing` (raw SQL). Tests use `mock.AsyncMock()` for the `db` parameter and `mock.patch.object()` for domain layer calls, matching the existing test conventions.
+
 - [ ] **Step 1: Write the failing test**
 
 ```python
@@ -2280,121 +2282,51 @@ import pytest
 from sentinel.domain.pipeline import tracer
 
 
-@pytest.fixture
-def mock_db() -> mock.AsyncMock:
-    return mock.AsyncMock()
-
-
-class TestExecutionTracer:
+class TestStartPipeline:
     @pytest.mark.asyncio
-    async def test_start_pipeline_creates_run(self, mock_db: mock.AsyncMock) -> None:
-        # Given an ExecutionTracer with a database
+    async def test_sets_trace_id_and_pipeline_run_id(self) -> None:
+        # Given an ExecutionTracer with a mock database
+        mock_db = mock.AsyncMock()
         mock_db.execute.return_value = None
         et = tracer.ExecutionTracer(db=mock_db)
 
         # When start_pipeline is called
-        await et.start_pipeline(
-            pipeline_type="sre_investigation",
-            job_request_id=uuid.uuid4(),
-            input_data={"alert_id": "alert-1"},
-        )
+        with mock.patch.object(
+            tracer, "pipeline_ops"
+        ) as mock_ops:
+            mock_ops.persist_pipeline_run = mock.AsyncMock(return_value=uuid.uuid4())
+            await et.start_pipeline(
+                pipeline_type="sre_investigation",
+                job_request_id=uuid.uuid4(),
+                input_data={"alert_id": "alert-1"},
+            )
 
         # Then trace_id and pipeline_run_id are set
         assert et.trace_id is not None
         assert et.pipeline_run_id is not None
 
-        # And a pipeline_run INSERT was executed
-        mock_db.execute.assert_awaited_once()
-
     @pytest.mark.asyncio
-    async def test_complete_pipeline_updates_run(self, mock_db: mock.AsyncMock) -> None:
-        # Given a started pipeline
+    async def test_delegates_to_pipeline_operations(self) -> None:
+        # Given an ExecutionTracer with a mock database
+        mock_db = mock.AsyncMock()
         et = tracer.ExecutionTracer(db=mock_db)
-        et._trace_id = uuid.uuid4()
-        et._pipeline_run_id = uuid.uuid4()
-        et._pipeline_started_at = datetime(2026, 4, 4, 10, 0, tzinfo=UTC)
+        job_id = uuid.uuid4()
 
-        # When complete_pipeline is called
-        await et.complete_pipeline(
-            status="completed",
-            output_data={"root_cause": "leak"},
-        )
+        # When start_pipeline is called
+        with mock.patch.object(
+            tracer, "pipeline_ops"
+        ) as mock_ops:
+            mock_ops.persist_pipeline_run = mock.AsyncMock(return_value=uuid.uuid4())
+            await et.start_pipeline(
+                pipeline_type="sre_investigation",
+                job_request_id=job_id,
+            )
 
-        # Then UPDATE was executed
-        mock_db.execute.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_start_node_creates_execution(self, mock_db: mock.AsyncMock) -> None:
-        # Given a started pipeline
-        et = tracer.ExecutionTracer(db=mock_db)
-        et._trace_id = uuid.uuid4()
-        et._pipeline_run_id = uuid.uuid4()
-
-        # When start_node is called
-        node_id = await et.start_node(node_name="ClassifyAlert")
-
-        # Then a node_id is returned
-        assert isinstance(node_id, uuid.UUID)
-
-        # And INSERT was executed
-        mock_db.execute.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_complete_node_updates_execution(self, mock_db: mock.AsyncMock) -> None:
-        # Given a started node
-        et = tracer.ExecutionTracer(db=mock_db)
-        et._trace_id = uuid.uuid4()
-        et._pipeline_run_id = uuid.uuid4()
-        node_id = uuid.uuid4()
-        et._node_started_at[node_id] = datetime(2026, 4, 4, 10, 1, tzinfo=UTC)
-
-        # When complete_node is called
-        await et.complete_node(
-            node_id=node_id,
-            status="completed",
-            output_data={"severity": "critical"},
-        )
-
-        # Then UPDATE was executed
-        mock_db.execute.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_record_agent_call_persists(self, mock_db: mock.AsyncMock) -> None:
-        # Given a started node
-        et = tracer.ExecutionTracer(db=mock_db)
-        et._trace_id = uuid.uuid4()
-        node_id = uuid.uuid4()
-
-        # When record_agent_call is called
-        await et.record_agent_call(
-            node_id=node_id,
-            agent_name="alert_classifier",
-            model_id="gpt-4.1-mini",
-            messages=[],
-            duration_ms=500,
-        )
-
-        # Then INSERT was executed
-        mock_db.execute.assert_awaited_once()
-
-    def test_also_satisfies_trace_collector_interface(self, mock_db: mock.AsyncMock) -> None:
-        # Given an ExecutionTracer
-        et = tracer.ExecutionTracer(db=mock_db)
-
-        # Then it has the record method (TraceCollector interface)
-        assert hasattr(et, "record")
-        assert callable(et.record)
-
-    def test_record_appends_to_traces_list(self, mock_db: mock.AsyncMock) -> None:
-        # Given an ExecutionTracer
-        et = tracer.ExecutionTracer(db=mock_db)
-
-        # When record is called (TraceCollector interface)
-        et.record(agent_name="test_agent", messages=[])
-
-        # Then traces are accumulated
-        assert len(et.traces) == 1
-        assert et.traces[0].agent_name == "test_agent"
+        # Then persist_pipeline_run is called with correct kwargs
+        mock_ops.persist_pipeline_run.assert_awaited_once()
+        call_kwargs = mock_ops.persist_pipeline_run.call_args.kwargs
+        assert call_kwargs["pipeline_type"] == "sre_investigation"
+        assert call_kwargs["job_request_id"] == job_id
 
     @pytest.mark.asyncio
     async def test_graceful_degradation_without_db(self) -> None:
@@ -2406,6 +2338,161 @@ class TestExecutionTracer:
 
         # Then no error is raised and trace_id is still set
         assert et.trace_id is not None
+        assert et.pipeline_run_id is not None
+
+
+class TestCompletePipeline:
+    @pytest.mark.asyncio
+    async def test_delegates_to_pipeline_operations(self) -> None:
+        # Given a started pipeline tracer
+        mock_db = mock.AsyncMock()
+        et = tracer.ExecutionTracer(db=mock_db)
+        et._trace_id = uuid.uuid4()
+        et._pipeline_run_id = uuid.uuid4()
+        et._pipeline_started_at = datetime(2026, 4, 4, 10, 0, tzinfo=UTC)
+
+        # When complete_pipeline is called
+        with mock.patch.object(
+            tracer, "pipeline_ops"
+        ) as mock_ops:
+            mock_ops.complete_pipeline_run = mock.AsyncMock()
+            await et.complete_pipeline(
+                status="completed",
+                output_data={"root_cause": "leak"},
+            )
+
+        # Then complete_pipeline_run is called with correct status
+        mock_ops.complete_pipeline_run.assert_awaited_once()
+        assert mock_ops.complete_pipeline_run.call_args.kwargs["status"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_noop_when_db_is_none(self) -> None:
+        # Given an ExecutionTracer without a database
+        et = tracer.ExecutionTracer(db=None)
+        et._trace_id = uuid.uuid4()
+
+        # When complete_pipeline is called
+        await et.complete_pipeline(status="completed")
+
+        # Then no error is raised (noop)
+
+
+class TestStartNode:
+    @pytest.mark.asyncio
+    async def test_returns_node_uuid(self) -> None:
+        # Given a started pipeline tracer
+        mock_db = mock.AsyncMock()
+        et = tracer.ExecutionTracer(db=mock_db)
+        et._trace_id = uuid.uuid4()
+        et._pipeline_run_id = uuid.uuid4()
+
+        # When start_node is called
+        with mock.patch.object(
+            tracer, "pipeline_ops"
+        ) as mock_ops:
+            expected_id = uuid.uuid4()
+            mock_ops.persist_node_execution = mock.AsyncMock(return_value=expected_id)
+            node_id = await et.start_node(node_name="ClassifyAlert")
+
+        # Then a UUID is returned
+        assert node_id == expected_id
+
+    @pytest.mark.asyncio
+    async def test_increments_node_order(self) -> None:
+        # Given a started pipeline tracer
+        mock_db = mock.AsyncMock()
+        et = tracer.ExecutionTracer(db=mock_db)
+        et._trace_id = uuid.uuid4()
+        et._pipeline_run_id = uuid.uuid4()
+
+        # When two nodes are started
+        with mock.patch.object(
+            tracer, "pipeline_ops"
+        ) as mock_ops:
+            mock_ops.persist_node_execution = mock.AsyncMock(side_effect=[uuid.uuid4(), uuid.uuid4()])
+            await et.start_node(node_name="ClassifyAlert")
+            await et.start_node(node_name="InvestigateWithHolmes")
+
+        # Then node_order increments
+        first_call = mock_ops.persist_node_execution.call_args_list[0].kwargs
+        second_call = mock_ops.persist_node_execution.call_args_list[1].kwargs
+        assert first_call["node_order"] == 1
+        assert second_call["node_order"] == 2
+
+
+class TestCompleteNode:
+    @pytest.mark.asyncio
+    async def test_delegates_to_pipeline_operations(self) -> None:
+        # Given a started node
+        mock_db = mock.AsyncMock()
+        et = tracer.ExecutionTracer(db=mock_db)
+        et._trace_id = uuid.uuid4()
+        et._pipeline_run_id = uuid.uuid4()
+        node_id = uuid.uuid4()
+        et._node_started_at[node_id] = datetime(2026, 4, 4, 10, 1, tzinfo=UTC)
+
+        # When complete_node is called
+        with mock.patch.object(
+            tracer, "pipeline_ops"
+        ) as mock_ops:
+            mock_ops.complete_node_execution = mock.AsyncMock()
+            await et.complete_node(
+                node_id=node_id,
+                status="completed",
+                output_data={"severity": "critical"},
+            )
+
+        # Then complete_node_execution is called
+        mock_ops.complete_node_execution.assert_awaited_once()
+        assert mock_ops.complete_node_execution.call_args.kwargs["status"] == "completed"
+
+
+class TestRecordAgentCall:
+    @pytest.mark.asyncio
+    async def test_delegates_to_pipeline_operations(self) -> None:
+        # Given a started node
+        mock_db = mock.AsyncMock()
+        et = tracer.ExecutionTracer(db=mock_db)
+        et._trace_id = uuid.uuid4()
+        node_id = uuid.uuid4()
+
+        # When record_agent_call is called
+        with mock.patch.object(
+            tracer, "pipeline_ops"
+        ) as mock_ops:
+            mock_ops.persist_agent_call = mock.AsyncMock(return_value=uuid.uuid4())
+            await et.record_agent_call(
+                node_id=node_id,
+                agent_name="alert_classifier",
+                model_id="gpt-4.1-mini",
+                messages=[],
+                duration_ms=500,
+            )
+
+        # Then persist_agent_call is called with correct agent name
+        mock_ops.persist_agent_call.assert_awaited_once()
+        assert mock_ops.persist_agent_call.call_args.kwargs["agent_name"] == "alert_classifier"
+
+
+class TestTraceCollectorBackwardCompat:
+    def test_has_record_method(self) -> None:
+        # Given an ExecutionTracer
+        et = tracer.ExecutionTracer(db=None)
+
+        # Then it satisfies the TraceCollector interface
+        assert hasattr(et, "record")
+        assert callable(et.record)
+
+    def test_record_appends_to_traces_list(self) -> None:
+        # Given an ExecutionTracer
+        et = tracer.ExecutionTracer(db=None)
+
+        # When record is called (TraceCollector interface)
+        et.record(agent_name="test_agent", messages=[])
+
+        # Then traces are accumulated
+        assert len(et.traces) == 1
+        assert et.traces[0].agent_name == "test_agent"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2433,6 +2520,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic_ai.messages import ModelMessage
 
+from sentinel.domain.pipeline import operations as pipeline_ops
 from sentinel.domain.pipeline import types
 
 
@@ -2502,9 +2590,7 @@ class ExecutionTracer:
             self._pipeline_run_id = uuid.uuid4()
             return
 
-        from sentinel.data import tracing
-
-        self._pipeline_run_id = await tracing.persist_pipeline_run(
+        self._pipeline_run_id = await pipeline_ops.persist_pipeline_run(
             db=self._db,
             trace_id=self._trace_id,
             pipeline_type=pipeline_type,
@@ -2535,9 +2621,7 @@ class ExecutionTracer:
             delta = datetime.now(tz=UTC) - self._pipeline_started_at
             duration_ms = int(delta.total_seconds() * 1000)
 
-        from sentinel.data import tracing
-
-        await tracing.complete_pipeline_run(
+        await pipeline_ops.complete_pipeline_run(
             db=self._db,
             run_id=self._pipeline_run_id,
             status=status,
@@ -2567,9 +2651,7 @@ class ExecutionTracer:
             self._node_started_at[node_id] = now
             return node_id
 
-        from sentinel.data import tracing
-
-        node_id = await tracing.persist_node_execution(
+        node_id = await pipeline_ops.persist_node_execution(
             db=self._db,
             trace_id=self._trace_id,  # type: ignore[arg-type]
             pipeline_run_id=self._pipeline_run_id,
@@ -2606,9 +2688,7 @@ class ExecutionTracer:
             delta = datetime.now(tz=UTC) - started_at
             duration_ms = int(delta.total_seconds() * 1000)
 
-        from sentinel.data import tracing
-
-        await tracing.complete_node_execution(
+        await pipeline_ops.complete_node_execution(
             db=self._db,
             node_id=node_id,
             status=status,
@@ -2650,9 +2730,7 @@ class ExecutionTracer:
                 for m in messages
             ]
 
-        from sentinel.data import tracing
-
-        await tracing.persist_agent_call(
+        await pipeline_ops.persist_agent_call(
             db=self._db,
             trace_id=self._trace_id,
             node_execution_id=node_id,
@@ -2829,15 +2907,30 @@ git commit -m "feat: wire databases.Database singleton into API, worker, and MCP
 
 This task wires the `ExecutionTracer` into the worker's job dispatch and passes it through to the graph pipelines. The graphs already accept `trace_collector` — we pass `ExecutionTracer` instead (it satisfies the same interface).
 
+> **Pattern alignment:** Uses `_get_optional_db()` helper (already extracted in `server.py` — extract a shared version or inline in worker). Imports domain layer modules (`domain.sre.operations`, `domain.support.operations`), not data layer. Import modules not objects per AGENT.md.
+
 - [ ] **Step 1: Update `_run_sre_investigation` in `worker.py`**
 
-Replace the `_persist` closure with `databases`-based persistence and add `ExecutionTracer`:
+Replace the `_persist` closure with domain-layer persistence and add `ExecutionTracer`:
 
 ```python
-# Add imports at top of worker.py:
-from sentinel.data import db as async_db
-from sentinel.data import investigations as inv_data
+# Replace old imports:
+#   from sentinel.application.sre import persist as sre_persist
+#   from sentinel.application.support import persist as support_persist
+# With:
+from sentinel.domain.sre import operations as sre_ops
+from sentinel.domain.support import operations as support_ops
 from sentinel.domain.pipeline import tracer as pipeline_tracer
+
+# Note: `from sentinel.data import db as async_db` is already imported (Task 9).
+
+# Add helper (matches server.py pattern):
+def _get_optional_db() -> databases.Database | None:
+    """Return the database connection, or None if not configured."""
+    try:
+        return async_db.get_db()
+    except RuntimeError:
+        return None
 
 # Replace _run_sre_investigation:
 async def _run_sre_investigation(payload: dict[str, object]) -> str:
@@ -2846,17 +2939,13 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     holmes = cfg.build_holmes_adapter()
     pd_client = cfg.pagerduty_client if get_settings().pagerduty_api_key else None
 
-    # Create ExecutionTracer
-    try:
-        db = async_db.get_db()
-    except RuntimeError:
-        db = None
+    db = _get_optional_db()
     et = pipeline_tracer.ExecutionTracer(db=db)
 
     async def _persist(reply: common.InvestigationReply) -> None:
         if db is None:
             return
-        await inv_data.persist_investigation(
+        await sre_ops.persist_investigation(
             db=db,
             alert_source=str(payload.get("source", "webhook")),
             alert_id=reply.alert_id,
@@ -2884,24 +2973,18 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
 - [ ] **Step 2: Update `_run_support_review` in `worker.py`**
 
 ```python
-# Add import (if not already):
-from sentinel.data import ticket_reviews as tr_data
-
 # Replace _run_support_review:
 async def _run_support_review(payload: dict[str, object]) -> str:
     ticket = support_entities.Ticket.model_validate(payload)
     cfg = get_config()
 
-    try:
-        db = async_db.get_db()
-    except RuntimeError:
-        db = None
+    db = _get_optional_db()
     et = pipeline_tracer.ExecutionTracer(db=db)
 
     async def _persist(reply: common.SupportReply) -> None:
         if db is None:
             return
-        await tr_data.persist_ticket_review(
+        await support_ops.persist_ticket_review(
             db=db,
             ticket_id=reply.ticket_id,
             ticket_key=reply.ticket_key,
@@ -2943,11 +3026,13 @@ git commit -m "feat: wire ExecutionTracer into worker job dispatch"
 - Modify: `src/sentinel/data/models.py`
 - Modify: `src/sentinel/data/job_models.py`
 
-The Alembic autogenerate reads SQLModel metadata. We need the models to match the migration.
+The Alembic autogenerate reads SQLModel metadata. We need the models to match the migration (003). The `trace_id` column was added to the database by migration 003 but the SQLModel classes don't yet declare it — they must match for future `alembic revision --autogenerate` to work correctly.
+
+> **Pattern alignment:** Follow existing `Field` conventions in `models.py`: nullable UUID with `index=True`, placed after the last timestamp field. Use `uuid.UUID` type annotation matching `tracing_models.py` pattern.
 
 - [ ] **Step 1: Add trace_id to InvestigationRecord and TicketReviewRecord**
 
-In `src/sentinel/data/models.py`, add after `created_at` in each class:
+In `src/sentinel/data/models.py`, add after the last field in each class:
 
 ```python
 # InvestigationRecord — add after created_at field:
@@ -2968,7 +3053,7 @@ In `src/sentinel/data/job_models.py`, add after `created_at` in `JobRequestRecor
 - [ ] **Step 3: Run existing tests**
 
 Run: `just test -v`
-Expected: All tests PASS — new nullable fields don't break existing code.
+Expected: All tests PASS — new nullable fields with defaults don't break existing code.
 
 - [ ] **Step 4: Commit**
 
@@ -2992,33 +3077,51 @@ git commit -m "feat: add trace_id column to SQLModel investigation, ticket, and 
 
 **Important:** Before deleting, search the codebase for all imports of these modules and update them.
 
+> **Pattern alignment:** All replacements must use domain layer imports (import modules not objects per AGENT.md). The new modules use `db: databases.Database` as their first kwarg instead of `session: AsyncSession`. Use `_get_optional_db()` helper where the database may not be configured.
+
 - [ ] **Step 1: Search for all imports of old persistence modules**
 
-Run:
-```bash
-rg "from sentinel.application.sre import persist" src/
-rg "from sentinel.application.support import persist" src/
-rg "from sentinel.application.audit import persist" src/
-rg "from sentinel.application.jobs import dequeue" src/
-rg "from sentinel.application.jobs import enqueue" src/
+Use Grep tool (not bash `rg`) to find all imports:
+
+```
+# Search patterns:
+"from sentinel.application.sre import persist"
+"from sentinel.application.support import persist"
+"from sentinel.application.audit import persist"
+"from sentinel.application.jobs import dequeue"
+"from sentinel.application.jobs import enqueue"
 ```
 
 Document every file that imports these modules.
 
-- [ ] **Step 2: Update each caller to use the new `data/*` modules**
+- [ ] **Step 2: Update each caller to use the new domain layer modules**
 
 For each file found in Step 1:
-- Replace `from sentinel.application.sre import persist` with `from sentinel.data import investigations`
-- Replace `from sentinel.application.support import persist` with `from sentinel.data import ticket_reviews`
-- Replace `from sentinel.application.audit import persist` with `from sentinel.data import audit`
-- Replace `from sentinel.application.jobs import dequeue` / `enqueue` with `from sentinel.data import jobs`
-- Update function call signatures (new functions use `db=` instead of `session=`)
+- Replace `from sentinel.application.sre import persist` → `from sentinel.domain.sre import operations as sre_ops`
+- Replace `from sentinel.application.support import persist` → `from sentinel.domain.support import operations as support_ops`
+- Replace `from sentinel.application.audit import persist` → `from sentinel.domain.audit import operations as audit_ops`
+- Replace `from sentinel.application.jobs import dequeue` → `from sentinel.domain.jobs import operations as job_ops` + `from sentinel.domain.jobs import queries as job_queries`
+- Replace `from sentinel.application.jobs import enqueue` → `from sentinel.domain.jobs import operations as job_ops`
+- Update function call signatures:
+  - `session` parameter → `db` parameter
+  - `database.get_session()` context manager → `_get_optional_db()` or `async_db.get_db()`
+  - `persist.save_investigation(session, ...)` → `sre_ops.persist_investigation(db=db, ...)`
+  - `dequeue.fetch_job_record(session, ...)` → `job_queries.fetch_job(db=db, ...)`
+  - `dequeue.complete_job(session, ...)` → `job_ops.complete_job(db=db, ...)`
 
 - [ ] **Step 3: Update test imports**
 
 Search `tests/` for old imports and update them to match new module paths.
 
-Run: `rg "application.sre.persist\|application.support.persist\|application.audit.persist\|application.jobs" tests/`
+Use Grep tool to search:
+```
+"application.sre.persist" in tests/
+"application.support.persist" in tests/
+"application.audit.persist" in tests/
+"application.jobs" in tests/
+```
+
+Update mock targets to patch the domain layer modules instead.
 
 - [ ] **Step 4: Run full test suite**
 
@@ -3038,13 +3141,13 @@ rm src/sentinel/application/jobs/dequeue.py
 - [ ] **Step 6: Run full test suite and lint**
 
 Run: `just test -v && just lint`
-Expected: All tests PASS, no lint errors (no dangling imports)
+Expected: All tests PASS, no lint errors (no dangling imports, import-linter contracts satisfied)
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add -A
-git commit -m "refactor: remove old SQLAlchemy persistence modules in favour of databases library"
+git commit -m "refactor: remove old SQLAlchemy persistence modules in favour of domain layer"
 ```
 
 ---
@@ -3054,21 +3157,30 @@ git commit -m "refactor: remove old SQLAlchemy persistence modules in favour of 
 - [ ] **Step 1: Run full test suite**
 
 Run: `just test -v`
-Expected: All tests PASS
+Expected: All tests PASS (475+ tests)
 
 - [ ] **Step 2: Run lint**
 
 Run: `just lint`
-Expected: No errors
+Expected: No errors (ruff + mypy + import-linter contracts all pass). In particular, verify import-linter contracts are satisfied — the domain layer must not import from interfaces or application layers.
 
 - [ ] **Step 3: Verify migration applies cleanly (if DB available)**
 
 Run: `just run-db-migrations`
-Expected: Migration 003 applies without errors
+Expected: Migrations 002a and 003 apply without errors. Tables `investigation_records`, `ticket_review_records`, `pipeline_runs`, `node_executions`, `agent_calls` all exist with `trace_id` columns.
 
 - [ ] **Step 4: Verify trace_id correlation works end-to-end**
 
-Check that the worker creates an `ExecutionTracer`, propagates `trace_id` to investigation/ticket records, and pipeline_runs/node_executions are written. This can be verified by running a functional test or manual inspection.
+Check that the worker creates an `ExecutionTracer`, propagates `trace_id` to investigation/ticket records, and pipeline_runs/node_executions are written. This can be verified by running a functional test or manual inspection. Key verification points:
+
+- `ExecutionTracer.trace_id` is a UUID set during `start_pipeline()`
+- The same `trace_id` appears in:
+  - `pipeline_runs.trace_id`
+  - `node_executions.trace_id`
+  - `agent_calls.trace_id`
+  - `investigation_records.trace_id` (via persist callback)
+  - `ticket_review_records.trace_id` (via persist callback)
+- `TraceCollector` backward compat: `et.record()` still appends to `et.traces` for Streamlit UI
 
 - [ ] **Step 5: Commit any remaining fixes**
 
