@@ -27,8 +27,7 @@ def get_db() -> databases.Database:
         url = get_settings().database_url
         if not url:
             raise RuntimeError(
-                "DATABASE_URL is not configured. "
-                "Set the DATABASE_URL environment variable."
+                "DATABASE_URL is not configured. Set the DATABASE_URL environment variable."
             )
         # The databases library expects postgresql:// not postgresql+asyncpg://
         clean_url = url.replace("+asyncpg", "")

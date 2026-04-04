@@ -1,5 +1,5 @@
 """
-Job queue persistence via the databases library.
+Write operations for the job queue.
 
 Uses PostgreSQL ``SELECT ... FOR UPDATE SKIP LOCKED`` for safe concurrent
 worker claiming.
@@ -14,7 +14,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 import databases
+from sqlalchemy import insert, select, update
+from sqlmodel import col
 
+from sentinel.data import job_models
 from sentinel.utils import logs
 
 
@@ -48,34 +51,20 @@ async def enqueue_job(
     payload_hash = hashlib.sha256(payload_json.encode()).hexdigest()
     idempotency_key = hashlib.sha256(f"{job_type}:{source_id}".encode()).hexdigest()
 
-    query = """
-        INSERT INTO job_requests (
-            id, job_type, payload_json, payload_hash, status, priority,
-            requested_by, idempotency_key, retry_count, max_retries,
-            created_at, trace_id
-        ) VALUES (
-            :id, :job_type, :payload_json, :payload_hash, :status, :priority,
-            :requested_by, :idempotency_key, :retry_count, :max_retries,
-            :created_at, :trace_id
-        )
-    """
-    await db.execute(
-        query=query,
-        values={
-            "id": job_id,
-            "job_type": job_type,
-            "payload_json": payload_json,
-            "payload_hash": payload_hash,
-            "status": "pending",
-            "priority": priority,
-            "requested_by": requested_by,
-            "idempotency_key": idempotency_key,
-            "retry_count": 0,
-            "max_retries": max_retries,
-            "created_at": created_at,
-            "trace_id": trace_id,
-        },
+    query = insert(job_models.JobRequestRecord).values(
+        id=job_id,
+        job_type=job_type,
+        payload_json=payload_json,
+        payload_hash=payload_hash,
+        status="pending",
+        priority=priority,
+        requested_by=requested_by,
+        idempotency_key=idempotency_key,
+        retry_count=0,
+        max_retries=max_retries,
+        created_at=created_at,
     )
+    await db.execute(query)
     logs.log_event(
         "job_enqueued",
         params={
@@ -202,41 +191,32 @@ async def claim_next_job(
     :param job_types: Tuple of job types to consider.
     :returns: The claimed job row as a dict, or None if no jobs available.
     """
-    placeholders = ", ".join(f":jt{i}" for i in range(len(job_types)))
-    type_values = {f"jt{i}": jt for i, jt in enumerate(job_types)}
-
-    select_query = f"""
-        SELECT *
-        FROM job_requests
-        WHERE status = 'pending'
-          AND job_type IN ({placeholders})
-        ORDER BY priority ASC, created_at ASC
-        LIMIT 1
-        FOR UPDATE SKIP LOCKED
-    """  # noqa: S608
-    row = await db.fetch_one(query=select_query, values=type_values)
+    select_query = (
+        select(job_models.JobRequestRecord)
+        .where(col(job_models.JobRequestRecord.status) == "pending")
+        .where(col(job_models.JobRequestRecord.job_type).in_(job_types))
+        .order_by(
+            col(job_models.JobRequestRecord.priority).asc(),
+            col(job_models.JobRequestRecord.created_at).asc(),
+        )
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    )
+    row = await db.fetch_one(select_query)
 
     if row is None:
         return None
 
-    row_dict = dict(row)
+    row_dict = dict(row._mapping)  # noqa: SLF001
     job_id = row_dict["id"]
     now = datetime.now(tz=UTC)
 
-    update_query = """
-        UPDATE job_requests
-        SET status = 'running', locked_by = :locked_by, locked_at = :locked_at
-        WHERE id = :id
-    """
-    await db.execute(
-        query=update_query,
-        values={
-            "id": job_id,
-            "locked_by": worker_id,
-            "locked_at": now,
-            "status": "running",
-        },
+    update_query = (
+        update(job_models.JobRequestRecord)
+        .where(col(job_models.JobRequestRecord.id) == job_id)
+        .values(status="running", locked_by=worker_id, locked_at=now)
     )
+    await db.execute(update_query)
 
     logs.log_event(
         "job_claimed",
@@ -248,29 +228,6 @@ async def claim_next_job(
     )
 
     return row_dict
-
-
-async def fetch_job(
-    *,
-    db: databases.Database,
-    job_id: uuid.UUID,
-) -> dict[str, Any] | None:
-    """
-    Fetch a single job request by its primary key.
-
-    :param db: The async database connection.
-    :param job_id: UUID primary key of the job request.
-    :returns: Row dict if found, or None.
-    """
-    query = """
-        SELECT *
-        FROM job_requests
-        WHERE id = :id
-    """
-    row = await db.fetch_one(query=query, values={"id": job_id})
-    if row is None:
-        return None
-    return dict(row)
 
 
 async def complete_job(
@@ -291,38 +248,24 @@ async def complete_job(
     """
     now = datetime.now(tz=UTC)
 
-    update_query = """
-        UPDATE job_requests
-        SET status = 'completed'
-        WHERE id = :id
-    """
-    await db.execute(
-        query=update_query,
-        values={"id": job_id},
+    update_query = (
+        update(job_models.JobRequestRecord)
+        .where(col(job_models.JobRequestRecord.id) == job_id)
+        .values(status="completed")
     )
+    await db.execute(update_query)
 
     result_id = uuid.uuid4()
-    insert_query = """
-        INSERT INTO job_results (
-            id, job_request_id, status, result_json, completed_at,
-            worker_id, created_at
-        ) VALUES (
-            :id, :job_request_id, :status, :result_json, :completed_at,
-            :worker_id, :created_at
-        )
-    """
-    await db.execute(
-        query=insert_query,
-        values={
-            "id": result_id,
-            "job_request_id": job_id,
-            "status": "completed",
-            "result_json": result_json,
-            "completed_at": now,
-            "worker_id": worker_id,
-            "created_at": now,
-        },
+    insert_query = insert(job_models.JobResultRecord).values(
+        id=result_id,
+        job_request_id=job_id,
+        status="completed",
+        result_json=result_json,
+        completed_at=now,
+        worker_id=worker_id,
+        created_at=now,
     )
+    await db.execute(insert_query)
 
     logs.log_event(
         "job_completed",
@@ -360,48 +303,36 @@ async def fail_job(
     now = datetime.now(tz=UTC)
 
     if should_retry:
-        update_query = """
-            UPDATE job_requests
-            SET status = 'pending',
-                locked_by = NULL,
-                locked_at = NULL,
-                retry_count = retry_count + 1
-            WHERE id = :id
-        """
+        update_query = (
+            update(job_models.JobRequestRecord)
+            .where(col(job_models.JobRequestRecord.id) == job_id)
+            .values(
+                status="pending",
+                locked_by=None,
+                locked_at=None,
+                retry_count=col(job_models.JobRequestRecord.retry_count) + 1,
+            )
+        )
     else:
-        update_query = """
-            UPDATE job_requests
-            SET status = 'failed'
-            WHERE id = :id
-        """
+        update_query = (
+            update(job_models.JobRequestRecord)
+            .where(col(job_models.JobRequestRecord.id) == job_id)
+            .values(status="failed")
+        )
 
-    await db.execute(
-        query=update_query,
-        values={"id": job_id},
-    )
+    await db.execute(update_query)
 
     result_id = uuid.uuid4()
-    insert_query = """
-        INSERT INTO job_results (
-            id, job_request_id, status, error_message, completed_at,
-            worker_id, created_at
-        ) VALUES (
-            :id, :job_request_id, :status, :error_message, :completed_at,
-            :worker_id, :created_at
-        )
-    """
-    await db.execute(
-        query=insert_query,
-        values={
-            "id": result_id,
-            "job_request_id": job_id,
-            "status": "failed",
-            "error_message": error_message,
-            "completed_at": now,
-            "worker_id": worker_id,
-            "created_at": now,
-        },
+    insert_query = insert(job_models.JobResultRecord).values(
+        id=result_id,
+        job_request_id=job_id,
+        status="failed",
+        error_message=error_message,
+        completed_at=now,
+        worker_id=worker_id,
+        created_at=now,
     )
+    await db.execute(insert_query)
 
     logs.log_event(
         "job_failed",
@@ -429,15 +360,13 @@ async def recover_stale_jobs(
     :param db: The async database connection.
     :param worker_id: Identifier of the worker whose stale jobs to recover.
     """
-    query = """
-        UPDATE job_requests
-        SET status = 'pending', locked_by = NULL, locked_at = NULL
-        WHERE status = 'running' AND locked_by = :worker_id
-    """
-    await db.execute(
-        query=query,
-        values={"worker_id": worker_id},
+    query = (
+        update(job_models.JobRequestRecord)
+        .where(col(job_models.JobRequestRecord.status) == "running")
+        .where(col(job_models.JobRequestRecord.locked_by) == worker_id)
+        .values(status="pending", locked_by=None, locked_at=None)
     )
+    await db.execute(query)
 
     logs.log_event(
         "stale_jobs_recovered",

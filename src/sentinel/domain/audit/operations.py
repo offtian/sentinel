@@ -1,15 +1,18 @@
 """
-Append-only audit log persistence via the databases library.
+Append-only audit log write operations.
 """
 
 from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 import databases
+from sqlalchemy import insert
 
+from sentinel.data import audit_models
 from sentinel.utils import logs
 
 
@@ -20,7 +23,7 @@ async def record_audit_entry(
     action: str,
     resource_type: str,
     resource_id: str,
-    details: dict,
+    details: dict[str, Any],
     input_hash: str,
     model_id: str = "",
     prompt_version: str = "",
@@ -40,32 +43,21 @@ async def record_audit_entry(
     :returns: The UUID of the inserted audit log row.
     """
     row_id = uuid.uuid4()
-    timestamp = datetime.now(tz=timezone.utc)
+    timestamp = datetime.now(tz=UTC)
     details_json = json.dumps(details, default=str)
-    query = """
-        INSERT INTO audit_log (
-            id, timestamp, actor, action, resource_type, resource_id,
-            details_json, input_hash, model_id, prompt_version
-        ) VALUES (
-            :id, :timestamp, :actor, :action, :resource_type, :resource_id,
-            :details_json, :input_hash, :model_id, :prompt_version
-        )
-    """
-    await db.execute(
-        query=query,
-        values={
-            "id": row_id,
-            "timestamp": timestamp,
-            "actor": actor,
-            "action": action,
-            "resource_type": resource_type,
-            "resource_id": resource_id,
-            "details_json": details_json,
-            "input_hash": input_hash,
-            "model_id": model_id,
-            "prompt_version": prompt_version,
-        },
+    query = insert(audit_models.AuditLogRecord).values(
+        id=row_id,
+        timestamp=timestamp,
+        actor=actor,
+        action=action,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        details_json=details_json,
+        input_hash=input_hash,
+        model_id=model_id,
+        prompt_version=prompt_version,
     )
+    await db.execute(query)
     logs.log_event(
         "audit_entry_recorded",
         params={

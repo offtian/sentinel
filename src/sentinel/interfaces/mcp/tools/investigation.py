@@ -36,11 +36,13 @@ async def trigger_investigation(
         return "Database not available. Cannot enqueue investigation."
 
     job_id = uuid.uuid4()
-    payload = json.dumps({
-        "alert_source": alert_source,
-        "alert_id": alert_id,
-        "description": description,
-    })
+    payload = json.dumps(
+        {
+            "alert_source": alert_source,
+            "alert_id": alert_id,
+            "description": description,
+        }
+    )
     idempotency_key = f"mcp:sre:{alert_source}:{alert_id}"
 
     try:
