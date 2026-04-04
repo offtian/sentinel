@@ -85,7 +85,7 @@ class TestTriggerAutomation:
 
         # When triggering
         with mock.patch(
-            "sentinel.interfaces.api.routers.automations.router.enqueue.enqueue_automation",
+            "sentinel.interfaces.api.routers.automations.router.job_ops.enqueue_automation",
             return_value=job_id,
         ):
             response = client.post(

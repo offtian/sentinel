@@ -18,16 +18,17 @@ import asyncio
 import json
 import os
 import signal
+from typing import Any
 
 import databases
 
 from sentinel import bootstrap
 from sentinel.application.automations import runner as automation_runner
-from sentinel.application.jobs import dequeue
 from sentinel.config import get_config
-from sentinel.data import database, job_models
+from sentinel.data import database
 from sentinel.data import db as async_db
 from sentinel.domain.jobs import entities
+from sentinel.domain.jobs import operations as job_ops
 from sentinel.domain.pipeline import tracer as pipeline_tracer
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre import operations as sre_ops
@@ -80,36 +81,36 @@ async def _dispatch_job(job_type: str, payload: dict[str, object]) -> str:
 
 
 async def _execute_job(
-    job_record: job_models.JobRequestRecord,
+    job_dict: dict[str, Any],
     *,
     worker_id: str,
 ) -> None:
     """Dispatch a claimed job to the appropriate pipeline."""
-    payload = json.loads(job_record.payload_json)
-    job_id = job_record.id
+    payload = json.loads(str(job_dict["payload_json"]))
+    job_id = job_dict["id"]
 
     try:
-        result_json = await _dispatch_job(job_record.job_type, payload)
+        result_json = await _dispatch_job(str(job_dict["job_type"]), payload)
 
-        async with database.get_session() as session:
-            fresh_record = await dequeue.fetch_job_record(session, job_id=job_id)
-            await dequeue.complete_job(
-                session,
-                job_record=fresh_record,
-                result_json=result_json,
-                worker_id=worker_id,
-            )
+        db = async_db.get_db()
+        await job_ops.complete_job(
+            db=db,
+            job_id=job_id,
+            result_json=result_json,
+            worker_id=worker_id,
+        )
 
     except Exception as exc:
         logs.log_exception(exc, params={"job_id": str(job_id)})
-        async with database.get_session() as session:
-            fresh_record = await dequeue.fetch_job_record(session, job_id=job_id)
-            await dequeue.fail_job(
-                session,
-                job_record=fresh_record,
-                error_message=str(exc),
-                worker_id=worker_id,
-            )
+        db = async_db.get_db()
+        should_retry = job_dict["retry_count"] < job_dict["max_retries"]
+        await job_ops.fail_job(
+            db=db,
+            job_id=job_id,
+            error_message=str(exc),
+            worker_id=worker_id,
+            should_retry=should_retry,
+        )
 
 
 async def _run_sre_investigation(payload: dict[str, object]) -> str:
@@ -212,43 +213,36 @@ async def _poll_loop(*, worker_id: str) -> None:
     )
 
     # Recover any jobs left running by a previous crash of this worker
-    async with database.get_session() as session:
-        recovered = await dequeue.recover_stale_jobs(session, worker_id=worker_id)
-        if recovered:
-            logs.log_event(
-                "worker.recovered_stale_jobs",
-                params={"count": recovered},
-            )
+    db = async_db.get_db()
+    await job_ops.recover_stale_jobs(db=db, worker_id=worker_id)
 
     while not _shutdown_requested:
-        async with database.get_session() as session:
-            job_record = await dequeue.claim_next_job(
-                session,
-                worker_id=worker_id,
-            )
+        db = async_db.get_db()
+        job_dict = await job_ops.claim_next_job(db=db, worker_id=worker_id)
 
-        if job_record is None:
+        if job_dict is None:
             await asyncio.sleep(poll_interval)
             continue
 
         try:
             await asyncio.wait_for(
-                _execute_job(job_record, worker_id=worker_id),
+                _execute_job(job_dict, worker_id=worker_id),
                 timeout=job_timeout,
             )
         except TimeoutError:
             logs.log_event(
                 "worker.job_timed_out",
-                params={"job_id": str(job_record.id), "timeout": job_timeout},
+                params={"job_id": str(job_dict["id"]), "timeout": job_timeout},
             )
-            async with database.get_session() as session:
-                fresh_record = await dequeue.fetch_job_record(session, job_id=job_record.id)
-                await dequeue.fail_job(
-                    session,
-                    job_record=fresh_record,
-                    error_message=f"Job timed out after {job_timeout}s",
-                    worker_id=worker_id,
-                )
+            db = async_db.get_db()
+            should_retry = job_dict["retry_count"] < job_dict["max_retries"]
+            await job_ops.fail_job(
+                db=db,
+                job_id=job_dict["id"],
+                error_message=f"Job timed out after {job_timeout}s",
+                worker_id=worker_id,
+                should_retry=should_retry,
+            )
 
     logs.log_event("worker.shutdown_complete", params={"worker_id": worker_id})
 
@@ -262,34 +256,32 @@ async def _run_once(*, worker_id: str) -> None:
         params={"worker_id": worker_id, "job_timeout": job_timeout},
     )
 
-    async with database.get_session() as session:
-        job_record = await dequeue.claim_next_job(
-            session,
-            worker_id=worker_id,
-        )
+    db = async_db.get_db()
+    job_dict = await job_ops.claim_next_job(db=db, worker_id=worker_id)
 
-    if job_record is None:
+    if job_dict is None:
         logs.log_event("worker.run_once_no_jobs")
         return
 
     try:
         await asyncio.wait_for(
-            _execute_job(job_record, worker_id=worker_id),
+            _execute_job(job_dict, worker_id=worker_id),
             timeout=job_timeout,
         )
     except TimeoutError:
         logs.log_event(
             "worker.job_timed_out",
-            params={"job_id": str(job_record.id), "timeout": job_timeout},
+            params={"job_id": str(job_dict["id"]), "timeout": job_timeout},
         )
-        async with database.get_session() as session:
-            fresh_record = await dequeue.fetch_job_record(session, job_id=job_record.id)
-            await dequeue.fail_job(
-                session,
-                job_record=fresh_record,
-                error_message=f"Job timed out after {job_timeout}s",
-                worker_id=worker_id,
-            )
+        db = async_db.get_db()
+        should_retry = job_dict["retry_count"] < job_dict["max_retries"]
+        await job_ops.fail_job(
+            db=db,
+            job_id=job_dict["id"],
+            error_message=f"Job timed out after {job_timeout}s",
+            worker_id=worker_id,
+            should_retry=should_retry,
+        )
 
     logs.log_event("worker.run_once_complete", params={"worker_id": worker_id})
 

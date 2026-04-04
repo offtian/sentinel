@@ -6,10 +6,11 @@ from typing import Any
 
 import fastapi
 
-from sentinel.application.jobs import enqueue
-from sentinel.application.support import persist as support_persist
-from sentinel.data import database
+from sentinel.data import db as async_db
+from sentinel.domain.jobs import operations as job_ops
 from sentinel.domain.support import entities
+from sentinel.domain.support import operations as support_ops
+from sentinel.domain.support import queries as support_queries
 from sentinel.domain.support.entities import ReviewStatus
 from sentinel.interfaces.api.dependencies import require_database
 from sentinel.settings import get_settings
@@ -26,14 +27,14 @@ async def _enqueue_ticket(
     priority: int = 2,
 ) -> fastapi.responses.JSONResponse:
     """Enqueue a ticket for async review and return 202 Accepted."""
-    async with database.get_session() as session:
-        job_id = await enqueue.enqueue_review(
-            session,
-            ticket_payload=ticket.model_dump(mode="json"),
-            requested_by=requested_by,
-            ticket_id=ticket.id,
-            priority=priority,
-        )
+    db = async_db.get_db()
+    job_id = await job_ops.enqueue_review(
+        db=db,
+        ticket_payload=ticket.model_dump(mode="json"),
+        requested_by=requested_by,
+        ticket_id=ticket.id,
+        priority=priority,
+    )
 
     return fastapi.responses.JSONResponse(
         status_code=202,
@@ -132,8 +133,8 @@ async def get_review(
 
     Returns 404 if the review is not found.
     """
-    async with database.get_session() as session:
-        record = await support_persist.get_ticket_review(session, record_id=review_id)
+    db = async_db.get_db()
+    record = await support_queries.fetch_ticket_review(db=db, record_id=review_id)
 
     if record is None:
         return fastapi.responses.JSONResponse(
@@ -141,19 +142,20 @@ async def get_review(
             content={"error": "Review not found", "review_id": str(review_id)},
         )
 
+    reviewed_at = record["reviewed_at"]
     return fastapi.responses.JSONResponse(
         status_code=200,
         content={
-            "review_id": str(record.id),
-            "ticket_id": record.ticket_id,
-            "ticket_key": record.ticket_key,
-            "suggested_response": record.suggested_response,
-            "sources": record.sources_json,
-            "confidence_score": record.confidence_score,
-            "category": record.category,
-            "status": record.status,
-            "created_at": record.created_at.isoformat(),
-            "reviewed_at": record.reviewed_at.isoformat() if record.reviewed_at else None,
+            "review_id": str(record["id"]),
+            "ticket_id": record["ticket_id"],
+            "ticket_key": record["ticket_key"],
+            "suggested_response": record["suggested_response"],
+            "sources": record["sources_json"],
+            "confidence_score": record["confidence_score"],
+            "category": record["category"],
+            "status": record["status"],
+            "created_at": record["created_at"].isoformat(),
+            "reviewed_at": reviewed_at.isoformat() if reviewed_at else None,
         },
     )
 
@@ -165,8 +167,8 @@ async def get_support_stats() -> fastapi.responses.JSONResponse:
 
     Provides counts of reviews grouped by status (drafted, accepted, rejected, modified).
     """
-    async with database.get_session() as session:
-        counts = await support_persist.get_review_stats(session)
+    db = async_db.get_db()
+    counts = await support_queries.fetch_review_stats(db=db)
 
     total = sum(counts.values())
     reviewed = total - counts.get("drafted", 0)
@@ -208,18 +210,15 @@ async def submit_review_feedback(
             },
         )
 
-    async with database.get_session() as session:
-        record = await support_persist.update_review_status(
-            session,
-            record_id=review_id,
-            status=new_status,
-        )
-
+    db = async_db.get_db()
+    record = await support_queries.fetch_ticket_review(db=db, record_id=review_id)
     if record is None:
         return fastapi.responses.JSONResponse(
             status_code=404,
             content={"error": "Review not found", "review_id": str(review_id)},
         )
+
+    await support_ops.update_review_status(db=db, record_id=review_id, status=new_status)
 
     logs.log_event(
         "review_feedback_submitted",
@@ -229,8 +228,8 @@ async def submit_review_feedback(
     return fastapi.responses.JSONResponse(
         status_code=200,
         content={
-            "review_id": str(record.id),
-            "status": record.status,
-            "reviewed_at": record.reviewed_at.isoformat() if record.reviewed_at else None,
+            "review_id": str(review_id),
+            "status": new_status,
+            "reviewed_at": datetime.now(tz=UTC).isoformat(),
         },
     )

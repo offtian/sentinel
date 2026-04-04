@@ -49,7 +49,7 @@ class TestGetSupportStats:
 
         # When requesting stats
         with mock.patch(
-            "sentinel.interfaces.api.routers.support.router.support_persist.get_review_stats",
+            "sentinel.interfaces.api.routers.support.router.support_queries.fetch_review_stats",
             return_value=mock_counts,
         ):
             response = client.get("/api/support/stats")
@@ -74,7 +74,7 @@ class TestGetSupportStats:
 
         # When requesting stats
         with mock.patch(
-            "sentinel.interfaces.api.routers.support.router.support_persist.get_review_stats",
+            "sentinel.interfaces.api.routers.support.router.support_queries.fetch_review_stats",
             return_value=mock_counts,
         ):
             response = client.get("/api/support/stats")

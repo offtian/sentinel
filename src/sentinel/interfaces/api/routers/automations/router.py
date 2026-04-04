@@ -5,8 +5,8 @@ from typing import Any
 import fastapi
 
 from sentinel.application.automations import runner
-from sentinel.application.jobs import enqueue
-from sentinel.data import database
+from sentinel.data import db as async_db
+from sentinel.domain.jobs import operations as job_ops
 from sentinel.interfaces.api.dependencies import require_database
 from sentinel.utils import logs
 
@@ -48,13 +48,13 @@ async def trigger_automation(
             },
         )
 
-    async with database.get_session() as session:
-        job_id = await enqueue.enqueue_automation(
-            session,
-            automation_name=automation_name,
-            params=params,
-            requested_by="api:manual",
-        )
+    db = async_db.get_db()
+    job_id = await job_ops.enqueue_automation(
+        db=db,
+        automation_name=automation_name,
+        params=params,
+        requested_by="api:manual",
+    )
 
     logs.log_event(
         "automation_triggered",

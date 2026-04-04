@@ -8,10 +8,10 @@ from typing import Any
 import fastapi
 from pydantic import BaseModel
 
-from sentinel.application.jobs import enqueue
-from sentinel.application.sre import persist as sre_persist
-from sentinel.data import database
+from sentinel.data import db as async_db
+from sentinel.domain.jobs import operations as job_ops
 from sentinel.domain.sre import entities as sre_entities
+from sentinel.domain.sre import queries as sre_queries
 from sentinel.interfaces.api.dependencies import require_database
 from sentinel.interfaces.webhooks import pagerduty
 from sentinel.settings import get_settings
@@ -28,14 +28,14 @@ async def _enqueue_alert(
     priority: int = 1,
 ) -> fastapi.responses.JSONResponse:
     """Enqueue an alert for async investigation and return 202 Accepted."""
-    async with database.get_session() as session:
-        job_id = await enqueue.enqueue_investigation(
-            session,
-            alert_payload=alert.model_dump(mode="json"),
-            requested_by=requested_by,
-            alert_id=alert.id,
-            priority=priority,
-        )
+    db = async_db.get_db()
+    job_id = await job_ops.enqueue_investigation(
+        db=db,
+        alert_payload=alert.model_dump(mode="json"),
+        requested_by=requested_by,
+        alert_id=alert.id,
+        priority=priority,
+    )
 
     return fastapi.responses.JSONResponse(
         status_code=202,
@@ -142,8 +142,8 @@ async def get_investigation(
 
     Returns 404 if the investigation is not found.
     """
-    async with database.get_session() as session:
-        record = await sre_persist.get_investigation(session, record_id=investigation_id)
+    db = async_db.get_db()
+    record = await sre_queries.fetch_investigation(db=db, record_id=investigation_id)
 
     if record is None:
         return fastapi.responses.JSONResponse(
@@ -154,23 +154,25 @@ async def get_investigation(
             },
         )
 
+    started_at = record["started_at"]
+    completed_at = record["completed_at"]
     return fastapi.responses.JSONResponse(
         status_code=200,
         content={
-            "investigation_id": str(record.id),
-            "alert_source": record.alert_source,
-            "alert_id": record.alert_id,
-            "alert_title": record.alert_title,
-            "severity": record.severity,
-            "service": record.service,
-            "status": record.status,
-            "root_cause": record.root_cause,
-            "remediation": record.remediation,
-            "confidence_score": record.confidence_score,
-            "findings": record.findings_json,
-            "started_at": record.started_at.isoformat() if record.started_at else None,
-            "completed_at": record.completed_at.isoformat() if record.completed_at else None,
-            "created_at": record.created_at.isoformat(),
+            "investigation_id": str(record["id"]),
+            "alert_source": record["alert_source"],
+            "alert_id": record["alert_id"],
+            "alert_title": record["alert_title"],
+            "severity": record["severity"],
+            "service": record["service"],
+            "status": record["status"],
+            "root_cause": record["root_cause"],
+            "remediation": record["remediation"],
+            "confidence_score": record["confidence_score"],
+            "findings": record["findings_json"],
+            "started_at": started_at.isoformat() if started_at else None,
+            "completed_at": completed_at.isoformat() if completed_at else None,
+            "created_at": record["created_at"].isoformat(),
         },
     )
 

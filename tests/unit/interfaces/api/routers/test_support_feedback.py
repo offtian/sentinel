@@ -49,7 +49,7 @@ class TestGetReview:
 
         # When a review is requested
         with mock.patch(
-            "sentinel.interfaces.api.routers.support.router.support_persist.get_ticket_review",
+            "sentinel.interfaces.api.routers.support.router.support_queries.fetch_ticket_review",
             return_value=None,
         ):
             response = client.get(f"/api/support/reviews/{review_id}")
@@ -63,21 +63,22 @@ class TestGetReview:
         # Given a review record exists
         review_id = uuid.uuid4()
         created = datetime(2024, 6, 1, tzinfo=UTC)
-        record = mock.MagicMock()
-        record.id = review_id
-        record.ticket_id = "10001"
-        record.ticket_key = "SUPPORT-42"
-        record.suggested_response = "Try resetting your password."
-        record.sources_json = {"sources": []}
-        record.confidence_score = 0.85
-        record.category = "account"
-        record.status = "drafted"
-        record.created_at = created
-        record.reviewed_at = None
+        record = {
+            "id": review_id,
+            "ticket_id": "10001",
+            "ticket_key": "SUPPORT-42",
+            "suggested_response": "Try resetting your password.",
+            "sources_json": {"sources": []},
+            "confidence_score": 0.85,
+            "category": "account",
+            "status": "drafted",
+            "created_at": created,
+            "reviewed_at": None,
+        }
 
         # When a review is requested
         with mock.patch(
-            "sentinel.interfaces.api.routers.support.router.support_persist.get_ticket_review",
+            "sentinel.interfaces.api.routers.support.router.support_queries.fetch_ticket_review",
             return_value=record,
         ):
             response = client.get(f"/api/support/reviews/{review_id}")
@@ -127,7 +128,7 @@ class TestSubmitReviewFeedback:
 
         # When feedback is submitted
         with mock.patch(
-            "sentinel.interfaces.api.routers.support.router.support_persist.update_review_status",
+            "sentinel.interfaces.api.routers.support.router.support_queries.fetch_ticket_review",
             return_value=None,
         ):
             response = client.post(
@@ -142,16 +143,17 @@ class TestSubmitReviewFeedback:
     def test_updates_status_successfully(self, client):
         # Given a review record exists
         review_id = uuid.uuid4()
-        reviewed_at = datetime(2024, 6, 2, tzinfo=UTC)
-        record = mock.MagicMock()
-        record.id = review_id
-        record.status = "accepted"
-        record.reviewed_at = reviewed_at
+        existing_record = {"id": review_id, "status": "drafted"}
 
         # When feedback is submitted
-        with mock.patch(
-            "sentinel.interfaces.api.routers.support.router.support_persist.update_review_status",
-            return_value=record,
+        with (
+            mock.patch(
+                "sentinel.interfaces.api.routers.support.router.support_queries.fetch_ticket_review",
+                return_value=existing_record,
+            ),
+            mock.patch(
+                "sentinel.interfaces.api.routers.support.router.support_ops.update_review_status",
+            ),
         ):
             response = client.post(
                 f"/api/support/reviews/{review_id}/feedback",
@@ -169,15 +171,17 @@ class TestSubmitReviewFeedback:
     def test_accepts_valid_statuses(self, status, client):
         # Given a valid status value
         review_id = uuid.uuid4()
-        record = mock.MagicMock()
-        record.id = review_id
-        record.status = status
-        record.reviewed_at = datetime(2024, 6, 2, tzinfo=UTC)
+        existing_record = {"id": review_id, "status": "drafted"}
 
         # When feedback with that status is submitted
-        with mock.patch(
-            "sentinel.interfaces.api.routers.support.router.support_persist.update_review_status",
-            return_value=record,
+        with (
+            mock.patch(
+                "sentinel.interfaces.api.routers.support.router.support_queries.fetch_ticket_review",
+                return_value=existing_record,
+            ),
+            mock.patch(
+                "sentinel.interfaces.api.routers.support.router.support_ops.update_review_status",
+            ),
         ):
             response = client.post(
                 f"/api/support/reviews/{review_id}/feedback",
