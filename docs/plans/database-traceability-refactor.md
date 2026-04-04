@@ -8,28 +8,33 @@
 
 **Tech Stack:** Python `databases` library (async PostgreSQL), Alembic migrations, `attrs` frozen classes, `structlog`
 
+> **Architecture deviation (implemented):** During implementation, persistence functions were placed in the **domain layer** (`domain/$category/{queries,operations}.py`) instead of the originally planned `data/` layer. This aligns with the project's existing pattern where domain logic owns its own persistence via SQLAlchemy Core expressions with `databases.Database` dependency injection. The `data/` layer retains only SQLModel table definitions (for Alembic metadata) and the `databases.Database` singleton. See updated file paths in the tables below.
+
 ---
 
 ## File Structure
 
 ### New Files
-| File | Responsibility |
-|------|---------------|
-| `src/sentinel/data/db.py` | `databases.Database` singleton: `get_db()`, `connect_db()`, `disconnect_db()` |
-| `src/sentinel/data/investigations.py` | Investigation persistence via `databases` (replaces `application/sre/persist.py`) |
-| `src/sentinel/data/ticket_reviews.py` | Ticket review persistence via `databases` (replaces `application/support/persist.py`) |
-| `src/sentinel/data/audit.py` | Audit log persistence via `databases` (replaces `application/audit/persist.py`) |
-| `src/sentinel/data/jobs.py` | Job queue persistence via `databases` (replaces `application/jobs/enqueue.py` + `dequeue.py`) |
-| `src/sentinel/data/tracing.py` | Pipeline/node/agent trace persistence via `databases` |
-| `src/sentinel/domain/pipeline/tracer.py` | `ExecutionTracer` — DB-backed replacement for `TraceCollector` |
-| `src/sentinel/data/migrations/alembic/versions/003_add_traceability.py` | Alembic migration: new tables + `trace_id` on existing tables |
-| `tests/unit/data/test_investigations.py` | Tests for investigation persistence |
-| `tests/unit/data/test_ticket_reviews.py` | Tests for ticket review persistence |
-| `tests/unit/data/test_audit.py` | Tests for audit persistence |
-| `tests/unit/data/test_jobs.py` | Tests for job queue persistence |
-| `tests/unit/data/test_tracing.py` | Tests for tracing persistence |
-| `tests/unit/data/test_db.py` | Tests for database singleton |
-| `tests/unit/domain/pipeline/test_tracer.py` | Tests for `ExecutionTracer` |
+| Planned File | Actual File | Responsibility |
+|------|------|---------------|
+| `src/sentinel/data/db.py` | `src/sentinel/data/db.py` | `databases.Database` singleton: `get_db()`, `connect_db()`, `disconnect_db()` |
+| `src/sentinel/data/investigations.py` | `src/sentinel/domain/sre/{queries,operations}.py` | Investigation persistence (reads + writes) |
+| `src/sentinel/data/ticket_reviews.py` | `src/sentinel/domain/support/{queries,operations}.py` | Ticket review persistence (reads + writes) |
+| `src/sentinel/data/audit.py` | `src/sentinel/domain/audit/operations.py` | Audit log persistence (append-only) |
+| `src/sentinel/data/jobs.py` | `src/sentinel/domain/jobs/{queries,operations}.py` | Job queue persistence (reads + writes) |
+| `src/sentinel/data/tracing.py` | `src/sentinel/domain/pipeline/{queries,operations}.py` | Pipeline/node/agent trace persistence |
+| `src/sentinel/domain/pipeline/tracer.py` | _(not yet implemented)_ | `ExecutionTracer` — DB-backed replacement for `TraceCollector` |
+| `src/sentinel/data/migrations/alembic/versions/003_add_traceability.py` | `src/sentinel/data/migrations/alembic/versions/003_add_traceability.py` | Alembic migration: new tables + `trace_id` on existing tables |
+| `src/sentinel/data/migrations/alembic/versions/002a_...` | `src/sentinel/data/migrations/alembic/versions/002a_create_support_and_sre_tables.py` | Alembic migration: investigation_records + ticket_review_records tables |
+| `src/sentinel/data/tracing_models.py` | `src/sentinel/data/tracing_models.py` | SQLModel classes for pipeline_runs, node_executions, agent_calls |
+| `src/sentinel/data/evaluation_models.py` | `src/sentinel/data/evaluation_models.py` | SQLModel classes for comparison_runs, eval_runs |
+| `tests/unit/data/test_db.py` | `tests/unit/data/test_db.py` | Tests for database singleton |
+| `tests/unit/data/test_investigations.py` | `tests/unit/domain/sre/test_{queries,operations}.py` | Tests for investigation persistence |
+| `tests/unit/data/test_ticket_reviews.py` | `tests/unit/domain/support/test_{queries,operations}.py` | Tests for ticket review persistence |
+| `tests/unit/data/test_audit.py` | `tests/unit/domain/audit/test_operations.py` | Tests for audit persistence |
+| `tests/unit/data/test_jobs.py` | `tests/unit/domain/jobs/test_{queries,operations}.py` | Tests for job queue persistence |
+| `tests/unit/data/test_tracing.py` | `tests/unit/domain/pipeline/test_{queries,operations}.py` | Tests for tracing persistence |
+| `tests/unit/domain/pipeline/test_tracer.py` | _(not yet implemented)_ | Tests for `ExecutionTracer` |
 
 ### Modified Files
 | File | Change |
@@ -45,13 +50,13 @@
 | `src/sentinel/interfaces/graphs/support_review.py` | Accept `ExecutionTracer`; record node executions |
 
 ### Deleted After Migration (final cleanup task)
-| File | Reason |
-|------|--------|
-| `src/sentinel/application/sre/persist.py` | Replaced by `data/investigations.py` |
-| `src/sentinel/application/support/persist.py` | Replaced by `data/ticket_reviews.py` |
-| `src/sentinel/application/audit/persist.py` | Replaced by `data/audit.py` |
-| `src/sentinel/application/jobs/enqueue.py` | Replaced by `data/jobs.py` |
-| `src/sentinel/application/jobs/dequeue.py` | Replaced by `data/jobs.py` |
+| File | Replaced By | Status |
+|------|-------------|--------|
+| `src/sentinel/application/sre/persist.py` | `domain/sre/{queries,operations}.py` | Still exists — pending Task 12 |
+| `src/sentinel/application/support/persist.py` | `domain/support/{queries,operations}.py` | Still exists — pending Task 12 |
+| `src/sentinel/application/audit/persist.py` | `domain/audit/operations.py` | Still exists — pending Task 12 |
+| `src/sentinel/application/jobs/enqueue.py` | `domain/jobs/operations.py` | Still exists — pending Task 12 |
+| `src/sentinel/application/jobs/dequeue.py` | `domain/jobs/{queries,operations}.py` | Still exists — pending Task 12 |
 
 ---
 
@@ -59,7 +64,8 @@
 
 | Decision | Choice | Why |
 |----------|--------|-----|
-| Persistence library | `databases` (raw SQL) everywhere | User requirement; already proven in `comparison.py`/`eval_runs.py`; explicit SQL is auditable |
+| Persistence library | `databases` with SQLAlchemy Core expressions | User requirement; already proven in `comparison.py`/`eval_runs.py`; type-safe column refs via `col()` wrapper |
+| Persistence location | `domain/$category/{queries,operations}.py` | Architecture correction: queries belong in domain layer alongside business logic, not in data layer |
 | Tracing granularity | pipeline_run → node_execution → agent_call (3 levels) | Matches actual execution hierarchy; `tool_invocations` deferred (captured in agent message history JSON) |
 | Correlation strategy | `trace_id` UUID on all tables | Single ID links webhook → job → pipeline → nodes → agents; enables `WHERE trace_id = ?` across all tables |
 | `TraceCollector` backward compat | Keep as protocol; `ExecutionTracer` satisfies same interface | Streamlit UI and tests still work without change |
@@ -69,14 +75,14 @@
 
 ---
 
-### Task 1: Database Singleton (`data/db.py`)
+### Task 1: Database Singleton (`data/db.py`) ✅
 
 **Files:**
 - Create: `src/sentinel/data/db.py`
 - Modify: `src/sentinel/data/__init__.py`
 - Test: `tests/unit/data/test_db.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/data/test_db.py
@@ -176,12 +182,12 @@ class TestDisconnectDb:
         assert db._db is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `just test tests/unit/data/test_db.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'sentinel.data.db'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # src/sentinel/data/db.py
@@ -237,7 +243,7 @@ async def disconnect_db() -> None:
         _db = None
 ```
 
-- [ ] **Step 4: Update `__init__.py` to re-export**
+- [x] **Step 4: Update `__init__.py` to re-export**
 
 ```python
 # src/sentinel/data/__init__.py
@@ -246,26 +252,28 @@ from sentinel.data.db import connect_db, disconnect_db, get_db
 __all__ = ["connect_db", "disconnect_db", "get_db"]
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `just test tests/unit/data/test_db.py -v`
 Expected: All 5 tests PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/sentinel/data/db.py src/sentinel/data/__init__.py tests/unit/data/test_db.py
 git commit -m "feat: add databases.Database singleton in data/db.py"
 ```
 
+> **Completed:** commit `13ff47d`
+
 ---
 
-### Task 2: Alembic Migration — Traceability Tables and trace_id Columns
+### Task 2: Alembic Migration — Traceability Tables and trace_id Columns ✅
 
 **Files:**
 - Create: `src/sentinel/data/migrations/alembic/versions/003_add_traceability.py`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```python
 # src/sentinel/data/migrations/alembic/versions/003_add_traceability.py
@@ -384,27 +392,31 @@ def downgrade() -> None:
     op.remove_column("investigation_records", "trace_id")
 ```
 
-- [ ] **Step 2: Verify migration syntax**
+- [x] **Step 2: Verify migration syntax**
 
 Run: `cd /Users/fengtian/projects/sentinel && python -c "import importlib; importlib.import_module('sentinel.data.migrations.alembic.versions.003_add_traceability')"`
 Expected: No import errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/sentinel/data/migrations/alembic/versions/003_add_traceability.py
 git commit -m "feat: add Alembic migration 003 for traceability tables and trace_id columns"
 ```
 
+> **Completed:** commit `f7fb699`. Additional migration `002a` added in commit `c196b43` for `investigation_records` and `ticket_review_records` tables.
+
 ---
 
-### Task 3: Investigation Persistence via `databases`
+### Task 3: Investigation Persistence via `databases` ✅
 
-**Files:**
-- Create: `src/sentinel/data/investigations.py`
-- Test: `tests/unit/data/test_investigations.py`
+> **Architecture change:** Implemented in `domain/sre/{queries,operations}.py` instead of `data/investigations.py`. Uses SQLAlchemy Core expressions with `col()` wrapper, not raw SQL strings. Tests at `tests/unit/domain/sre/test_{queries,operations}.py`.
 
-- [ ] **Step 1: Write the failing test**
+**Files (actual):**
+- Create: `src/sentinel/domain/sre/queries.py`, `src/sentinel/domain/sre/operations.py`
+- Test: `tests/unit/domain/sre/test_queries.py`, `tests/unit/domain/sre/test_operations.py`
+
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/data/test_investigations.py
@@ -524,12 +536,12 @@ class TestFetchInvestigationsForService:
         assert call_kwargs["values"]["limit"] == 5
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `just test tests/unit/data/test_investigations.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # src/sentinel/data/investigations.py
@@ -700,27 +712,31 @@ async def fetch_investigations_for_service(
     return [dict(row) for row in rows]
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `just test tests/unit/data/test_investigations.py -v`
 Expected: All tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/data/investigations.py tests/unit/data/test_investigations.py
 git commit -m "feat: add investigation persistence via databases library"
 ```
 
+> **Completed:** commits `c4cc5f3`, `bde4af0` (domain layer migration), and subsequent refactors.
+
 ---
 
-### Task 4: Ticket Review Persistence via `databases`
+### Task 4: Ticket Review Persistence via `databases` ✅
 
-**Files:**
-- Create: `src/sentinel/data/ticket_reviews.py`
-- Test: `tests/unit/data/test_ticket_reviews.py`
+> **Architecture change:** Implemented in `domain/support/{queries,operations}.py` instead of `data/ticket_reviews.py`. Tests at `tests/unit/domain/support/test_{queries,operations}.py`.
 
-- [ ] **Step 1: Write the failing test**
+**Files (actual):**
+- Create: `src/sentinel/domain/support/queries.py`, `src/sentinel/domain/support/operations.py`
+- Test: `tests/unit/domain/support/test_queries.py`, `tests/unit/domain/support/test_operations.py`
+
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/data/test_ticket_reviews.py
@@ -815,12 +831,12 @@ class TestUpdateReviewStatus:
         assert call_kwargs.kwargs["values"]["status"] == "accepted"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `just test tests/unit/data/test_ticket_reviews.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # src/sentinel/data/ticket_reviews.py
@@ -975,27 +991,31 @@ async def update_review_status(
     )
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `just test tests/unit/data/test_ticket_reviews.py -v`
 Expected: All tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/data/ticket_reviews.py tests/unit/data/test_ticket_reviews.py
 git commit -m "feat: add ticket review persistence via databases library"
 ```
 
+> **Completed:** commits `47192be`, `bde4af0` (domain layer migration), and subsequent refactors.
+
 ---
 
-### Task 5: Audit Log Persistence via `databases`
+### Task 5: Audit Log Persistence via `databases` ✅
 
-**Files:**
-- Create: `src/sentinel/data/audit.py`
-- Test: `tests/unit/data/test_audit.py`
+> **Architecture change:** Implemented in `domain/audit/operations.py` instead of `data/audit.py`. Tests at `tests/unit/domain/audit/test_operations.py`.
 
-- [ ] **Step 1: Write the failing test**
+**Files (actual):**
+- Create: `src/sentinel/domain/audit/operations.py`
+- Test: `tests/unit/domain/audit/test_operations.py`
+
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/data/test_audit.py
@@ -1067,12 +1087,12 @@ class TestRecordAuditEntry:
         assert "42" in details_value
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `just test tests/unit/data/test_audit.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # src/sentinel/data/audit.py
@@ -1158,29 +1178,33 @@ async def record_audit_entry(
     return row_id
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `just test tests/unit/data/test_audit.py -v`
 Expected: All tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/data/audit.py tests/unit/data/test_audit.py
 git commit -m "feat: add audit log persistence via databases library"
 ```
 
+> **Completed:** commits `c1db893`, `bde4af0` (domain layer migration), and subsequent refactors.
+
 ---
 
-### Task 6: Job Queue Persistence via `databases`
+### Task 6: Job Queue Persistence via `databases` ✅
 
-**Files:**
-- Create: `src/sentinel/data/jobs.py`
-- Test: `tests/unit/data/test_jobs.py`
+> **Architecture change:** Implemented in `domain/jobs/{queries,operations}.py` instead of `data/jobs.py`. Tests at `tests/unit/domain/jobs/test_{queries,operations}.py`.
+
+**Files (actual):**
+- Create: `src/sentinel/domain/jobs/queries.py`, `src/sentinel/domain/jobs/operations.py`
+- Test: `tests/unit/domain/jobs/test_queries.py`, `tests/unit/domain/jobs/test_operations.py`
 
 This is the most complex migration because of `SELECT ... FOR UPDATE SKIP LOCKED`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/data/test_jobs.py
@@ -1339,12 +1363,12 @@ class TestRecoverStaleJobs:
         assert call_kwargs.kwargs["values"]["worker_id"] == "worker-1"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `just test tests/unit/data/test_jobs.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # src/sentinel/data/jobs.py
@@ -1677,27 +1701,31 @@ async def recover_stale_jobs(
     )
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `just test tests/unit/data/test_jobs.py -v`
 Expected: All tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/data/jobs.py tests/unit/data/test_jobs.py
 git commit -m "feat: add job queue persistence via databases library"
 ```
 
+> **Completed:** commits `602b630`, `bde4af0` (domain layer migration), and subsequent refactors. Also added `JobType` enum in commit `a2c4cf1`.
+
 ---
 
-### Task 7: Tracing Persistence (`data/tracing.py`)
+### Task 7: Tracing Persistence (`data/tracing.py`) ✅
 
-**Files:**
-- Create: `src/sentinel/data/tracing.py`
-- Test: `tests/unit/data/test_tracing.py`
+> **Architecture change:** Implemented in `domain/pipeline/{queries,operations}.py` instead of `data/tracing.py`. SQLModel classes in `data/tracing_models.py`. Tests at `tests/unit/domain/pipeline/test_{queries,operations}.py`.
 
-- [ ] **Step 1: Write the failing test**
+**Files (actual):**
+- Create: `src/sentinel/domain/pipeline/queries.py`, `src/sentinel/domain/pipeline/operations.py`, `src/sentinel/data/tracing_models.py`
+- Test: `tests/unit/domain/pipeline/test_queries.py`, `tests/unit/domain/pipeline/test_operations.py`
+
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/data/test_tracing.py
@@ -1885,12 +1913,12 @@ class TestFetchNodeExecutions:
         assert len(results) == 2
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `just test tests/unit/data/test_tracing.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```python
 # src/sentinel/data/tracing.py
@@ -2212,17 +2240,19 @@ async def fetch_agent_calls(
     return [dict(row) for row in rows]
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `just test tests/unit/data/test_tracing.py -v`
 Expected: All tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/sentinel/data/tracing.py tests/unit/data/test_tracing.py
 git commit -m "feat: add pipeline tracing persistence via databases library"
 ```
+
+> **Completed:** commit `c7db7d5`. Also added `evaluation_models.py` and moved comparison/eval persistence to domain layer in commit `83447ac`.
 
 ---
 
