@@ -22,27 +22,25 @@ if TYPE_CHECKING:
     import databases
 
 
-class ExecutionTracer:
+class ExecutionTracer(types.TraceCollector):
     """
     Record pipeline execution traces to the database.
 
-    Also satisfies the TraceCollector interface for backward compatibility
-    with the Streamlit chat UI.
+    Inherits from TraceCollector for backward compatibility with the
+    Streamlit chat UI (.record() and .traces).
 
     When db is None, tracing calls are no-ops but trace_id is still
     generated for correlation.
     """
 
     def __init__(self, *, db: databases.Database | None) -> None:
+        super().__init__()
         self._db = db
         self._trace_id: uuid.UUID | None = None
         self._pipeline_run_id: uuid.UUID | None = None
         self._pipeline_started_at: datetime | None = None
         self._node_order: int = 0
         self._node_started_at: dict[uuid.UUID, datetime] = {}
-
-        # TraceCollector backward compatibility
-        self.traces: list[types.AgentTrace] = []
 
     @property
     def trace_id(self) -> uuid.UUID | None:
@@ -53,14 +51,6 @@ class ExecutionTracer:
     def pipeline_run_id(self) -> uuid.UUID | None:
         """Return the current pipeline run ID."""
         return self._pipeline_run_id
-
-    def record(self, *, agent_name: str, messages: list[ModelMessage]) -> None:
-        """
-        Record an agent trace (TraceCollector interface).
-
-        Accumulates traces in-memory for Streamlit UI.
-        """
-        self.traces.append(types.AgentTrace(agent_name=agent_name, messages=messages))
 
     async def start_pipeline(
         self,
