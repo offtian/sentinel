@@ -5,7 +5,7 @@ Unit tests for investigation persistence via the databases library.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest import mock
 
 import pytest
@@ -125,8 +125,8 @@ class TestPersistInvestigation:
         mock_db = mock.AsyncMock()
         mock_db.execute.return_value = None
         trace_id = uuid.uuid4()
-        started = datetime(2026, 4, 1, 10, 0, 0, tzinfo=timezone.utc)
-        completed = datetime(2026, 4, 1, 10, 5, 0, tzinfo=timezone.utc)
+        started = datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC)
+        completed = datetime(2026, 4, 1, 10, 5, 0, tzinfo=UTC)
 
         # When an investigation is persisted with all optional fields
         await investigation_persistence.persist_investigation(

@@ -5,7 +5,7 @@ Persist and fetch ticket review records via the databases library.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import databases
@@ -39,7 +39,7 @@ async def persist_ticket_review(
     :returns: The UUID of the inserted row.
     """
     row_id = uuid.uuid4()
-    created_at = datetime.now(tz=None)
+    created_at = datetime.now(tz=UTC)
     query = """
         INSERT INTO ticket_review_records (
             id, ticket_id, ticket_key, suggested_response,
@@ -186,7 +186,4 @@ async def fetch_review_stats(
     """
     rows = await db.fetch_all(query=query, values={})
     counts_from_db = {row["status"]: row["count"] for row in rows}
-    return {
-        status.value: counts_from_db.get(status.value, 0)
-        for status in entities.ReviewStatus
-    }
+    return {status.value: counts_from_db.get(status.value, 0) for status in entities.ReviewStatus}

@@ -5,7 +5,7 @@ Persist and fetch investigation records via the databases library.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import databases
@@ -50,7 +50,7 @@ async def persist_investigation(
     :returns: The UUID of the inserted row.
     """
     row_id = uuid.uuid4()
-    created_at = datetime.now(tz=None)
+    created_at = datetime.now(tz=UTC)
     query = """
         INSERT INTO investigation_records (
             id, alert_source, alert_id, alert_title, severity, service,
