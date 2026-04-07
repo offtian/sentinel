@@ -135,6 +135,9 @@ class Settings(LLMSettings, SRESettings, K8sChartSettings, SupportSettings):
     # Observability
     dd_service: str = "sentinel"
     dd_env: str = "production"
+    otel_metrics_enabled: bool = True
+    otel_service_name: str = "sentinel"
+    worker_metrics_port: int = 8001
 
 
 _settings: Settings | None = None
