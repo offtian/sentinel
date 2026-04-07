@@ -215,6 +215,7 @@ layers = [
     "data",
     "vendors",
     "bootstrap",
+    "bootstrap_otel",
     "utils",
     "settings",
     "version",
