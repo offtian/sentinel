@@ -57,6 +57,14 @@ dependencies = [
     "sentry-sdk>=2.35",
     "tiktoken>=0.12.0",
     "streamlit>=1.39",
+    "opentelemetry-api>=1.27",
+    "opentelemetry-sdk>=1.27",
+    "opentelemetry-exporter-prometheus>=0.48b0",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.48b0",
+    "opentelemetry-instrumentation-httpx>=0.48b0",
+    "opentelemetry-instrumentation-system-metrics>=0.48b0",
+    "prometheus-client>=0.21",
 ]
 
 [project.optional-dependencies]
