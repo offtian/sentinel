@@ -22,3 +22,6 @@ htmlcov/
 *.swo
 *~
 .DS_Store
+
+# Git worktrees
+.worktrees/
