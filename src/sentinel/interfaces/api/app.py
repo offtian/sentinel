@@ -4,8 +4,9 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import fastapi
+from prometheus_client import make_asgi_app
 
-from sentinel import bootstrap
+from sentinel import bootstrap, bootstrap_otel
 from sentinel.data import database
 from sentinel.data import db as async_db
 from sentinel.interfaces.api.routers.automations.router import router as automations_router
@@ -19,16 +20,16 @@ from sentinel.utils import logs
 @asynccontextmanager
 async def lifespan(app: fastapi.FastAPI) -> AsyncGenerator[None]:
     bootstrap.initialise()
+    bootstrap_otel.init_otel()
 
-    # Initialise the database engine on startup (if configured)
     if get_settings().database_url:
-        database.get_engine()
+        engine = database.get_engine()
+        bootstrap_otel.instrument_sqlalchemy(engine=engine.sync_engine)
         await async_db.connect_db()
         logs.log_event("database_engine_initialised")
 
     yield
 
-    # Shutdown: close the database engine
     if get_settings().database_url:
         await async_db.disconnect_db()
     await database.close_engine()
@@ -41,6 +42,10 @@ app = fastapi.FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+bootstrap_otel.instrument_fastapi(app=app)
+
+app.mount("/metrics", make_asgi_app())
 
 app.include_router(sre_router, prefix="/api")
 app.include_router(support_router, prefix="/api")
