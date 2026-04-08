@@ -25,17 +25,26 @@ class Dependencies:
     ticket_labels: list[str]
 
 
-SYSTEM_PROMPT = utils.append_skills_to_prompt(
-    base_prompt=prompts.load_system_prompt("ticket_reviewer"),
-    category="ticket_triage",
-    max_skills=3,
-)
+BASE_SYSTEM_PROMPT = prompts.load_system_prompt("ticket_reviewer")
 
 
-agent: Agent[Dependencies, TicketClassification] = Agent(
-    "test",  # Default placeholder; overridden at call site with the configured LiteLLM model.
-    deps_type=Dependencies,
-    output_type=TicketClassification,
-    system_prompt=SYSTEM_PROMPT,
-    instrument=True,
-)
+def build_agent(
+    *, model: str | None = None, skills: tuple[str, ...] = ()
+) -> Agent[Dependencies, TicketClassification]:
+    """
+    Build the ticket reviewer agent with configured skills baked in.
+    """
+    system_prompt = utils.compose_system_prompt(
+        base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills
+    )
+    return Agent(
+        model or "test",
+        deps_type=Dependencies,
+        output_type=TicketClassification,
+        system_prompt=system_prompt,
+        instrument=True,
+    )
+
+
+SYSTEM_PROMPT = BASE_SYSTEM_PROMPT
+agent = build_agent()
