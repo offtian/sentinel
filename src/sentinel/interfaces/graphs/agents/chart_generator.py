@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
 from sentinel.domain.charts import entities
+from sentinel.interfaces.graphs.agents import utils
 from sentinel.plugins import prompts
 
 
@@ -30,7 +31,11 @@ class Dependencies:
     policy_json: str
 
 
-SYSTEM_PROMPT = prompts.load_system_prompt("chart_generator")
+SYSTEM_PROMPT = utils.append_skills_to_prompt(
+    base_prompt=prompts.load_system_prompt("chart_generator"),
+    category="chart_helm",
+    max_skills=3,
+)
 
 agent: Agent[Dependencies, ChartGeneratorOutput] = Agent(
     "test",
