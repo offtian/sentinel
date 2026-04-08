@@ -112,6 +112,17 @@ def _parse_skill_file(path: Path) -> SkillHandle:
     )
 
 
+def all_installed_skills() -> tuple[SkillHandle, ...]:
+    """
+    Return the full cached catalogue of installed Skills, sorted by name.
+
+    Public accessor used by callers that need to list the catalogue
+    without filtering by category (e.g. the ``list_skills`` FastMCP tool).
+    Internally delegates to the lru-cached ``_load_all_skills``.
+    """
+    return _load_all_skills()
+
+
 @functools.lru_cache(maxsize=1)
 def _load_all_skills() -> tuple[SkillHandle, ...]:
     """

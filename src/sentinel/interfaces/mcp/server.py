@@ -157,7 +157,7 @@ async def list_skills() -> str:
     excluded from the response to keep internal runbook content off the
     wire unless explicitly requested through a future fetch_skill tool.
     """
-    handles = skills_mod._load_all_skills()
+    handles = skills_mod.all_installed_skills()
     entries = [
         {
             "name": handle.name,
