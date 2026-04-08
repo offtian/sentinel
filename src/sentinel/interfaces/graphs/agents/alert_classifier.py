@@ -5,6 +5,7 @@ import dataclasses
 from pydantic import BaseModel
 from pydantic_ai import Agent
 
+from sentinel.interfaces.graphs.agents import utils
 from sentinel.plugins import prompts
 
 
@@ -23,7 +24,11 @@ class Dependencies:
     alert_source: str
 
 
-SYSTEM_PROMPT = prompts.load_system_prompt("alert_classifier")
+SYSTEM_PROMPT = utils.append_skills_to_prompt(
+    base_prompt=prompts.load_system_prompt("alert_classifier"),
+    category="alert_triage",
+    max_skills=3,
+)
 
 agent: Agent[Dependencies, AlertClassification] = Agent(
     "test",  # Placeholder; overridden at call site with the configured LiteLLM model.
