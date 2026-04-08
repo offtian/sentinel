@@ -221,7 +221,10 @@ HolmesGPT SDK has a dependency conflict with pydantic-ai>=1.0.7. Rather than wai
 | agentgateway | Defer until multiple MCP backends or agent runtimes need centralised routing |
 | Claude Agent SDK / OpenAI Agent SDK | Evaluate -- may complement PydanticAI for specific workflows |
 | LangGraph / LangChain | Evaluate -- compare with Pydantic Graph for complex branching |
-| FastMCP | **Adopted** -- MCP server at `interfaces/mcp/`, MCP client at `plugins/toolsets/mcp.py` |
+| FastMCP | **Adopted everywhere** — server at `interfaces/mcp/`, client builder at `plugins/toolsets/mcp.py` consumed by every pipeline agent via `Configuration.build_mcp_toolsets()` |
+| Logfire | Adopt for dev — exports PydanticAI spans via OTel; production swaps the exporter for Datadog APM OTLP |
+| Anthropic prompt caching | Adopt — wired via LiteLLM `extra_body` `cache_control` on agent system prompts |
+| Skills (file-based runbooks) | Adopt — `plugins/skills/` catalogue loaded by `plugins.skills.load_skills_for()` |
 
 ### Quality Over Time
 
@@ -229,6 +232,7 @@ Quality improvement relies on three feedback loops:
 1. **LangFuse** -- per-call cost, latency, and prompt versioning
 2. **Eval framework** -- golden test cases with automated scoring, run on prompt changes
 3. **Feedback API** -- track accept/reject/modify rates on support suggestions
+4. **Skill catalogue** -- when a human rejects an investigation or modifies a response, the supervisor can attach the failure context to the relevant Skill so the runbook accumulates real failure modes over time
 
 ---
 
@@ -254,6 +258,135 @@ ClassifyTicket → SearchDocumentation → DraftResponse → DetermineConfidence
 
 - `SearchDocumentation` uses `asyncio.TaskGroup()` for parallel doc + ticket search
 - Same error handling and supervisor wrapping pattern as SRE pipeline
+
+---
+
+## Agent Capability Plane
+
+Sentinel agents share a uniform capability plane composed of Skills (file-based
+runbooks), MCP tool servers, Anthropic prompt caching, and OTel telemetry.
+Adding a new runbook, tool server, or model should be a config change, not a
+code change.
+
+```mermaid
+flowchart LR
+    subgraph Today
+      A1[Static .j2 prompts]
+      A2[K8s agent uses MCP only]
+      A3[instrument=True but no exporter]
+      A4[No prompt versioning]
+      A5[No reproducibility snapshot]
+    end
+    subgraph Proposed
+      B1[Skills: runbooks +<br/>response patterns<br/>loaded by classifier output]
+      B2[All agents mount MCP toolsets<br/>via shared builder]
+      B3[OTel/Logfire exporter<br/>for PydanticAI spans]
+      B4[Prompt version + SHA256<br/>recorded in audit log]
+      B5[Replay snapshot per pipeline run<br/>persisted in pipeline_runs]
+      B6[Anthropic prompt cache markers<br/>on system prompts via LiteLLM]
+    end
+    A1 --> B1
+    A2 --> B2
+    A3 --> B3
+    A4 --> B4
+    A4 --> B5
+    A1 --> B6
+```
+
+### Agent inventory (current vs. proposed)
+
+| Agent | Pipeline | Toolsets today | Proposed |
+|---|---|---|---|
+| `alert_classifier.py` | SRE | none | shared MCP toolsets + category-triggered skills |
+| `root_cause_analyser.py` | SRE | `analyser_toolsets` | + shared MCP + runbook skills keyed off classifier category |
+| `k8s_investigator.py` (via `k8s_runner.py`) | SRE (K8s) | `k8s_toolset` + MCP from `MCP_SERVERS` + `K8S_MCP_SERVER_URL` | unchanged (reference implementation) |
+| `intent_router.py` | Slack bot | none | n/a |
+| `ticket_reviewer.py` | Support | `reviewer_toolsets` | + shared MCP + category-triggered skills |
+| `response_drafter.py` | Support | `drafter_toolsets` | + shared MCP + response pattern skills |
+| `chart_request_parser.py` | Chart-coding | none | n/a |
+| `chart_generator.py` | Chart-coding | none | + chart best-practice skills |
+
+### Skills layout
+
+- On-disk layout: `src/sentinel/plugins/skills/<name>/SKILL.md` plus any
+  supporting files. Frontmatter fields: `name`, `description`, `applies_to`,
+  `version`.
+- Loader: `plugins/skills/__init__.py:load_skills_for(category=..., max=N)`
+  returns matching skills sorted deterministically (for reproducibility).
+- Selection: driven by classifier output —
+  `AlertClassification.category` (SRE) or `TicketClassification.category` (Support).
+- Injection: appended to the system prompt by a helper in
+  `interfaces/graphs/agents/utils.py` so every agent picks them up uniformly.
+- Initial catalogue: `k8s-crashloop-runbook`, `database-connection-runbook`,
+  `latency-spike-runbook`, `auth-error-response`, `rate-limit-response`,
+  `chart-helm-best-practices`.
+- Skills are git-tracked and content-hashed (SHA-256) for replay.
+
+### Universal MCP injection
+
+- `Configuration.build_mcp_toolsets()` in `config.py` becomes the single
+  memoised builder that parses `MCP_SERVERS` and returns a tuple of
+  `MCPServerSSE` / `MCPServerStdio` instances.
+- Consumed by every non-router pipeline agent (`root_cause_analyser`,
+  `alert_classifier`, `ticket_reviewer`, `response_drafter`, `chart_generator`).
+- The K8s agent keeps its current path (already wired via `k8s_runner.py`).
+- The FastMCP server at `interfaces/mcp/server.py` gains a `list_skills` tool
+  so external agents can discover the installed runbook catalogue.
+- New external servers (Datadog MCP, GitHub MCP, Confluence MCP, internal
+  runbook MCPs) can be added via `MCP_SERVERS` env var alone.
+
+### Prompt caching
+
+- `interfaces/graphs/agents/utils.py:get_model_with_gateway()` (or a wrapper)
+  is extended to attach Anthropic `cache_control` on system prompts via
+  LiteLLM `extra_body`.
+- Cache key = prompt SHA + model id. Targets the ~600-token static system
+  prompts reused on every alert/ticket; expected -50–80% TTFT and cost.
+
+### Telemetry exporter
+
+- `bootstrap.initialise()` configures an OTLP exporter so the existing
+  PydanticAI `instrument=True` spans land somewhere visible.
+- Dev: Logfire via `logfire.configure()` (lowest-friction, ships native
+  PydanticAI integration).
+- Prod: Datadog APM via OTLP exporter pointed at the cluster APM agent.
+
+---
+
+## Reproducibility & Replay
+
+### Prompt versioning
+
+- `plugins/prompts/__init__.py` computes and caches, per template:
+  - `prompt_version` = git SHA + file basename
+  - `prompt_sha256` = SHA-256 of rendered template content
+- `load_system_prompt()` returns a `PromptHandle` attrs class carrying the
+  rendered text plus the version/hash triple.
+
+### Pipeline run snapshot
+
+- Every graph node call writes through to
+  `domain/pipeline/operations.py:persist_node_execution()` (already exists)
+  with input/output JSON.
+- The graph entrypoint writes a `PipelineRunRecord` capturing the input
+  payload, model ids, MCP server endpoints used, active skills (names +
+  hashes), and the final reply.
+
+### Audit linkage
+
+- `domain/audit/operations.py:record_audit_entry()` is called from the
+  supervisor decision step with `prompt_version`, `prompt_sha256`, `model_id`,
+  `input_hash`, and the `pipeline_run_id`, so each audit row links back to
+  the full snapshot.
+
+### Replay
+
+- New domain helper
+  `domain/pipeline/queries.py:fetch_replay_bundle(run_id)` returns everything
+  needed to rerun a historical investigation: prompt version/hash, model id,
+  MCP endpoints, skills, and input payload.
+- A future CLI `python -m sentinel.replay <run_id>` is planned separately for
+  regulator playback.
 
 ### Domain Entities
 
@@ -376,3 +509,8 @@ just k8s-up                     # Deploy to local K8s
 | MCP client builder | `src/sentinel/plugins/toolsets/mcp.py` |
 | Evaluation metrics | `src/sentinel/domain/evaluation/metrics.py` |
 | Helm chart | `helm/sentinel/values.yaml` |
+| Skills loader | `src/sentinel/plugins/skills/__init__.py` (planned) |
+| Universal MCP builder | `src/sentinel/config.py` `Configuration.build_mcp_toolsets()` (planned) |
+| Prompt versioning | `src/sentinel/plugins/prompts/__init__.py` `PromptHandle` (planned) |
+| Pipeline run snapshot persistence | `src/sentinel/domain/pipeline/operations.py` (existing — needs callers) |
+| Telemetry exporter setup | `src/sentinel/bootstrap.py` (planned) |

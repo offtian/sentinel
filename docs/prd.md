@@ -60,6 +60,7 @@ Grouped into the following areas of focus:
 4. Observability & Feedback Loop
 5. Scheduled Automations
 6. Hedge Fund Compliance & Quality Gating
+7. Agent Capability Platform — Skills, MCP & Cutting-Edge Capabilities
 
 ### 1. AI SRE — Alert Investigation Pipeline
 
@@ -75,6 +76,9 @@ Acceptance criteria:
 - [x] Results are posted to a configurable Slack channel with formatted blocks
 - [x] Results are added as a note on the PagerDuty incident
 - [ ] Investigation completes within 2 minutes of alert receipt — not yet benchmarked in production
+- [ ] SRE agents auto-load MCP toolsets discovered from `MCP_SERVERS` (today only the K8s agent does)
+- [ ] Alert classifier output drives runbook **skill** selection (e.g. `k8s-crashloop-runbook`) appended to root-cause-analyser context
+- [ ] Anthropic prompt-cache markers applied to all SRE agent system prompts via LiteLLM `extra_body`
 
 ### 2. AI Support Agent — Ticket Review Pipeline
 
@@ -90,6 +94,9 @@ Acceptance criteria:
 - [x] Feedback API allows accepting/rejecting/modifying suggestions (`POST /api/support/reviews/{id}/feedback`)
 - [x] Feedback stats endpoint tracks acceptance rates over time (`GET /api/support/stats`)
 - [ ] Review completes within 3 minutes of ticket creation — not yet benchmarked in production
+- [ ] Support agents auto-load MCP toolsets discovered from `MCP_SERVERS`
+- [ ] Ticket classifier output drives response **skill** selection (e.g. `auth-error-response`, `rate-limit-response`)
+- [ ] Anthropic prompt-cache markers applied to ticket reviewer + response drafter system prompts
 
 ### 3. Infrastructure & Scalability
 
@@ -115,7 +122,10 @@ As a **platform engineer**, I want **structured logging, distributed tracing, an
 Acceptance criteria:
 
 - [x] Structured logging via structlog with context-aware event names (e.g. `alert_classified`, `investigation_completed`)
-- [ ] Datadog APM integration for distributed tracing across the pipeline
+- [ ] PydanticAI spans (`Agent(..., instrument=True)`) exported via OTLP — Logfire in dev, Datadog APM in production
+- [ ] Per-pipeline-run snapshot persisted to `pipeline_runs` / `node_executions` / `agent_calls` (graph nodes write to the existing tracing tables)
+- [ ] Token usage and cost recorded per agent call from LiteLLM response metadata
+- [ ] Skill activations logged as structlog events and persisted to the audit log
 - [x] Sentry integration for exception tracking
 - [x] Audit trail of all investigations and reviews persisted to the database
 - [x] Multi-factor confidence scoring (`ConfidenceScore.from_factors`) with source count, relevance, and recency weights
@@ -151,6 +161,23 @@ Acceptance criteria:
 - [x] Append-only audit log with SHA-256 input hashes for regulatory traceability
 - [x] Supervisor graph wrapping both pipelines with rule-based quality gate before publishing
 - [x] Tier 2 component evaluations: per-agent quality scoring with golden datasets
+- [ ] Every prompt template carries a `prompt_version` (git SHA + filename) and a `prompt_sha256` hash, recorded on each `AgentCallRecord` and `AuditLogRecord`
+- [ ] Skill files are content-hashed and the active hash is recorded alongside the prompt hash
+- [ ] `replay_pipeline_run(run_id)` re-executes a historical run from its snapshot — prompt version, model id, MCP servers, skills, and input payload — for regulator playback
+
+### 7. Agent Capability Platform — Skills, MCP & Cutting-Edge Capabilities
+
+As a **platform engineer**, I want **Sentinel agents to share a uniform capability plane (Skills + MCP + prompt caching + telemetry)**, so that **adding a new runbook, tool server, or model is a config change rather than a code change**.
+
+Acceptance criteria:
+
+- [ ] `src/sentinel/plugins/skills/<name>/SKILL.md` directory layout with frontmatter (`name`, `description`, `applies_to`, `version`)
+- [ ] `plugins.skills.load_skills_for(category=..., max=N)` helper returns matching skills, sorted deterministically
+- [ ] Skills are appended to the system prompt by `interfaces/graphs/agents/utils.py` so every agent picks them up uniformly
+- [ ] `Configuration.build_mcp_toolsets()` is the single place that builds the shared MCP toolset list, consumed by all SRE and Support pipeline dependencies
+- [ ] `MCP_SERVERS` documented in `.env.default` with examples for Datadog MCP, GitHub MCP, Confluence MCP
+- [ ] `bootstrap.initialise()` configures an OTLP exporter (Logfire in dev, Datadog APM in prod) so PydanticAI's `instrument=True` spans are emitted
+- [ ] FastMCP server (`interfaces/mcp/server.py`) gains a `list_skills` tool exposing the installed skill catalogue to external agents
 
 ---
 
@@ -223,7 +250,11 @@ AgentGateway becomes relevant when:
 |-----|------------|--------|
 | Investigation < 2min benchmark | Production deployment (separate repo) | Post-deploy |
 | Review < 3min benchmark | Production deployment (separate repo) | Post-deploy |
-| Datadog APM distributed tracing | ddtrace dependency + Datadog agent in cluster | Phase B |
+| Pipeline OTel/Logfire exporter | Section 4 acceptance criteria | Phase D |
+| Skills runtime + initial runbook catalogue | Section 7 | Phase D |
+| Universal MCP injection across all agents | Section 7 | Phase D |
+| Prompt versioning + replay snapshots | Sections 4 & 6 | Phase D |
+| Anthropic prompt caching across agents | Sections 1 & 2 | Phase D |
 
 ---
 
@@ -236,6 +267,7 @@ AgentGateway becomes relevant when:
 - **Multi-factor confidence scoring** — `ConfidenceScore.from_factors()` independently weighs source count, relevance, and recency with configurable weights
 - **Human approval gate** — Confidence-gated publishing with Slack interactive messages (approve/reject buttons) for hedge fund compliance
 - **Kubernetes-native agent management** — Future evaluation of kagent and AgentGateway for deploying, scaling, and observing agents as first-class Kubernetes resources
+- **Skills + MCP capability plane** — runtime composition of agent capabilities from on-disk Skills (procedural runbooks) and remote MCP tool servers, with deterministic ordering, content hashing, and per-run capture for replay
 
 ## Technical Stuff
 
