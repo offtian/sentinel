@@ -51,9 +51,7 @@ class TestAppendSkillsToPrompt:
         skill = _fake_handle(name="k8s-crashloop", body="Step 1: check pods")
 
         # When the helper is called
-        with mock.patch.object(
-            skills_mod, "load_skills_for", return_value=(skill,)
-        ):
+        with mock.patch.object(skills_mod, "load_skills_for", return_value=(skill,)):
             result = agents_utils.append_skills_to_prompt(
                 base_prompt="base", category="k8s_crashloop", max_skills=5
             )
@@ -68,9 +66,7 @@ class TestAppendSkillsToPrompt:
         skill = _fake_handle(name="db-runbook", version="1.2.3")
 
         # When the helper is called
-        with mock.patch.object(
-            skills_mod, "load_skills_for", return_value=(skill,)
-        ):
+        with mock.patch.object(skills_mod, "load_skills_for", return_value=(skill,)):
             result = agents_utils.append_skills_to_prompt(
                 base_prompt="base", category="database_error", max_skills=5
             )
@@ -85,9 +81,7 @@ class TestAppendSkillsToPrompt:
         bravo = _fake_handle(name="bravo", body="bravo body")
 
         # When the helper is called
-        with mock.patch.object(
-            skills_mod, "load_skills_for", return_value=(alpha, bravo)
-        ):
+        with mock.patch.object(skills_mod, "load_skills_for", return_value=(alpha, bravo)):
             result = agents_utils.append_skills_to_prompt(
                 base_prompt="base", category="any", max_skills=5
             )
@@ -97,9 +91,7 @@ class TestAppendSkillsToPrompt:
 
     def test_passes_max_skills_through_to_loader(self) -> None:
         # Given a loader mock
-        with mock.patch.object(
-            skills_mod, "load_skills_for", return_value=()
-        ) as mocked:
+        with mock.patch.object(skills_mod, "load_skills_for", return_value=()) as mocked:
             # When called with a specific max_skills
             agents_utils.append_skills_to_prompt(
                 base_prompt="base", category="cat_a", max_skills=3

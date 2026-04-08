@@ -24,9 +24,7 @@ def get_model_with_gateway(model_name: str) -> str:
     return model_name
 
 
-def append_skills_to_prompt(
-    *, base_prompt: str, category: str, max_skills: int = 5
-) -> str:
+def append_skills_to_prompt(*, base_prompt: str, category: str, max_skills: int = 5) -> str:
     """
     Append Skills matching ``category`` onto ``base_prompt``.
 
