@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
+from sentinel.interfaces.graphs.agents import utils
 from sentinel.plugins import prompts
 
 
@@ -26,6 +27,8 @@ class Dependencies:
     holmes_analysis: str
     holmes_tool_calls: list[dict[str, Any]]
     holmes_sources: list[str]
+    # Classifier-produced category, used to select runbook Skills at run time.
+    category: str = ""
 
 
 SYSTEM_PROMPT = prompts.load_system_prompt("root_cause_analyser")
@@ -53,3 +56,16 @@ def build_investigation_context(ctx: RunContext[Dependencies]) -> str:
         ),
         tool_calls=ctx.deps.holmes_tool_calls,
     )
+
+
+@agent.system_prompt
+def inject_runbook_skills(ctx: RunContext[Dependencies]) -> str:
+    """
+    Append runbook Skills matching the classifier category at run time.
+
+    Returns an empty string when the category is unset or no skill matches,
+    so the static SYSTEM_PROMPT stays unchanged in that case.
+    """
+    if not ctx.deps.category:
+        return ""
+    return utils.render_skills_section(category=ctx.deps.category, max_skills=3)
