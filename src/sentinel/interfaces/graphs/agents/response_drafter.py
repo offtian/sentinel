@@ -53,9 +53,7 @@ def inject_response_pattern_skills(ctx: RunContext[Dependencies]) -> str:
     """
     if not ctx.deps.ticket_category:
         return ""
-    return utils.render_skills_section(
-        category=ctx.deps.ticket_category, max_skills=3
-    )
+    return utils.render_skills_section(category=ctx.deps.ticket_category, max_skills=3)
 
 
 @agent.instructions
