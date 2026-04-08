@@ -77,9 +77,7 @@ def build_agent(
     """
     Build the response drafter agent with configured skills baked in.
     """
-    system_prompt = utils.compose_system_prompt(
-        base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills
-    )
+    system_prompt = utils.compose_system_prompt(base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills)
     agent_instance: Agent[Dependencies, DraftedResponse] = Agent(
         model or "test",
         deps_type=Dependencies,

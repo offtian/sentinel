@@ -34,9 +34,7 @@ def build_agent(
     """
     Build the ticket reviewer agent with configured skills baked in.
     """
-    system_prompt = utils.compose_system_prompt(
-        base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills
-    )
+    system_prompt = utils.compose_system_prompt(base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills)
     return Agent(
         model or "test",
         deps_type=Dependencies,

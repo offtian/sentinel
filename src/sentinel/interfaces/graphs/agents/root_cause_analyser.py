@@ -74,9 +74,7 @@ def build_agent(
     operator can declare a base runbook set in ``config.load_agents()``
     and let the classifier output add category-specific skills at runtime.
     """
-    system_prompt = utils.compose_system_prompt(
-        base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills
-    )
+    system_prompt = utils.compose_system_prompt(base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills)
     agent_instance: Agent[Dependencies, RootCauseAnalysis] = Agent(
         model or "test",
         deps_type=Dependencies,
