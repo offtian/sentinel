@@ -46,6 +46,31 @@ def append_skills_to_prompt(*, base_prompt: str, category: str, max_skills: int 
     return f"{base_prompt}\n\n---\n{_format_skills_section(handles)}"
 
 
+def compose_system_prompt(*, base_prompt: str, skill_names: tuple[str, ...]) -> str:
+    """
+    Append the named Skills onto ``base_prompt`` in the given order.
+
+    Looks each name up against the installed catalogue and appends the
+    Markdown Skills section. Skill order is preserved from ``skill_names``
+    (not alphabetised) so operators control the presentation order in
+    ``config.load_agents()``.
+
+    :raises sentinel.plugins.skills.SkillNotFoundError: if any name in
+        ``skill_names`` is not in the installed catalogue.
+    """
+    if not skill_names:
+        return base_prompt
+
+    catalogue = {handle.name: handle for handle in skills_mod.all_installed_skills()}
+    missing = [name for name in skill_names if name not in catalogue]
+    if missing:
+        msg = f"Unknown skill name(s) requested: {', '.join(missing)}"
+        raise skills_mod.SkillNotFoundError(msg)
+
+    handles = tuple(catalogue[name] for name in skill_names)
+    return f"{base_prompt}\n\n---\n{_format_skills_section(handles)}"
+
+
 def render_skills_section(*, category: str, max_skills: int = 5) -> str:
     """
     Return the Skills Markdown section for ``category``, or an empty string.

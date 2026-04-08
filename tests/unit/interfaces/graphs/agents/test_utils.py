@@ -113,6 +113,75 @@ class TestAppendSkillsToPrompt:
         assert result == blank_input
 
 
+class TestComposeSystemPrompt:
+    def test_returns_base_prompt_when_no_skills_requested(self) -> None:
+        # Given an empty skill-name tuple
+        # When the helper is called
+        result = agents_utils.compose_system_prompt(base_prompt="base prompt", skill_names=())
+
+        # Then the base prompt is returned unchanged
+        assert result == "base prompt"
+
+    def test_resolves_skill_names_into_section(self) -> None:
+        # Given two skills on the catalogue
+        alpha = _fake_handle(name="alpha", body="alpha body")
+        bravo = _fake_handle(name="bravo", body="bravo body")
+
+        # When compose_system_prompt is called with their names
+        with mock.patch.object(skills_mod, "all_installed_skills", return_value=(alpha, bravo)):
+            result = agents_utils.compose_system_prompt(
+                base_prompt="base", skill_names=("alpha", "bravo")
+            )
+
+        # Then both skill bodies appear inside the Applicable Skills section
+        assert "base" in result
+        assert "## Applicable Skills" in result
+        assert "alpha body" in result
+        assert "bravo body" in result
+
+    def test_preserves_config_order_not_alphabetical(self) -> None:
+        # Given two skills declared in non-alphabetical order in config
+        alpha = _fake_handle(name="alpha", body="alpha body")
+        bravo = _fake_handle(name="bravo", body="bravo body")
+
+        # When compose_system_prompt is called with bravo before alpha
+        with mock.patch.object(skills_mod, "all_installed_skills", return_value=(alpha, bravo)):
+            result = agents_utils.compose_system_prompt(
+                base_prompt="base", skill_names=("bravo", "alpha")
+            )
+
+        # Then bravo appears before alpha (config-driven order wins)
+        assert result.index("bravo body") < result.index("alpha body")
+
+    def test_raises_skill_not_found_when_name_unknown(self) -> None:
+        # Given a catalogue that does not contain "typoed-name"
+        alpha = _fake_handle(name="alpha")
+
+        # When compose_system_prompt is called with the unknown name
+        # Then SkillNotFoundError is raised and names the missing skill
+        with (
+            mock.patch.object(skills_mod, "all_installed_skills", return_value=(alpha,)),
+            pytest.raises(skills_mod.SkillNotFoundError, match="typoed-name"),
+        ):
+            agents_utils.compose_system_prompt(base_prompt="base", skill_names=("typoed-name",))
+
+    def test_raises_with_all_missing_names_when_multiple_unknown(self) -> None:
+        # Given a catalogue missing two requested skills
+        alpha = _fake_handle(name="alpha")
+
+        # When compose_system_prompt is called with two unknown names
+        # Then SkillNotFoundError surfaces both missing names
+        with (
+            mock.patch.object(skills_mod, "all_installed_skills", return_value=(alpha,)),
+            pytest.raises(skills_mod.SkillNotFoundError) as exc_info,
+        ):
+            agents_utils.compose_system_prompt(
+                base_prompt="base", skill_names=("missing-one", "missing-two")
+            )
+        assert "missing-one" in str(exc_info.value)
+        assert "missing-two" in str(exc_info.value)
+
+
 class TestRenderSkillsSection:
     def test_returns_empty_string_when_no_skills_match(self) -> None:
         # Given a loader that returns no skills

@@ -50,6 +50,16 @@ class SkillFrontmatterError(ValueError):
     """
 
 
+class SkillNotFoundError(LookupError):
+    """
+    Raised when a caller requests a skill name that is not in the catalogue.
+
+    Surfaces all missing names in the exception message to help operators
+    fix typos in ``config.load_agents()`` at startup rather than silently
+    dropping them.
+    """
+
+
 @attrs.frozen
 class SkillHandle:
     """
