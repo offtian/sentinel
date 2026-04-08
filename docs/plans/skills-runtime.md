@@ -1,9 +1,8 @@
 # Plan: Skills Runtime
 
-**Status:** complete
+**Status:** in progress (Phases 1–5 complete; Phase 7 config-driven refactor in progress)
 **Created:** 2026-04-08
 **Last updated:** 2026-04-08
-**Completed:** 2026-04-08
 
 > **For agentic workers:** REQUIRED SUB-SKILL — use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -142,6 +141,23 @@ Sentinel agents currently load only a Jinja system prompt. To enable runbook-dri
 ### Phase 6 — Documentation
 - [x] **Step 23: Tick PRD §7 boxes** and note §1/§2 runbook-selection boxes now unblocked
 - [x] **Step 24: Commit** — `docs: mark Skills runtime acceptance criteria complete`
+
+### Phase 7 — Config-driven skills refactor (added 2026-04-08)
+
+User feedback: the import-time `append_skills_to_prompt(category=...)` wiring
+in each agent module is too rigid. Operators should declare skill-per-agent
+mapping in `config.py` (Python code, git-reviewable, test-friendly) and the
+Configuration should own agent construction end-to-end. Models move from
+`.run(model=...)` to `build_agent(model=...)`. Dynamic runtime `@agent.system_prompt`
+injection is kept as a second-layer mechanism on top of configured static skills.
+
+- [x] **Step 25: Foundation** — add `SkillNotFoundError` exception and `compose_system_prompt(*, base_prompt, skill_names)` helper that resolves skill names (not categories) against the installed catalogue and raises loudly on typos. TDD: 5 new tests cover empty pass-through, name resolution, config-order preservation, single-missing, multi-missing. Commit: `feat(skills): add SkillNotFoundError and compose_system_prompt helper`
+- [x] **Step 26: Agent factories** — refactor all 8 agent modules (alert_classifier, root_cause_analyser, ticket_reviewer, response_drafter, chart_generator, chart_request_parser, intent_router, k8s_investigator) to expose `build_agent(*, model=None, skills=())`. Keep a module-level `agent = build_agent()` fallback with placeholder `"test"` model for backward compatibility with existing tests that patch `<module>.agent`. Module-level helper functions (`_build_context`, `_inject_runbook_skills`, etc.) are shared across factory invocations via `agent.instructions(fn)` / `agent.system_prompt(fn)` non-decorator syntax. Commit: `refactor(agents): expose build_agent factory on every agent module`
+- [x] **Step 27: Configuration.load_agents** — add `SKILLS_BY_AGENT: dict[str, tuple[str, ...]]` at `config.py` module level as the single source of truth for skill-per-agent mapping. Add `Configuration.load_agents()` that iterates every pipeline agent and calls its `build_agent` factory with the normalised model identifier and the configured skills. Add `Configuration.agent_for(name)` returning cached instances, raising `KeyError` on unknown names or before `load_agents()` was called. Wire `get_config()` to call `load_agents()` after `load_vendors()`. 8 new unit tests under `tests/unit/test_config_load_agents.py` covering: every expected agent present, every factory called exactly once, normalised model kwargs passed, configured skills forwarded, cached identity on repeat lookups, unknown-name KeyError, pre-load KeyError, end-to-end SkillNotFoundError propagation from typoed skill name. Commit: `feat(config): add load_agents and agent_for for declarative agent wiring`
+- [ ] **Step 28: Graph consumption** — update `sre_investigation.py`, `support_review.py`, `chart_generation.py` to read agents off `cfg.agent_for(name)` instead of importing `<agent_module>.agent` directly. Drop the `classifier_model` / `analyser_model` / `reviewer_model` / `drafter_model` / `chart_parser_model` / `chart_generator_model` fields from each graph's `Dependencies` dataclass (models now live on the pre-built agent). Add a `config: Configuration` field to each graph `Dependencies`. Update every functional test that patches `<module>.agent` or passes `*_model` kwargs. This is the breaking change for the functional test suite. **Not yet executed — awaiting user sign-off on blast radius.**
+- [ ] **Step 29: Remove module-level `agent = build_agent()` fallback** from all 8 agent modules once graph consumption has moved over and nothing imports the module-level singleton any more.
+- [ ] **Step 30: Remove the import-time `append_skills_to_prompt` / `render_skills_section` wiring** from agent modules (the old category-literal wiring) — these become dead code once `compose_system_prompt` via config owns all static skill composition.
+- [ ] **Step 31: Docs** — sync `docs/claude-plan.md` and PRD with the config-driven model; update `Outcome` section here.
 
 ## Test Plan
 
