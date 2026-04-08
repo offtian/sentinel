@@ -16,6 +16,7 @@ this file.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -25,6 +26,7 @@ from sentinel.data import db as async_db
 from sentinel.interfaces.mcp.tools import documentation as doc_tools
 from sentinel.interfaces.mcp.tools import investigation as inv_tools
 from sentinel.interfaces.mcp.tools import observability as obs_tools
+from sentinel.plugins import skills as skills_mod
 from sentinel.utils import logs
 
 
@@ -143,6 +145,29 @@ async def get_investigation_status(investigation_id: str) -> str:
         db=_get_optional_db(),
         investigation_id=investigation_id,
     )
+
+
+@mcp.tool()
+async def list_skills() -> str:
+    """
+    List installed Skills (runbooks) available to Sentinel agents.
+
+    Returns a JSON-encoded list of ``{name, version, description, applies_to}``
+    entries sorted alphabetically by name. Skill bodies are deliberately
+    excluded from the response to keep internal runbook content off the
+    wire unless explicitly requested through a future fetch_skill tool.
+    """
+    handles = skills_mod._load_all_skills()
+    entries = [
+        {
+            "name": handle.name,
+            "version": handle.version,
+            "description": handle.description,
+            "applies_to": list(handle.applies_to),
+        }
+        for handle in handles
+    ]
+    return json.dumps(entries)
 
 
 if __name__ == "__main__":
