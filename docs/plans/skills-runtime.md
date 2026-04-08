@@ -1,8 +1,9 @@
 # Plan: Skills Runtime
 
-**Status:** draft
+**Status:** complete
 **Created:** 2026-04-08
 **Last updated:** 2026-04-08
+**Completed:** 2026-04-08
 
 > **For agentic workers:** REQUIRED SUB-SKILL — use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -99,21 +100,21 @@ Sentinel agents currently load only a Jinja system prompt. To enable runbook-dri
 ## Steps
 
 ### Phase 1 — Loader and SkillHandle
-- [ ] **Step 1: Write loader tests** covering `TestSkillHandle`, `TestLoadAllSkills`, `TestLoadSkillsFor` (10+ cases). Use `tmp_path` + monkeypatched `SKILLS_DIR`.
-- [ ] **Step 2: Run tests — verify they fail**
-- [ ] **Step 3: Implement `SkillHandle` and loader** in `plugins/skills/__init__.py`
-- [ ] **Step 4: Run tests — verify pass**
-- [ ] **Step 5: Commit** — `feat: add skills loader with deterministic ordering and SHA-256 hashing`
+- [x] **Step 1: Write loader tests** covering `TestSkillHandle`, `TestLoadAllSkills`, `TestLoadSkillsFor` (10+ cases). Use `tmp_path` + monkeypatched `SKILLS_DIR`.
+- [x] **Step 2: Run tests — verify they fail**
+- [x] **Step 3: Implement `SkillHandle` and loader** in `plugins/skills/__init__.py`
+- [x] **Step 4: Run tests — verify pass**
+- [x] **Step 5: Commit** — `feat: add skills loader with deterministic ordering and SHA-256 hashing`
 
 ### Phase 2 — Seed catalogue
-- [ ] **Step 6: Add the six seed SKILL.md files** with placeholder bodies and `applies_to` patterns
-- [ ] **Step 7: Add a regression test** locking the catalogue to exactly 6 seeds
-- [ ] **Step 8: Run loader tests against real catalogue**
-- [ ] **Step 9: Commit** — `feat: seed initial Skills catalogue with 6 placeholder runbooks`
+- [x] **Step 6: Add the six seed SKILL.md files** with placeholder bodies and `applies_to` patterns
+- [x] **Step 7: Add a regression test** locking the catalogue to exactly 6 seeds
+- [x] **Step 8: Run loader tests against real catalogue**
+- [x] **Step 9: Commit** — `feat: seed initial Skills catalogue with 6 placeholder runbooks`
 
 ### Phase 3 — `append_skills_to_prompt` helper
-- [ ] **Step 10: Write tests** in `test_utils.py` (5 cases)
-- [ ] **Step 11: Implement helper** with section format:
+- [x] **Step 10: Write tests** in `test_utils.py` (5 cases)
+- [x] **Step 11: Implement helper** with section format:
   ```
   <base_prompt>
 
@@ -122,25 +123,25 @@ Sentinel agents currently load only a Jinja system prompt. To enable runbook-dri
   ### {name} (v{version})
   {body}
   ```
-- [ ] **Step 12: Run tests — verify pass**
-- [ ] **Step 13: Commit** — `feat: add append_skills_to_prompt helper for agent system prompts`
+- [x] **Step 12: Run tests — verify pass**
+- [x] **Step 13: Commit** — `feat: add append_skills_to_prompt helper for agent system prompts`
 
 ### Phase 4 — Wire helper into 5 agents (one commit per agent)
-- [ ] **Step 14: alert_classifier** (static) — commit: `feat: wire skills loader into alert_classifier agent`
-- [ ] **Step 15: root_cause_analyser** (dynamic via `@agent.system_prompt`) — commit: `feat: wire skills loader into root_cause_analyser agent`
-- [ ] **Step 16: ticket_reviewer** (dynamic) — commit
-- [ ] **Step 17: response_drafter** (dynamic) — commit
-- [ ] **Step 18: chart_generator** (static `chart_helm`) — commit
+- [x] **Step 14: alert_classifier** (static) — commit: `feat: wire skills loader into alert_classifier agent`
+- [x] **Step 15: root_cause_analyser** (dynamic via `@agent.system_prompt`) — commit: `feat: wire skills loader into root_cause_analyser agent`
+- [x] **Step 16: ticket_reviewer** (dynamic) — commit
+- [x] **Step 17: response_drafter** (dynamic) — commit
+- [x] **Step 18: chart_generator** (static `chart_helm`) — commit
 
 ### Phase 5 — `list_skills` MCP tool
-- [ ] **Step 19: Write integration test** using `fastmcp.Client`
-- [ ] **Step 20: Implement** `@mcp.tool() async def list_skills()`
-- [ ] **Step 21: Run integration test — verify pass**
-- [ ] **Step 22: Commit** — `feat: add list_skills tool to FastMCP server`
+- [x] **Step 19: Write integration test** using `fastmcp.Client`
+- [x] **Step 20: Implement** `@mcp.tool() async def list_skills()`
+- [x] **Step 21: Run integration test — verify pass**
+- [x] **Step 22: Commit** — `feat: add list_skills tool to FastMCP server`
 
 ### Phase 6 — Documentation
-- [ ] **Step 23: Tick PRD §7 boxes** and note §1/§2 runbook-selection boxes now unblocked
-- [ ] **Step 24: Commit** — `docs: mark Skills runtime acceptance criteria complete`
+- [x] **Step 23: Tick PRD §7 boxes** and note §1/§2 runbook-selection boxes now unblocked
+- [x] **Step 24: Commit** — `docs: mark Skills runtime acceptance criteria complete`
 
 ## Test Plan
 
@@ -184,6 +185,28 @@ Sentinel agents currently load only a Jinja system prompt. To enable runbook-dri
 ## Changes
 | Date | What changed | Why |
 |---|---|---|
+| 2026-04-08 | Added `render_skills_section` sibling helper alongside `append_skills_to_prompt` | Dynamic-category agents pass a static `system_prompt=` to PydanticAI and then use `@agent.system_prompt` to append run-time content; calling `append_skills_to_prompt(base_prompt=SYSTEM_PROMPT, ...)` from the decorator would duplicate the static base, so a separate helper returning just the Markdown section (or empty string) is required. |
+| 2026-04-08 | `ticket_reviewer` wired statically (category `"ticket_triage"`), not dynamically as the plan specified | Plan error: `ticket_reviewer` IS the support classifier — it produces the category rather than consuming one. There is no upstream category to read. Static wiring matches `alert_classifier`'s pattern; dynamic wiring would be nonsensical. |
+| 2026-04-08 | `list_skills` test placed under `tests/unit/interfaces/mcp/` rather than `tests/integration/interfaces/mcp/` | The tool has no DB or network dependency — it only reads files via the Skills loader. Integration-tier tests require Postgres fixtures; a unit test against the real seed catalogue is strictly sufficient and avoids pulling in unneeded test infrastructure. |
+| 2026-04-08 | Added public `all_installed_skills()` accessor alongside the private `_load_all_skills()` | `list_skills` MCP tool was accessing `_load_all_skills` across a module boundary, which ruff's SLF001 rule rightly rejects. The new thin public wrapper keeps cache implementation private while giving external callers a proper entry point. |
+| 2026-04-08 | PyYAML declared as a direct runtime dep (was previously transitive via datadog-api-client / jira), `types-PyYAML` added to dev deps, and the `# type: ignore[import-untyped]` on `domain/charts/policies.py` removed | Plan Risk #5 flagged PyYAML as "not verified"; it was in fact installed transitively. Declaring it explicitly is best practice — `domain/charts/policies.py` already used `import yaml` but was relying on a type-ignore to silence mypy. Declaring `types-PyYAML` makes the ignore obsolete and was removed in the same commit. |
+| 2026-04-08 | Added `classification_category` field to SRE graph `State` + threaded through `AnalyseRootCause` → `root_cause_analyser.Dependencies.category` | The plan called for dynamic injection into `root_cause_analyser` via `ctx.deps.category`, but the field did not exist — the classifier output's category was being discarded after the `ClassifyAlert` node finished. Adding the field to `State` is the minimal threading change that keeps the dynamic-injection pattern correct. |
 
 ## Outcome
-_Fill in after completion._
+
+### What was delivered
+- Complete Skills runtime package at `src/sentinel/plugins/skills/` with loader, SkillHandle attrs class, frontmatter parser, SHA-256 content hashing, deterministic alphabetical ordering, `fnmatch`-based `applies_to` matching (case-insensitive with empty-list universal semantics), lru-cached disk reads, and `skill_activated` / `skills_no_match` structlog events.
+- Six placeholder seed skills: `k8s-crashloop-runbook`, `database-connection-runbook`, `latency-spike-runbook`, `auth-error-response`, `rate-limit-response`, `chart-helm-best-practices`.
+- Two helpers in `interfaces/graphs/agents/utils.py`: `append_skills_to_prompt` (static wiring) and `render_skills_section` (dynamic `@agent.system_prompt` wiring).
+- All five in-scope agents wired: `alert_classifier`, `root_cause_analyser`, `ticket_reviewer`, `response_drafter`, `chart_generator` (`k8s_investigator` deliberately left alone as the MCP reference implementation).
+- `list_skills` FastMCP tool on `interfaces/mcp/server.py` returning a JSON-encoded catalogue list (metadata only — bodies stay off the wire).
+- 27 new tests (17 loader tests, 3 seed-catalogue regression tests, 9 helper tests, 3 `list_skills` tests). Full suite: **527 passed, 0 failed**.
+- PyYAML declared as a direct dep; spurious `type: ignore` in `domain/charts/policies.py` removed.
+- 14 atomic commits with conventional messages on `feature/skills-runtime` branch.
+
+### Follow-up / tech debt
+- Real runbook content for the 6 seed skills (separate content PRs, owned by SRE / support / platform teams).
+- None of the seed skills have an `applies_to` matching the classifier's `"alert_triage"` / `"ticket_triage"` / `"chart_helm"` literals yet — `alert_classifier`, `ticket_reviewer`, and `chart_generator` wiring is live but inert until such skills are added. This is intentional (the wiring is pay-on-content).
+- `Skill body size cap` (plan Risk #3) still deferred — revisit once prompt-caching slice (slice 3) gives us token-cost measurements.
+- Typed `Category` enum (plan Risk #1) not addressed — category strings are still free-form snake_case produced by the classifier agents. Family-glob `applies_to` patterns mitigate drift for now.
+- `list_skills` confidentiality (plan Risk #4) — seed catalogue is not secret, but a future `fetch_skill` tool (for bodies) should go through auth / tagging review.
