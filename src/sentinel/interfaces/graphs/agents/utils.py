@@ -24,6 +24,14 @@ def get_model_with_gateway(model_name: str) -> str:
     return model_name
 
 
+def _format_skills_section(handles: tuple[skills_mod.SkillHandle, ...]) -> str:
+    """
+    Render a tuple of SkillHandle objects into the canonical Markdown section.
+    """
+    sections = [f"### {handle.name} (v{handle.version})\n{handle.body}" for handle in handles]
+    return "## Applicable Skills\n\n" + "\n\n".join(sections)
+
+
 def append_skills_to_prompt(*, base_prompt: str, category: str, max_skills: int = 5) -> str:
     """
     Append Skills matching ``category`` onto ``base_prompt``.
@@ -35,6 +43,18 @@ def append_skills_to_prompt(*, base_prompt: str, category: str, max_skills: int 
     handles = skills_mod.load_skills_for(category=category, max_skills=max_skills)
     if not handles:
         return base_prompt
+    return f"{base_prompt}\n\n---\n{_format_skills_section(handles)}"
 
-    sections = [f"### {handle.name} (v{handle.version})\n{handle.body}" for handle in handles]
-    return f"{base_prompt}\n\n---\n## Applicable Skills\n\n" + "\n\n".join(sections)
+
+def render_skills_section(*, category: str, max_skills: int = 5) -> str:
+    """
+    Return the Skills Markdown section for ``category``, or an empty string.
+
+    Intended for use inside PydanticAI ``@agent.system_prompt`` functions
+    where the static system prompt is supplied separately and the returned
+    string is concatenated onto it by PydanticAI at run time.
+    """
+    handles = skills_mod.load_skills_for(category=category, max_skills=max_skills)
+    if not handles:
+        return ""
+    return _format_skills_section(handles)

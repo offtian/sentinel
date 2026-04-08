@@ -111,3 +111,36 @@ class TestAppendSkillsToPrompt:
 
         # Then the blank prompt is returned as-is
         assert result == blank_input
+
+
+class TestRenderSkillsSection:
+    def test_returns_empty_string_when_no_skills_match(self) -> None:
+        # Given a loader that returns no skills
+        with mock.patch.object(skills_mod, "load_skills_for", return_value=()):
+            # When the helper is called
+            result = agents_utils.render_skills_section(category="no_match", max_skills=5)
+
+        # Then the result is an empty string
+        assert result == ""
+
+    def test_returns_section_without_leading_separator(self) -> None:
+        # Given one matching skill
+        skill = _fake_handle(name="alpha", body="body")
+
+        # When the helper is called
+        with mock.patch.object(skills_mod, "load_skills_for", return_value=(skill,)):
+            result = agents_utils.render_skills_section(category="any", max_skills=5)
+
+        # Then the section begins with the heading (no leading '---')
+        assert result.startswith("## Applicable Skills")
+        assert "alpha" in result
+        assert "body" in result
+
+    def test_passes_arguments_through_to_loader(self) -> None:
+        # Given a loader mock
+        with mock.patch.object(skills_mod, "load_skills_for", return_value=()) as mocked:
+            # When called with specific kwargs
+            agents_utils.render_skills_section(category="cat_b", max_skills=2)
+
+        # Then the loader was invoked with the same kwargs
+        mocked.assert_called_once_with(category="cat_b", max_skills=2)
