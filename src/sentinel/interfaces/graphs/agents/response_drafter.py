@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
 from sentinel.domain.search import searcher
+from sentinel.interfaces.graphs.agents import utils
 from sentinel.plugins import prompts
 
 
@@ -41,6 +42,20 @@ agent: Agent[Dependencies, DraftedResponse] = Agent(
     system_prompt=SYSTEM_PROMPT,
     instrument=True,
 )
+
+
+@agent.system_prompt
+def inject_response_pattern_skills(ctx: RunContext[Dependencies]) -> str:
+    """
+    Append response-pattern Skills matching the ticket category.
+
+    Returns an empty string when the category is unset or no skill matches.
+    """
+    if not ctx.deps.ticket_category:
+        return ""
+    return utils.render_skills_section(
+        category=ctx.deps.ticket_category, max_skills=3
+    )
 
 
 @agent.instructions
