@@ -17,8 +17,9 @@ Usage::
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, PrivateAttr
-from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerSSE
 from pydantic_ai.toolsets import FunctionToolset
 
@@ -125,8 +126,10 @@ class Configuration(BaseModel):
     observability_circuit_breaker: CircuitBreaker | None = None
 
     # Agent instances — populated by load_agents(). Private so Pydantic
-    # doesn't try to validate PydanticAI Agent objects.
-    _agents: dict[str, Agent] = PrivateAttr(default_factory=dict)
+    # doesn't try to validate PydanticAI Agent objects. Typed as Any
+    # because the registry holds heterogeneous Agent[Deps, Output]
+    # specialisations with different type parameters.
+    _agents: dict[str, Any] = PrivateAttr(default_factory=dict)
 
     def load_vendors(self) -> None:
         """
@@ -294,7 +297,7 @@ class Configuration(BaseModel):
         }
         logger.info("Agents loaded", count=len(self._agents))
 
-    def agent_for(self, name: str) -> Agent:
+    def agent_for(self, name: str) -> Any:
         """
         Return the pre-built agent registered under ``name``.
 
