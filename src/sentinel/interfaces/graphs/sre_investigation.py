@@ -33,6 +33,9 @@ class Dependencies:
     require_approval_below: float = 0.0  # 0 = never require approval
     request_approval_fn: common.RequestApprovalFn | None = None
     # Toolsets injected at agent.run() time.  Built by config.py.
+    # Ordering: per-agent toolsets first, shared MCP second.
+    # PydanticAI uses first-wins for duplicate tool names.
+    classifier_toolsets: Sequence[AbstractToolset[object]] = ()
     analyser_toolsets: Sequence[AbstractToolset[object]] = ()
     # Optional challenger adapter for comparison mode.
     challenger_adapter: investigation.BaseInvestigationAdapter | None = None
@@ -67,6 +70,7 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
                         alert_description=ctx.state.alert.description,
                         alert_source=ctx.state.alert.source,
                     ),
+                    toolsets=list(ctx.deps.classifier_toolsets) or None,
                 )
             except Exception as exc:
                 logs.log_exception(
@@ -516,6 +520,7 @@ async def investigate_alert(
     trace_collector: common.TraceCollector | None = None,
     require_approval_below: float = 0.0,
     request_approval_fn: common.RequestApprovalFn | None = None,
+    classifier_toolsets: Sequence[AbstractToolset[object]] = (),
     analyser_toolsets: Sequence[AbstractToolset[object]] = (),
     challenger_adapter: investigation.BaseInvestigationAdapter | None = None,
 ) -> common.InvestigationReply:
@@ -535,6 +540,7 @@ async def investigate_alert(
         trace_collector=trace_collector,
         require_approval_below=require_approval_below,
         request_approval_fn=request_approval_fn,
+        classifier_toolsets=classifier_toolsets,
         analyser_toolsets=analyser_toolsets,
         challenger_adapter=challenger_adapter,
     )
