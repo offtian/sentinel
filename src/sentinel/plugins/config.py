@@ -13,9 +13,10 @@ module directly.
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, PrivateAttr
 from pydantic_ai.mcp import MCPServerSSE
 from pydantic_ai.toolsets import FunctionToolset
 
@@ -41,6 +42,8 @@ from sentinel.utils import logs
 
 logger = logs.get_logger()
 
+_mcp_build_lock = threading.Lock()
+
 
 class CommonConfiguration(BaseConfiguration):
     """
@@ -60,6 +63,9 @@ class CommonConfiguration(BaseConfiguration):
 
     # Resilience — populated by load_vendors()
     observability_circuit_breaker: CircuitBreaker | None = None
+
+    # Memoised shared MCP toolsets — populated lazily by build_mcp_toolsets().
+    _mcp_toolsets: tuple[object, ...] | None = PrivateAttr(default=None)
 
     def load_vendors(self) -> None:
         """
@@ -100,6 +106,31 @@ class CommonConfiguration(BaseConfiguration):
             confluence=self.confluence_client is not None,
         )
 
+    # -- MCP toolsets --------------------------------------------------------
+
+    def build_mcp_toolsets(self) -> tuple[object, ...]:
+        """
+        Build and memoise the shared MCP toolsets from ``MCP_SERVERS``.
+
+        Parse the JSON env var via ``plugins.toolsets.mcp.build_mcp_toolsets``
+        exactly once per ``Configuration`` instance.  Subsequent calls return
+        the cached tuple.  Thread-safe via a module-level lock.
+
+        :returns: Tuple of PydanticAI-compatible MCP toolset instances.
+        """
+        if self._mcp_toolsets is not None:
+            return self._mcp_toolsets
+
+        with _mcp_build_lock:
+            # Double-check after acquiring the lock.
+            if self._mcp_toolsets is not None:
+                return self._mcp_toolsets
+
+            self._mcp_toolsets = mcp_toolset_mod.build_mcp_toolsets(
+                config_json=self.settings.mcp_servers,
+            )
+            return self._mcp_toolsets
+
     # -- SRE pipeline helpers ------------------------------------------------
 
     def build_holmes_adapter(self) -> holmes_adapter.BaseHolmesAdapter:
@@ -138,10 +169,11 @@ class CommonConfiguration(BaseConfiguration):
             return None
 
         if backend in ("native", "both"):
-            mcp_toolsets = list(
-                mcp_toolset_mod.build_mcp_toolsets(config_json=self.settings.mcp_servers)
-            )
+            # Shared MCP servers from MCP_SERVERS (memoised).
+            mcp_toolsets = list(self.build_mcp_toolsets())
 
+            # K8S_MCP_SERVER_URL is a K8s-specific extra, appended after the
+            # shared tuple to avoid polluting the shared cache.
             if self.settings.k8s_mcp_server_url:
                 mcp_toolsets.append(MCPServerSSE(url=self.settings.k8s_mcp_server_url))
 

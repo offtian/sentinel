@@ -202,6 +202,10 @@ class BaseConfiguration(BaseModel):
 
     # -- Builder stubs (overridden by CommonConfiguration) -------------------
 
+    def build_mcp_toolsets(self) -> tuple[object, ...]:
+        """Build and memoise shared MCP toolsets. Override in subclass."""
+        raise NotImplementedError
+
     def build_holmes_adapter(self) -> Any:
         """Build the appropriate Holmes adapter. Override in subclass."""
         raise NotImplementedError
