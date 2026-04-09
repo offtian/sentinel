@@ -171,13 +171,13 @@ As a **platform engineer**, I want **Sentinel agents to share a uniform capabili
 
 Acceptance criteria:
 
-- [ ] `src/sentinel/plugins/skills/<name>/SKILL.md` directory layout with frontmatter (`name`, `description`, `applies_to`, `version`)
-- [ ] `plugins.skills.load_skills_for(category=..., max=N)` helper returns matching skills, sorted deterministically
-- [ ] Skills are appended to the system prompt by `interfaces/graphs/agents/utils.py` so every agent picks them up uniformly
+- [x] `src/sentinel/plugins/skills/<name>/SKILL.md` directory layout with frontmatter (`name`, `description`, `applies_to`, `version`)
+- [x] `plugins.skills.load_skills_for(category=..., max=N)` helper returns matching skills, sorted deterministically
+- [x] Skills are appended to the system prompt by `interfaces/graphs/agents/utils.py` so every agent picks them up uniformly
 - [ ] `Configuration.build_mcp_toolsets()` is the single place that builds the shared MCP toolset list, consumed by all SRE and Support pipeline dependencies
 - [ ] `MCP_SERVERS` documented in `.env.default` with examples for Datadog MCP, GitHub MCP, Confluence MCP
 - [ ] `bootstrap.initialise()` configures an OTLP exporter (Logfire in dev, Datadog APM in prod) so PydanticAI's `instrument=True` spans are emitted
-- [ ] FastMCP server (`interfaces/mcp/server.py`) gains a `list_skills` tool exposing the installed skill catalogue to external agents
+- [x] FastMCP server (`interfaces/mcp/server.py`) gains a `list_skills` tool exposing the installed skill catalogue to external agents
 
 ---
 

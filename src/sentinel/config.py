@@ -17,7 +17,9 @@ Usage::
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, PrivateAttr
 from pydantic_ai.mcp import MCPServerSSE
 from pydantic_ai.toolsets import FunctionToolset
 
@@ -33,12 +35,50 @@ from sentinel.domain.vendor_adapters.observability import (
     GrafanaClient,
 )
 from sentinel.domain.vendor_adapters.pagerduty import PagerDutyClient
-from sentinel.interfaces.graphs.agents import k8s_runner
+from sentinel.interfaces.graphs import agents
 from sentinel.plugins.toolsets import documentation as doc_toolsets
 from sentinel.plugins.toolsets import mcp as mcp_toolset_mod
 from sentinel.plugins.toolsets import observability as obs_toolsets
 from sentinel.settings import Settings, get_settings
 from sentinel.utils import logs
+
+
+# ---------------------------------------------------------------------------
+# Skills-per-agent mapping
+# ---------------------------------------------------------------------------
+#
+# Operators declare which on-disk Skills are baked into each agent's system
+# prompt here. Skill names must match directory names under
+# ``src/sentinel/plugins/skills/<name>/SKILL.md``. Unknown names raise
+# ``SkillNotFoundError`` loudly at ``load_agents()`` time so typos surface
+# at startup rather than silently dropping runbooks.
+#
+# Agents listed with an empty tuple get only their base Jinja system prompt.
+# Agents omitted from this mapping are also built with no configured skills;
+# for ``root_cause_analyser`` and ``response_drafter`` the runtime
+# ``@agent.system_prompt`` second-layer dynamic injection still fires on
+# top, keyed off classifier / ticket-category output.
+#
+# Edit this mapping and restart the process to change which runbooks each
+# agent sees. No code change to agent modules is required.
+
+SKILLS_BY_AGENT: dict[str, tuple[str, ...]] = {
+    "alert_classifier": (),
+    "root_cause_analyser": (
+        "k8s-crashloop-runbook",
+        "database-connection-runbook",
+        "latency-spike-runbook",
+    ),
+    "ticket_reviewer": (),
+    "response_drafter": (
+        "auth-error-response",
+        "rate-limit-response",
+    ),
+    "chart_generator": ("chart-helm-best-practices",),
+    "chart_request_parser": (),
+    "intent_router": (),
+    "k8s_investigator": ("k8s-crashloop-runbook",),
+}
 
 
 logger = logs.get_logger()
@@ -84,6 +124,12 @@ class Configuration(BaseModel):
 
     # Resilience — populated by load_vendors()
     observability_circuit_breaker: CircuitBreaker | None = None
+
+    # Agent instances — populated by load_agents(). Private so Pydantic
+    # doesn't try to validate PydanticAI Agent objects. Typed as Any
+    # because the registry holds heterogeneous Agent[Deps, Output]
+    # specialisations with different type parameters.
+    _agents: dict[str, Any] = PrivateAttr(default_factory=dict)
 
     def load_vendors(self) -> None:
         """
@@ -187,7 +233,7 @@ class Configuration(BaseModel):
                 k8s_client=None,  # Wire real K8s client when kubernetes lib is integrated
                 model_name=_normalise_model_name(self.settings.k8s_investigator_llm),
                 mcp_toolsets=tuple(mcp_toolsets),
-                agent_runner=k8s_runner.run_k8s_agent,
+                agent_runner=agents.k8s_runner.run_k8s_agent,
             )
 
         return None  # kagent adapter wired separately
@@ -195,6 +241,74 @@ class Configuration(BaseModel):
     @property
     def k8s_investigator_model(self) -> str:
         return _normalise_model_name(self.settings.k8s_investigator_llm)
+
+    @property
+    def intent_router_model(self) -> str:
+        return _normalise_model_name(self.settings.intent_router_llm)
+
+    # -- Agent registry ------------------------------------------------------
+
+    def load_agents(self) -> None:
+        """
+        Build every pipeline agent with its configured skills baked in.
+
+        Called by ``get_config()`` after ``load_vendors()``. Reads the
+        per-agent skill list from ``SKILLS_BY_AGENT`` at module level and
+        passes the normalised model identifier from settings to each
+        agent's ``build_agent`` factory.
+
+        :raises sentinel.plugins.skills.SkillNotFoundError: if any
+            ``SKILLS_BY_AGENT`` entry names a skill that is not installed
+            on disk under ``src/sentinel/plugins/skills/``.
+        """
+        self._agents = {
+            "alert_classifier": agents.alert_classifier.build_agent(
+                model=self.classifier_model,
+                skills=SKILLS_BY_AGENT.get("alert_classifier", ()),
+            ),
+            "root_cause_analyser": agents.root_cause_analyser.build_agent(
+                model=self.analyser_model,
+                skills=SKILLS_BY_AGENT.get("root_cause_analyser", ()),
+            ),
+            "ticket_reviewer": agents.ticket_reviewer.build_agent(
+                model=self.reviewer_model,
+                skills=SKILLS_BY_AGENT.get("ticket_reviewer", ()),
+            ),
+            "response_drafter": agents.response_drafter.build_agent(
+                model=self.drafter_model,
+                skills=SKILLS_BY_AGENT.get("response_drafter", ()),
+            ),
+            "chart_generator": agents.chart_generator.build_agent(
+                model=self.chart_generator_model,
+                skills=SKILLS_BY_AGENT.get("chart_generator", ()),
+            ),
+            "chart_request_parser": agents.chart_request_parser.build_agent(
+                model=self.chart_parser_model,
+                skills=SKILLS_BY_AGENT.get("chart_request_parser", ()),
+            ),
+            "intent_router": agents.intent_router.build_agent(
+                model=self.intent_router_model,
+                skills=SKILLS_BY_AGENT.get("intent_router", ()),
+            ),
+            "k8s_investigator": agents.k8s_investigator.build_agent(
+                model=self.k8s_investigator_model,
+                skills=SKILLS_BY_AGENT.get("k8s_investigator", ()),
+            ),
+        }
+        logger.info("Agents loaded", count=len(self._agents))
+
+    def agent_for(self, name: str) -> Any:
+        """
+        Return the pre-built agent registered under ``name``.
+
+        :raises KeyError: if ``name`` is not in the agent registry — either
+            because ``load_agents()`` has not been called or because the
+            name is not a recognised pipeline agent.
+        """
+        if name not in self._agents:
+            msg = f"Unknown agent name: {name!r} (call load_agents() first?)"
+            raise KeyError(msg)
+        return self._agents[name]
 
     # -- Chart generation helpers --------------------------------------------
 
@@ -293,7 +407,8 @@ def get_config(cfg: Settings | None = None) -> Configuration:
     """
     Return the cached application configuration, creating it on first call.
 
-    Calls ``load_vendors()`` so all adapters are ready to use.
+    Calls ``load_vendors()`` and ``load_agents()`` so adapters and agent
+    instances are ready to use.
 
     :param cfg: Override settings. Defaults to the module-level singleton.
     """
@@ -301,5 +416,6 @@ def get_config(cfg: Settings | None = None) -> Configuration:
     if _config is None:
         _config = Configuration(settings=cfg or get_settings())
         _config.load_vendors()
+        _config.load_agents()
         logger.info("Application configuration initialised")
     return _config

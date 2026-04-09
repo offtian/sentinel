@@ -44,6 +44,9 @@ class State:
     alert: sre_entities.Alert
     investigation: sre_entities.Investigation | None = None
     comparison_result: comparison.ComparisonResult | None = None
+    # Populated by ClassifyAlert and consumed by AnalyseRootCause to drive
+    # runbook Skills selection in the root_cause_analyser agent.
+    classification_category: str = ""
 
 
 @dataclasses.dataclass
@@ -101,6 +104,10 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
                     "service": result.output.affected_service,
                 }
             )
+
+            # Store the classification category so downstream agents can use
+            # it to pick the right runbook Skill.
+            ctx.state.classification_category = result.output.category
 
             # Initialise the investigation
             ctx.state.investigation = sre_entities.Investigation(
@@ -219,6 +226,7 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
                         holmes_analysis=self.holmes_analysis,
                         holmes_tool_calls=self.holmes_tool_calls,
                         holmes_sources=self.holmes_sources,
+                        category=ctx.state.classification_category,
                     ),
                     toolsets=list(ctx.deps.analyser_toolsets) or None,
                 )

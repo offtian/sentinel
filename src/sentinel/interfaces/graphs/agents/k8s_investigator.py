@@ -13,6 +13,7 @@ import dataclasses
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
+from sentinel.interfaces.graphs.agents import utils
 from sentinel.plugins import prompts
 
 
@@ -37,20 +38,10 @@ class Dependencies:
     namespace: str | None = None
 
 
-SYSTEM_PROMPT = prompts.load_system_prompt("k8s_investigator")
+BASE_SYSTEM_PROMPT = prompts.load_system_prompt("k8s_investigator")
 
 
-agent: Agent[Dependencies, K8sInvestigationOutput] = Agent(
-    "test",  # Overridden at call site with the configured LiteLLM model.
-    deps_type=Dependencies,
-    output_type=K8sInvestigationOutput,
-    system_prompt=SYSTEM_PROMPT,
-    instrument=True,
-)
-
-
-@agent.instructions
-def build_k8s_context(ctx: RunContext[Dependencies]) -> str:
+def _build_k8s_context(ctx: RunContext[Dependencies]) -> str:
     return prompts.render_user_prompt(
         "k8s_investigator",
         alert_title=ctx.deps.alert_title,
@@ -60,3 +51,25 @@ def build_k8s_context(ctx: RunContext[Dependencies]) -> str:
         cluster_name=ctx.deps.cluster_name,
         namespace=ctx.deps.namespace,
     )
+
+
+def build_agent(
+    *, model: str | None = None, skills: tuple[str, ...] = ()
+) -> Agent[Dependencies, K8sInvestigationOutput]:
+    """
+    Build the K8s investigator agent with configured skills baked in.
+    """
+    system_prompt = utils.compose_system_prompt(base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills)
+    agent_instance: Agent[Dependencies, K8sInvestigationOutput] = Agent(
+        model or "test",
+        deps_type=Dependencies,
+        output_type=K8sInvestigationOutput,
+        system_prompt=system_prompt,
+        instrument=True,
+    )
+    agent_instance.instructions(_build_k8s_context)
+    return agent_instance
+
+
+SYSTEM_PROMPT = BASE_SYSTEM_PROMPT
+agent = build_agent()

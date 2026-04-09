@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from sentinel.plugins import skills as skills_mod
+
 
 def get_model_with_gateway(model_name: str) -> str:
     """
@@ -20,3 +22,64 @@ def get_model_with_gateway(model_name: str) -> str:
         model_name = f"{provider}:{name}"
 
     return model_name
+
+
+def _format_skills_section(handles: tuple[skills_mod.SkillHandle, ...]) -> str:
+    """
+    Render a tuple of SkillHandle objects into the canonical Markdown section.
+    """
+    sections = [f"### {handle.name} (v{handle.version})\n{handle.body}" for handle in handles]
+    return "## Applicable Skills\n\n" + "\n\n".join(sections)
+
+
+def append_skills_to_prompt(*, base_prompt: str, category: str, max_skills: int = 5) -> str:
+    """
+    Append Skills matching ``category`` onto ``base_prompt``.
+
+    Delegates to ``sentinel.plugins.skills.load_skills_for`` and appends a
+    structured ``## Applicable Skills`` section. When no skills match, the
+    base prompt is returned unchanged.
+    """
+    handles = skills_mod.load_skills_for(category=category, max_skills=max_skills)
+    if not handles:
+        return base_prompt
+    return f"{base_prompt}\n\n---\n{_format_skills_section(handles)}"
+
+
+def compose_system_prompt(*, base_prompt: str, skill_names: tuple[str, ...]) -> str:
+    """
+    Append the named Skills onto ``base_prompt`` in the given order.
+
+    Looks each name up against the installed catalogue and appends the
+    Markdown Skills section. Skill order is preserved from ``skill_names``
+    (not alphabetised) so operators control the presentation order in
+    ``config.load_agents()``.
+
+    :raises sentinel.plugins.skills.SkillNotFoundError: if any name in
+        ``skill_names`` is not in the installed catalogue.
+    """
+    if not skill_names:
+        return base_prompt
+
+    catalogue = {handle.name: handle for handle in skills_mod.all_installed_skills()}
+    missing = [name for name in skill_names if name not in catalogue]
+    if missing:
+        msg = f"Unknown skill name(s) requested: {', '.join(missing)}"
+        raise skills_mod.SkillNotFoundError(msg)
+
+    handles = tuple(catalogue[name] for name in skill_names)
+    return f"{base_prompt}\n\n---\n{_format_skills_section(handles)}"
+
+
+def render_skills_section(*, category: str, max_skills: int = 5) -> str:
+    """
+    Return the Skills Markdown section for ``category``, or an empty string.
+
+    Intended for use inside PydanticAI ``@agent.system_prompt`` functions
+    where the static system prompt is supplied separately and the returned
+    string is concatenated onto it by PydanticAI at run time.
+    """
+    handles = skills_mod.load_skills_for(category=category, max_skills=max_skills)
+    if not handles:
+        return ""
+    return _format_skills_section(handles)
