@@ -251,7 +251,6 @@ AgentGateway becomes relevant when:
 | Investigation < 2min benchmark | Production deployment (separate repo) | Post-deploy |
 | Review < 3min benchmark | Production deployment (separate repo) | Post-deploy |
 | Pipeline OTel/Logfire exporter | Section 4 acceptance criteria | Phase D |
-| Skills runtime + initial runbook catalogue | Section 7 | Phase D |
 | Universal MCP injection across all agents | Section 7 | Phase D |
 | Prompt versioning + replay snapshots | Sections 4 & 6 | Phase D |
 | Anthropic prompt caching across agents | Sections 1 & 2 | Phase D |
@@ -306,4 +305,4 @@ AgentGateway becomes relevant when:
 
 **Serving suggestion:** Kubernetes via Helm chart with separate API deployment (user-facing, 2 replicas) and Worker deployment (background processing, 2 replicas). PostgreSQL for state. LiteLLM sidecar or shared gateway for LLM routing.
 
-**Test suite:** 475+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.
+**Test suite:** 540+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.

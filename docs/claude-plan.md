@@ -33,14 +33,18 @@ sentinel/
 │   │   ├── graphs/                   # Pydantic Graph pipelines
 │   │   │   ├── sre_investigation.py  # Alert triage → investigate → analyse → respond
 │   │   │   ├── support_review.py     # Ticket intake → search docs → draft response
-│   │   │   └── agents/              # PydanticAI agent definitions
-│   │   │       ├── alert_classifier.py
+│   │   │   └── agents/              # PydanticAI agent definitions (factory pattern)
+│   │   │       ├── __init__.py       # Agent registry exports
+│   │   │       ├── alert_classifier.py   # build_agent(model, skills)
 │   │   │       ├── root_cause_analyser.py
-│   │   │       ├── k8s_investigator.py  # K8s investigation agent
+│   │   │       ├── k8s_investigator.py
 │   │   │       ├── k8s_runner.py        # Agent runner (layer bridge for DI)
+│   │   │       ├── intent_router.py
 │   │   │       ├── ticket_reviewer.py
 │   │   │       ├── response_drafter.py
-│   │   │       └── utils.py          # LiteLLM gateway helper
+│   │   │       ├── chart_generator.py
+│   │   │       ├── chart_request_parser.py
+│   │   │       └── utils.py          # LiteLLM gateway helper, append_skills_to_prompt
 │   │   ├── mcp/                      # MCP server (FastMCP)
 │   │   │   ├── server.py             # FastMCP app definition
 │   │   │   └── tools/                # MCP tool wrappers
@@ -118,12 +122,20 @@ sentinel/
 │   │   ├── reporting.py              # EvaluationReport with assertion/score averages
 │   │   └── rendering.py              # Rich console table output
 │   │
-│   ├── plugins/                      # Plugin adapters (toolsets, prompts)
+│   ├── plugins/                      # Plugin adapters (toolsets, prompts, skills)
 │   │   ├── toolsets/                 # PydanticAI toolset wrappers
 │   │   │   ├── documentation.py      # Documentation toolset for agents
 │   │   │   ├── kubernetes.py         # K8s toolset for investigation agents
 │   │   │   ├── mcp.py                # MCP client toolset builder
 │   │   │   └── observability.py      # Observability toolset for agents
+│   │   ├── skills/                   # File-based operational runbooks
+│   │   │   ├── __init__.py           # load_skills_for(), compose_system_prompt(), all_installed_skills()
+│   │   │   ├── k8s-crashloop-runbook/SKILL.md
+│   │   │   ├── database-connection-runbook/SKILL.md
+│   │   │   ├── latency-spike-runbook/SKILL.md
+│   │   │   ├── auth-error-response/SKILL.md
+│   │   │   ├── rate-limit-response/SKILL.md
+│   │   │   └── chart-helm-best-practices/SKILL.md
 │   │   └── prompts/                  # Jinja2 agent system prompt templates
 │   │
 │   ├── data/                         # Layer 4: Persistence (models only)
@@ -270,27 +282,26 @@ code change.
 
 ```mermaid
 flowchart LR
+    subgraph Delivered
+      B1[Skills: runbooks +<br/>response patterns<br/>config-driven per agent]
+    end
     subgraph Today
-      A1[Static .j2 prompts]
       A2[K8s agent uses MCP only]
       A3[instrument=True but no exporter]
       A4[No prompt versioning]
       A5[No reproducibility snapshot]
     end
     subgraph Proposed
-      B1[Skills: runbooks +<br/>response patterns<br/>loaded by classifier output]
       B2[All agents mount MCP toolsets<br/>via shared builder]
       B3[OTel/Logfire exporter<br/>for PydanticAI spans]
       B4[Prompt version + SHA256<br/>recorded in audit log]
       B5[Replay snapshot per pipeline run<br/>persisted in pipeline_runs]
       B6[Anthropic prompt cache markers<br/>on system prompts via LiteLLM]
     end
-    A1 --> B1
     A2 --> B2
     A3 --> B3
     A4 --> B4
     A4 --> B5
-    A1 --> B6
 ```
 
 ### Agent inventory (current vs. proposed)
@@ -313,10 +324,14 @@ flowchart LR
   `version`.
 - Loader: `plugins/skills/__init__.py:load_skills_for(category=..., max=N)`
   returns matching skills sorted deterministically (for reproducibility).
-- Selection: driven by classifier output —
-  `AlertClassification.category` (SRE) or `TicketClassification.category` (Support).
-- Injection: appended to the system prompt by a helper in
-  `interfaces/graphs/agents/utils.py` so every agent picks them up uniformly.
+- Config-driven assignment: `SKILLS_BY_AGENT` dict in `config.py` maps agent
+  names to skill names. `Configuration.load_agents()` calls each agent's
+  `build_agent(model=..., skills=(...))` factory with the configured skills.
+- Injection: `compose_system_prompt(base_prompt=..., skill_names=(...))` in
+  `plugins/skills/__init__.py` resolves skill names against the installed
+  catalogue, raising `SkillNotFoundError` on typos.
+- Legacy dynamic injection via `append_skills_to_prompt` / `render_skills_section`
+  in `agents/utils.py` is deprecated in favour of the config-driven approach.
 - Initial catalogue: `k8s-crashloop-runbook`, `database-connection-runbook`,
   `latency-spike-runbook`, `auth-error-response`, `rate-limit-response`,
   `chart-helm-best-practices`.
@@ -509,7 +524,7 @@ just k8s-up                     # Deploy to local K8s
 | MCP client builder | `src/sentinel/plugins/toolsets/mcp.py` |
 | Evaluation metrics | `src/sentinel/domain/evaluation/metrics.py` |
 | Helm chart | `helm/sentinel/values.yaml` |
-| Skills loader | `src/sentinel/plugins/skills/__init__.py` (planned) |
+| Skills loader | `src/sentinel/plugins/skills/__init__.py` |
 | Universal MCP builder | `src/sentinel/config.py` `Configuration.build_mcp_toolsets()` (planned) |
 | Prompt versioning | `src/sentinel/plugins/prompts/__init__.py` `PromptHandle` (planned) |
 | Pipeline run snapshot persistence | `src/sentinel/domain/pipeline/operations.py` (existing — needs callers) |
