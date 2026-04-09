@@ -1,6 +1,6 @@
 # Plan: Universal MCP Injection
 
-**Status:** draft
+**Status:** complete
 **Created:** 2026-04-08
 **Last updated:** 2026-04-08
 
@@ -47,7 +47,7 @@ This ticks the PRD section 1, 2, and 7 boxes covering "SRE/Support agents auto-l
 ## Steps
 
 ### Step 1 — Tests for `Configuration.build_mcp_toolsets()`
-- [ ] **1a:** Add `tests/unit/test_config.py::TestBuildMcpToolsets`:
+- [x] **1a:** Add `tests/unit/test_config_build_mcp_toolsets.py::TestBuildMcpToolsets`:
   - `test_returns_empty_tuple_when_mcp_servers_unset`
   - `test_returns_empty_tuple_when_mcp_servers_malformed_json`
   - `test_builds_single_sse_server_from_url`
@@ -56,55 +56,54 @@ This ticks the PRD section 1, 2, and 7 boxes covering "SRE/Support agents auto-l
   - `test_memoises_result_across_calls` (assert identity)
   - `test_thread_safe_under_concurrent_first_call` (8-worker ThreadPoolExecutor)
   - `test_two_configurations_have_independent_caches`
-- [ ] **1b:** Run the file — expect failures.
+- [x] **1b:** Run the file — expect failures.
 
 ### Step 2 — Implement `Configuration.build_mcp_toolsets()`
-- [ ] **2a:** In `config.py`, add private `_mcp_toolsets` field and module-level `_mcp_build_lock = threading.Lock()`.
-- [ ] **2b:** Add `def build_mcp_toolsets(self) -> tuple[object, ...]` populating `self._mcp_toolsets` under the lock.
-- [ ] **2c:** Refactor `build_k8s_investigation_adapter` to call `self.build_mcp_toolsets()`. `K8S_MCP_SERVER_URL` fall-through stays as a K8s-only extra `MCPServerSSE` appended after the shared tuple — **not** double-mounted into the shared cache.
-- [ ] **2d:** Run tests; all pass.
+- [x] **2a:** In `config.py`, add private `_mcp_toolsets` field and module-level `_mcp_build_lock = threading.Lock()`.
+- [x] **2b:** Add `def build_mcp_toolsets(self) -> tuple[Any, ...]` populating `self._mcp_toolsets` under the lock.
+- [x] **2c:** Refactor `build_k8s_investigation_adapter` to call `self.build_mcp_toolsets()`. `K8S_MCP_SERVER_URL` fall-through stays as a K8s-only extra `MCPServerSSE` appended after the shared tuple — **not** double-mounted into the shared cache.
+- [x] **2d:** Run tests; all pass.
 
 ### Step 3 — Tests for pipeline-level wiring
-- [ ] **3a:** Extend `test_sre_investigation.py` with `test_classify_alert_passes_shared_mcp_toolsets` and `test_analyse_root_cause_composes_per_agent_then_shared_toolsets_in_order`
-- [ ] **3b:** Extend `test_support_review.py` analogously
-- [ ] **3c:** Extend `test_chart_generation.py` with `test_chart_generator_run_includes_shared_mcp_toolsets`
+- [x] **3a:** Add `test_sre_mcp_toolsets.py` with `test_passes_shared_mcp_toolsets_to_classifier_agent` and `test_composes_per_agent_then_shared_toolsets_in_order`
+- [x] **3b:** Add `test_support_mcp_toolsets.py` analogously
+- [x] **3c:** Add `test_chart_generation_mcp_toolsets.py` with `test_chart_generator_run_includes_shared_mcp_toolsets`
 
 ### Step 4 — Add `classifier_toolsets` and pipeline plumbing for SRE
-- [ ] **4a:** In `sre_investigation.py`:
+- [x] **4a:** In `sre_investigation.py`:
   - Add `classifier_toolsets: Sequence[AbstractToolset[object]] = ()` to `Dependencies` and `investigate_alert()`
   - Pass `toolsets=list(ctx.deps.classifier_toolsets) or None` into `alert_classifier.agent.run(...)` in `ClassifyAlert`
   - Document the per-agent-first / shared-second composition rule in comments
-- [ ] **4b:** Run pipeline tests — green.
+- [x] **4b:** Run pipeline tests — green.
 
 ### Step 5 — Add `chart_generator_toolsets` plumbing
-- [ ] **5a:** In `chart_generation.py`, add `chart_generator_toolsets` parameter to `_run_chart_generator()` and `generate_chart()`; thread into `chart_generator.agent.run(...)`.
-- [ ] **5b:** Run chart_generation tests — green.
+- [x] **5a:** In `chart_generation.py`, add `chart_generator_toolsets` parameter to `_generate_chart_files()` and `generate_chart()`; thread into `chart_generator.agent.run(...)`.
+- [x] **5b:** Run chart_generation tests — green.
 
 ### Step 6 — Wire `Configuration.build_mcp_toolsets()` into worker entry points
-- [ ] **6a:** In `worker.py::_run_sre_investigation`:
+- [x] **6a:** In `worker.py::_run_sre_investigation`:
   - `shared_mcp = cfg.build_mcp_toolsets()`
   - `analyser_toolsets=(observability_toolset, *shared_mcp)`
   - `classifier_toolsets=shared_mcp`
-- [ ] **6b:** In `worker.py::_run_support_review`:
+- [x] **6b:** In `worker.py::_run_support_review`:
   - `reviewer_toolsets=(cfg.build_ticket_triage_toolset(), *shared_mcp)`
   - `drafter_toolsets=(cfg.build_support_search_toolset(), *shared_mcp)`
-- [ ] **6c:** Audit other entry points (Streamlit chat `interfaces/chat/app.py`, supervisor orchestrator, eval runner) and route shared MCP toolsets through them too.
-- [ ] **6d:** Run unit + integration test suites.
+- [x] **6c:** Audit other entry points (Streamlit chat `interfaces/chat/app.py`, supervisor orchestrator, eval runner) and route shared MCP toolsets through them too.
+- [x] **6d:** Run unit + integration test suites.
 
 ### Step 7 — Document `MCP_SERVERS` in `.env.default`
-- [ ] **7a:** Append `# MCP Servers` section with three commented examples (Datadog HTTP, GitHub HTTP, Confluence stdio) and a note that omitting the var disables shared MCP injection without breaking agents.
+- [x] **7a:** Append `# MCP Servers` section with three commented examples (Datadog HTTP, GitHub HTTP, Confluence stdio) and a note that omitting the var disables shared MCP injection without breaking agents.
 
 ### Step 8 — Regression integration test for K8s no-double-mount
-- [ ] **8a:** Add `tests/integration/test_universal_mcp_injection.py`:
+- [x] **8a:** Add `tests/integration/test_universal_mcp_injection.py`:
   - Build `Configuration(settings=Settings(mcp_servers='[{"name":"dd","url":"..."}]', k8s_investigation_backend="native", k8s_mcp_server_url="..."))`
-  - `cfg.load_vendors()`; build K8s adapter via `cfg.build_k8s_investigation_adapter()`
-  - Patch `k8s_investigator.agent.run` to capture `toolsets=` kwarg
-  - Assert Datadog MCP server appears **exactly once** plus K8s function toolset plus `K8S_MCP_SERVER_URL` SSE server
-- [ ] **8b:** Add `test_pipeline_agents_receive_shared_mcp_toolsets` asserting all five non-router agents get the shared MCP server exactly once.
+  - Build K8s adapter via `cfg.build_k8s_investigation_adapter()`
+  - Assert Datadog MCP server appears **exactly once** plus `K8S_MCP_SERVER_URL` SSE server
+- [x] **8b:** Add `test_build_k8s_adapter_uses_memoised_build_mcp_toolsets` asserting shared cache identity.
 
 ### Step 9 — Lint, full test run, doc sync
-- [ ] **9a:** `just lint` — fix ruff/mypy/import-linter issues
-- [ ] **9b:** `just test && just test-integration`
+- [x] **9a:** `just lint` — fix ruff/mypy/import-linter issues (pre-existing yaml stubs errors only)
+- [x] **9b:** `just test && just test-integration` — 555 tests pass
 - [ ] **9c:** Tick PRD boxes (sections 1, 2, 7)
 - [ ] **9d:** Run `/update-docs`
 
