@@ -53,7 +53,3 @@ def build_agent(
     )
     agent_instance.instructions(_build_context)
     return agent_instance
-
-
-SYSTEM_PROMPT = BASE_SYSTEM_PROMPT
-agent = build_agent()

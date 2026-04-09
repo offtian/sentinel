@@ -42,7 +42,3 @@ def build_agent(
         system_prompt=system_prompt,
         instrument=True,
     )
-
-
-SYSTEM_PROMPT = BASE_SYSTEM_PROMPT
-agent = build_agent()

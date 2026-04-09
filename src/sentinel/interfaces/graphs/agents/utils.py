@@ -32,20 +32,6 @@ def _format_skills_section(handles: tuple[skills_mod.SkillHandle, ...]) -> str:
     return "## Applicable Skills\n\n" + "\n\n".join(sections)
 
 
-def append_skills_to_prompt(*, base_prompt: str, category: str, max_skills: int = 5) -> str:
-    """
-    Append Skills matching ``category`` onto ``base_prompt``.
-
-    Delegates to ``sentinel.plugins.skills.load_skills_for`` and appends a
-    structured ``## Applicable Skills`` section. When no skills match, the
-    base prompt is returned unchanged.
-    """
-    handles = skills_mod.load_skills_for(category=category, max_skills=max_skills)
-    if not handles:
-        return base_prompt
-    return f"{base_prompt}\n\n---\n{_format_skills_section(handles)}"
-
-
 def compose_system_prompt(*, base_prompt: str, skill_names: tuple[str, ...]) -> str:
     """
     Append the named Skills onto ``base_prompt`` in the given order.
@@ -75,9 +61,10 @@ def render_skills_section(*, category: str, max_skills: int = 5) -> str:
     """
     Return the Skills Markdown section for ``category``, or an empty string.
 
-    Intended for use inside PydanticAI ``@agent.system_prompt`` functions
-    where the static system prompt is supplied separately and the returned
-    string is concatenated onto it by PydanticAI at run time.
+    Used by second-layer dynamic system-prompt injection hooks in
+    ``root_cause_analyser`` and ``response_drafter`` agents, which add
+    category-specific runbook skills at runtime on top of the static skills
+    baked in by ``compose_system_prompt``.
     """
     handles = skills_mod.load_skills_for(category=category, max_skills=max_skills)
     if not handles:
