@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
@@ -12,16 +13,18 @@ from sentinel.domain.search import searcher
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.graphs import common
 from sentinel.interfaces.graphs._node_helpers import instrumented_node_run
-from sentinel.interfaces.graphs.agents import response_drafter, ticket_reviewer, utils
-from sentinel.settings import get_settings
+from sentinel.interfaces.graphs.agents import response_drafter, ticket_reviewer
 from sentinel.utils import logs, metrics
+
+
+if TYPE_CHECKING:
+    from sentinel import config as config_mod
 
 
 @dataclasses.dataclass
 class Dependencies:
     status_update_client: common.StatusUpdateClient
-    reviewer_model: str
-    drafter_model: str
+    config: config_mod.Configuration
     document_searcher: searcher.BaseDocumentSearcher | None = None
     ticket_searcher: searcher.BasePastTicketSearcher | None = None
     persist_fn: common.PersistTicketReviewFn | None = None
@@ -47,9 +50,9 @@ class ClassifyTicket(BaseNode[State, Dependencies, common.SupportReply]):
             await ctx.deps.status_update_client.update_status("Reviewing ticket...")
 
             try:
-                result = await ticket_reviewer.agent.run(
+                reviewer_agent = ctx.deps.config.agent_for("ticket_reviewer")
+                result = await reviewer_agent.run(
                     user_prompt=f"Ticket: {ctx.state.ticket.summary}\n\n{ctx.state.ticket.description}",
-                    model=utils.get_model_with_gateway(ctx.deps.reviewer_model),
                     deps=ticket_reviewer.Dependencies(
                         ticket_summary=ctx.state.ticket.summary,
                         ticket_description=ctx.state.ticket.description,
@@ -194,9 +197,9 @@ class DraftResponse(BaseNode[State, Dependencies, common.SupportReply]):
             await ctx.deps.status_update_client.update_status("Drafting response...")
 
             try:
-                result = await response_drafter.agent.run(
+                drafter_agent = ctx.deps.config.agent_for("response_drafter")
+                result = await drafter_agent.run(
                     user_prompt=f"Draft a response for: {ctx.state.ticket.summary}",
-                    model=utils.get_model_with_gateway(ctx.deps.drafter_model),
                     deps=response_drafter.Dependencies(
                         ticket_summary=ctx.state.ticket.summary,
                         ticket_description=ctx.state.ticket.description,
@@ -319,11 +322,10 @@ class DetermineConfidence(BaseNode[State, Dependencies, common.SupportReply]):
 async def review_ticket(
     ticket: support_entities.Ticket,
     *,
+    config: config_mod.Configuration,
     document_searcher: searcher.BaseDocumentSearcher | None = None,
     ticket_searcher: searcher.BasePastTicketSearcher | None = None,
     status_update_client: common.StatusUpdateClient | None = None,
-    reviewer_model: str = "",
-    drafter_model: str = "",
     persist_fn: common.PersistTicketReviewFn | None = None,
     trace_collector: common.TraceCollector | None = None,
     reviewer_toolsets: Sequence[AbstractToolset[object]] = (),
@@ -337,8 +339,7 @@ async def review_ticket(
     state = State(ticket=ticket)
     dependencies = Dependencies(
         status_update_client=status_update_client or common.NoOpStatusUpdateClient(),
-        reviewer_model=reviewer_model or get_settings().ticket_reviewer_llm,
-        drafter_model=drafter_model or get_settings().response_drafter_llm,
+        config=config,
         document_searcher=document_searcher,
         ticket_searcher=ticket_searcher,
         persist_fn=persist_fn,

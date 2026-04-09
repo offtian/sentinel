@@ -6,13 +6,12 @@ from typing import Any
 
 from slack_bolt.context.ack.async_ack import AsyncAck
 
-from sentinel.domain.search.factory import build_document_searcher, build_ticket_searcher
+from sentinel.config import get_config
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre.holmes_adapter import HolmesAdapter
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.graphs import common, sre_investigation, support_review
 from sentinel.interfaces.graphs.agents import intent_router
-from sentinel.interfaces.graphs.agents import utils as agent_utils
 from sentinel.interfaces.slack.app import app
 from sentinel.interfaces.slack.status_update import SlackStatusUpdateClient
 from sentinel.settings import get_settings
@@ -26,12 +25,13 @@ from sentinel.utils import logs
 
 async def _classify_intent(text: str) -> intent_router.Intent:
     """Route user message to SRE or Support via the intent router agent."""
-    result = await intent_router.agent.run(
+    cfg = get_config()
+    router_agent = cfg.agent_for("intent_router")
+    result = await router_agent.run(
         user_prompt=text,
-        model=agent_utils.get_model_with_gateway(get_settings().intent_router_llm),
         deps=intent_router.Dependencies(message=text),
     )
-    return result.output.intent
+    return result.output.intent  # type: ignore[no-any-return]
 
 
 def _strip_mention(text: str) -> str:
@@ -173,6 +173,7 @@ async def _run_sre(
 
     reply = await sre_investigation.investigate_alert(
         alert=alert,
+        config=get_config(),
         holmes=HolmesAdapter(enabled=get_settings().holmesgpt_enabled),
         status_update_client=status,
         post_to_slack=False,  # we post directly in this thread instead
@@ -212,10 +213,12 @@ async def _run_support(
         raw_payload={"slack_text": text, "user_id": user_id},
     )
 
+    cfg = get_config()
     reply = await support_review.review_ticket(
         ticket=ticket,
-        document_searcher=build_document_searcher(),
-        ticket_searcher=build_ticket_searcher(),
+        config=cfg,
+        document_searcher=cfg.build_document_searcher(),
+        ticket_searcher=cfg.build_ticket_searcher(),
         status_update_client=status,
     )
 

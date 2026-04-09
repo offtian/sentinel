@@ -143,6 +143,7 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
 
     result = await sre_investigation.investigate_alert(
         alert=alert,
+        config=cfg,
         holmes=holmes,
         pagerduty_client=pd_client,
         persist_fn=_persist,
@@ -176,6 +177,7 @@ async def _run_support_review(payload: dict[str, object]) -> str:
 
     result = await support_review.review_ticket(
         ticket=ticket,
+        config=cfg,
         document_searcher=cfg.build_document_searcher(),
         ticket_searcher=cfg.build_ticket_searcher(),
         persist_fn=_persist,
