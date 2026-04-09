@@ -30,7 +30,14 @@ class TestChartGeneratorToolsets:
         validation_result = factories.make_validation_result()
         shared_toolset = mock.Mock(name="datadog-mcp")
 
-        captured_kwargs: dict[str, object] = {}
+        # And a fake chart_generator agent accessible via agent_for
+        fake_output = mock.Mock()
+        fake_output.output.files = generated_files
+        fake_agent = mock.Mock()
+        fake_agent.run = mock.AsyncMock(return_value=fake_output)
+
+        def fake_agent_for(name: str) -> mock.Mock:
+            return fake_agent
 
         # When running the pipeline with chart_generator_toolsets
         with (
@@ -38,29 +45,20 @@ class TestChartGeneratorToolsets:
             mock.patch.object(chart_generation, "_load_policy") as mock_load,
             mock.patch.object(validation, "validate_chart") as mock_validate,
             mock.patch.object(chart_generation, "_commit_chart") as mock_commit,
-            mock.patch(
-                "sentinel.interfaces.graphs.agents.chart_generator.agent"
-            ) as mock_agent,
         ):
             mock_parse.return_value = spec
             mock_load.return_value = policy
             mock_validate.return_value = validation_result
             mock_commit.return_value = "https://github.com/org/repo/pull/42"
 
-            # Capture kwargs passed to agent.run
-            fake_output = mock.Mock()
-            fake_output.output.files = generated_files
-            mock_agent.run = mock.AsyncMock(return_value=fake_output)
-
-            result = asyncio.run(
+            asyncio.run(
                 chart_generation.generate_chart(
                     request=request,
-                    parser_model="test-model",
-                    generator_model="test-model",
+                    agent_for=fake_agent_for,
                     chart_generator_toolsets=(shared_toolset,),
                 )
             )
 
             # Then the chart generator agent received the shared toolsets
-            call_kwargs = mock_agent.run.call_args.kwargs
+            call_kwargs = fake_agent.run.call_args.kwargs
             assert call_kwargs.get("toolsets") == [shared_toolset]

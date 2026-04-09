@@ -16,19 +16,22 @@ import pytest
 from sentinel.interfaces.graphs import support_review
 from sentinel.interfaces.graphs.agents import response_drafter, ticket_reviewer
 from tests.factories import make_ticket
-from tests.functional.conftest import FakeAgentResult, StubDocumentSearcher
+from tests.functional.conftest import (
+    FakeAgentResult,
+    StubDocumentSearcher,
+    _build_fake_config,
+    _make_fake_agent,
+)
 
 
 class TestClassifyTicketToolsets:
     @pytest.mark.asyncio
-    async def test_passes_shared_mcp_toolsets_to_reviewer_agent(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_passes_shared_mcp_toolsets_to_reviewer_agent(self) -> None:
         # Given shared MCP toolsets
         shared_toolset = mock.Mock()
         captured_kwargs: dict[str, object] = {}
 
-        async def spy_review(*, user_prompt, model, deps, **kwargs):
+        async def spy_review(*, user_prompt, deps, **kwargs):
             captured_kwargs.update(kwargs)
             return FakeAgentResult(
                 ticket_reviewer.TicketClassification(
@@ -40,10 +43,7 @@ class TestClassifyTicketToolsets:
                 )
             )
 
-        monkeypatch.setattr(ticket_reviewer.agent, "run", spy_review)
-
-        # And a working drafter so the pipeline can complete
-        async def fake_draft(*, user_prompt, model, deps, **kwargs):
+        async def fake_draft(*, user_prompt, deps, **kwargs):
             return FakeAgentResult(
                 response_drafter.DraftedResponse(
                     response="Please check SSO settings.",
@@ -53,16 +53,20 @@ class TestClassifyTicketToolsets:
                 )
             )
 
-        monkeypatch.setattr(response_drafter.agent, "run", fake_draft)
+        config = _build_fake_config(
+            {
+                "ticket_reviewer": _make_fake_agent(spy_review),
+                "response_drafter": _make_fake_agent(fake_draft),
+            }
+        )
 
         ticket = make_ticket()
 
         # When the pipeline runs with reviewer_toolsets
         await support_review.review_ticket(
             ticket=ticket,
+            agent_for=config.agent_for,
             document_searcher=StubDocumentSearcher(),
-            reviewer_model="test-model",
-            drafter_model="test-model",
             reviewer_toolsets=(shared_toolset,),
         )
 
@@ -72,15 +76,13 @@ class TestClassifyTicketToolsets:
 
 class TestDraftResponseToolsetOrdering:
     @pytest.mark.asyncio
-    async def test_composes_per_agent_then_shared_toolsets_in_order(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_composes_per_agent_then_shared_toolsets_in_order(self) -> None:
         # Given per-agent and shared MCP toolsets
         per_agent_toolset = mock.Mock(name="support-search")
         shared_mcp_toolset = mock.Mock(name="confluence-mcp")
         captured_kwargs: dict[str, object] = {}
 
-        async def fake_review(*, user_prompt, model, deps, **kwargs):
+        async def fake_review(*, user_prompt, deps, **kwargs):
             return FakeAgentResult(
                 ticket_reviewer.TicketClassification(
                     category="api",
@@ -91,7 +93,7 @@ class TestDraftResponseToolsetOrdering:
                 )
             )
 
-        async def spy_draft(*, user_prompt, model, deps, **kwargs):
+        async def spy_draft(*, user_prompt, deps, **kwargs):
             captured_kwargs.update(kwargs)
             return FakeAgentResult(
                 response_drafter.DraftedResponse(
@@ -102,17 +104,20 @@ class TestDraftResponseToolsetOrdering:
                 )
             )
 
-        monkeypatch.setattr(ticket_reviewer.agent, "run", fake_review)
-        monkeypatch.setattr(response_drafter.agent, "run", spy_draft)
+        config = _build_fake_config(
+            {
+                "ticket_reviewer": _make_fake_agent(fake_review),
+                "response_drafter": _make_fake_agent(spy_draft),
+            }
+        )
 
         ticket = make_ticket()
 
         # When the pipeline runs with per-agent first, shared MCP second
         await support_review.review_ticket(
             ticket=ticket,
+            agent_for=config.agent_for,
             document_searcher=StubDocumentSearcher(),
-            reviewer_model="test-model",
-            drafter_model="test-model",
             drafter_toolsets=(per_agent_toolset, shared_mcp_toolset),
         )
 

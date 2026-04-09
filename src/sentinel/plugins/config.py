@@ -65,7 +65,7 @@ class CommonConfiguration(BaseConfiguration):
     observability_circuit_breaker: CircuitBreaker | None = None
 
     # Memoised shared MCP toolsets — populated lazily by build_mcp_toolsets().
-    _mcp_toolsets: tuple[object, ...] | None = PrivateAttr(default=None)
+    _mcp_toolsets: tuple[Any, ...] | None = PrivateAttr(default=None)
 
     def load_vendors(self) -> None:
         """
@@ -108,7 +108,7 @@ class CommonConfiguration(BaseConfiguration):
 
     # -- MCP toolsets --------------------------------------------------------
 
-    def build_mcp_toolsets(self) -> tuple[object, ...]:
+    def build_mcp_toolsets(self) -> tuple[Any, ...]:
         """
         Build and memoise the shared MCP toolsets from ``MCP_SERVERS``.
 
@@ -118,18 +118,21 @@ class CommonConfiguration(BaseConfiguration):
 
         :returns: Tuple of PydanticAI-compatible MCP toolset instances.
         """
-        if self._mcp_toolsets is not None:
-            return self._mcp_toolsets
+        cached = self._mcp_toolsets
+        if cached is not None:
+            return cached
 
         with _mcp_build_lock:
             # Double-check after acquiring the lock.
-            if self._mcp_toolsets is not None:
-                return self._mcp_toolsets
+            cached = self._mcp_toolsets
+            if cached is not None:
+                return cached
 
-            self._mcp_toolsets = mcp_toolset_mod.build_mcp_toolsets(
+            result = mcp_toolset_mod.build_mcp_toolsets(
                 config_json=self.settings.mcp_servers,
             )
-            return self._mcp_toolsets
+            self._mcp_toolsets = result
+            return result
 
     # -- SRE pipeline helpers ------------------------------------------------
 

@@ -15,19 +15,21 @@ import pytest
 from sentinel.interfaces.graphs import sre_investigation
 from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser
 from tests import factories
-from tests.functional.conftest import FakeAgentResult
+from tests.functional.conftest import (
+    FakeAgentResult,
+    _build_fake_config,
+    _make_fake_agent,
+)
 
 
 class TestClassifyAlertToolsets:
     @pytest.mark.asyncio
-    async def test_passes_shared_mcp_toolsets_to_classifier_agent(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_passes_shared_mcp_toolsets_to_classifier_agent(self) -> None:
         # Given shared MCP toolsets
         shared_toolset = mock.Mock()
         captured_kwargs: dict[str, object] = {}
 
-        async def spy_classify(*, user_prompt, model, deps, **kwargs):
+        async def spy_classify(*, user_prompt, deps, **kwargs):
             captured_kwargs.update(kwargs)
             return FakeAgentResult(
                 alert_classifier.AlertClassification(
@@ -39,10 +41,7 @@ class TestClassifyAlertToolsets:
                 )
             )
 
-        monkeypatch.setattr(alert_classifier.agent, "run", spy_classify)
-
-        # And a no-op Holmes and analyser so the pipeline completes
-        async def fake_analyse(*, user_prompt, model, deps, **kwargs):
+        async def fake_analyse(*, user_prompt, deps, **kwargs):
             return FakeAgentResult(
                 root_cause_analyser.RootCauseAnalysis(
                     root_cause="Unknown",
@@ -54,16 +53,20 @@ class TestClassifyAlertToolsets:
                 )
             )
 
-        monkeypatch.setattr(root_cause_analyser.agent, "run", fake_analyse)
+        config = _build_fake_config(
+            {
+                "alert_classifier": _make_fake_agent(spy_classify),
+                "root_cause_analyser": _make_fake_agent(fake_analyse),
+            }
+        )
 
         alert = factories.make_alert()
 
         # When the pipeline runs with classifier_toolsets
         await sre_investigation.investigate_alert(
             alert=alert,
+            agent_for=config.agent_for,
             holmes=factories.MockHolmesAdapter(),
-            classifier_model="test-model",
-            analyser_model="test-model",
             post_to_slack=False,
             classifier_toolsets=(shared_toolset,),
         )
@@ -74,15 +77,13 @@ class TestClassifyAlertToolsets:
 
 class TestAnalyseRootCauseToolsetOrdering:
     @pytest.mark.asyncio
-    async def test_composes_per_agent_then_shared_toolsets_in_order(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_composes_per_agent_then_shared_toolsets_in_order(self) -> None:
         # Given per-agent and shared MCP toolsets
         per_agent_toolset = mock.Mock(name="observability")
         shared_mcp_toolset = mock.Mock(name="datadog-mcp")
         captured_kwargs: dict[str, object] = {}
 
-        async def fake_classify(*, user_prompt, model, deps, **kwargs):
+        async def fake_classify(*, user_prompt, deps, **kwargs):
             return FakeAgentResult(
                 alert_classifier.AlertClassification(
                     severity="high",
@@ -93,7 +94,7 @@ class TestAnalyseRootCauseToolsetOrdering:
                 )
             )
 
-        async def spy_analyse(*, user_prompt, model, deps, **kwargs):
+        async def spy_analyse(*, user_prompt, deps, **kwargs):
             captured_kwargs.update(kwargs)
             return FakeAgentResult(
                 root_cause_analyser.RootCauseAnalysis(
@@ -106,17 +107,20 @@ class TestAnalyseRootCauseToolsetOrdering:
                 )
             )
 
-        monkeypatch.setattr(alert_classifier.agent, "run", fake_classify)
-        monkeypatch.setattr(root_cause_analyser.agent, "run", spy_analyse)
+        config = _build_fake_config(
+            {
+                "alert_classifier": _make_fake_agent(fake_classify),
+                "root_cause_analyser": _make_fake_agent(spy_analyse),
+            }
+        )
 
         alert = factories.make_alert()
 
         # When the pipeline runs with per-agent first, shared MCP second
         await sre_investigation.investigate_alert(
             alert=alert,
+            agent_for=config.agent_for,
             holmes=factories.MockHolmesAdapter(),
-            classifier_model="test-model",
-            analyser_model="test-model",
             post_to_slack=False,
             analyser_toolsets=(per_agent_toolset, shared_mcp_toolset),
         )
