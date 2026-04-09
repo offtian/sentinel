@@ -9,7 +9,12 @@ from sentinel.domain.sre import holmes_adapter
 from sentinel.interfaces.graphs import sre_investigation
 from sentinel.interfaces.graphs.agents import root_cause_analyser
 from tests import factories
-from tests.functional.conftest import FakeAgentResult
+from tests.functional.conftest import (
+    FakeAgentResult,
+    _build_fake_config,
+    _fake_alert_classifier_run,
+    _make_fake_agent,
+)
 
 
 async def _noop_slack(**kwargs: object) -> None:
@@ -39,15 +44,17 @@ def _disable_side_effects(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("sentinel.vendors.slack.post_investigation_summary", _noop_slack)
 
 
-@pytest.mark.usefixtures(
-    "patch_alert_classifier", "patch_root_cause_analyser", "_disable_side_effects"
-)
 class TestSreInvestigationPipeline:
+    @pytest.fixture(autouse=True)
+    def _setup(self, _disable_side_effects, fake_sre_config):
+        self._config = fake_sre_config
+
     async def test_full_pipeline_returns_populated_reply(self, mock_holmes, sample_alert):
         # Given a triggered alert with a Holmes adapter that returns findings
         # When running the full investigation pipeline
         reply = await sre_investigation.investigate_alert(
             alert=sample_alert,
+            config=self._config,
             holmes=mock_holmes,
             post_to_slack=False,
         )
@@ -68,6 +75,7 @@ class TestSreInvestigationPipeline:
         # When running the pipeline end-to-end
         reply = await sre_investigation.investigate_alert(
             alert=sample_alert,
+            config=self._config,
             holmes=mock_holmes,
             post_to_slack=False,
         )
@@ -84,6 +92,7 @@ class TestSreInvestigationPipeline:
         with patch("sentinel.vendors.slack.post_investigation_summary", tracker):
             await sre_investigation.investigate_alert(
                 alert=sample_alert,
+                config=self._config,
                 holmes=mock_holmes,
                 post_to_slack=True,
             )
@@ -101,6 +110,7 @@ class TestSreInvestigationPipeline:
         with patch("sentinel.vendors.slack.post_investigation_summary", tracker):
             await sre_investigation.investigate_alert(
                 alert=sample_alert,
+                config=self._config,
                 holmes=mock_holmes,
                 post_to_slack=False,
             )
@@ -115,6 +125,7 @@ class TestSreInvestigationPipeline:
         # When running the pipeline
         await sre_investigation.investigate_alert(
             alert=sample_alert,
+            config=self._config,
             holmes=mock_holmes,
             post_to_slack=False,
             persist_fn=tracker,
@@ -122,8 +133,6 @@ class TestSreInvestigationPipeline:
 
         # Then the persist callback is invoked with the investigation reply
         assert tracker.called_once  # noqa: PGH005
-        # persist_fn receives a positional arg, captured via *args → kwargs is empty;
-        # the call is persist_fn(reply) so we check the first positional.
 
     async def test_pipeline_writes_pagerduty_note_for_pd_alerts(self, mock_holmes):
         # Given a PagerDuty-sourced alert and a PagerDuty client
@@ -140,6 +149,7 @@ class TestSreInvestigationPipeline:
         # When running the pipeline
         await sre_investigation.investigate_alert(
             alert=alert,
+            config=self._config,
             holmes=mock_holmes,
             post_to_slack=False,
             pagerduty_client=FakePagerDutyClient(),
@@ -154,6 +164,7 @@ class TestSreInvestigationPipeline:
         # When running the full investigation
         reply = await sre_investigation.investigate_alert(
             alert=critical_alert,
+            config=self._config,
             holmes=mock_holmes,
             post_to_slack=False,
         )
@@ -164,9 +175,12 @@ class TestSreInvestigationPipeline:
         assert reply.confidence is not None
 
 
-@pytest.mark.usefixtures("patch_alert_classifier", "_disable_side_effects")
 class TestSrePipelineWithLowConfidence:
-    async def test_low_confidence_holmes_produces_low_label(self, sample_alert, monkeypatch):
+    @pytest.fixture(autouse=True)
+    def _setup(self, _disable_side_effects):
+        pass
+
+    async def test_low_confidence_holmes_produces_low_label(self, sample_alert):
         # Given Holmes returns minimal findings
         sparse_holmes = factories.MockHolmesAdapter(
             result=holmes_adapter.HolmesInvestigationResult(
@@ -177,8 +191,7 @@ class TestSrePipelineWithLowConfidence:
         )
 
         # And the root cause analyser reports low confidence
-
-        async def low_confidence_run(*, user_prompt, model, deps, **kwargs):
+        async def low_confidence_run(*, user_prompt, deps, **kwargs):
             return FakeAgentResult(
                 root_cause_analyser.RootCauseAnalysis(
                     root_cause="Unable to determine root cause with available data",
@@ -190,11 +203,18 @@ class TestSrePipelineWithLowConfidence:
                 )
             )
 
-        monkeypatch.setattr(root_cause_analyser.agent, "run", low_confidence_run)
+        # Given a config with a low-confidence analyser
+        config = _build_fake_config(
+            {
+                "alert_classifier": _make_fake_agent(_fake_alert_classifier_run),
+                "root_cause_analyser": _make_fake_agent(low_confidence_run),
+            }
+        )
 
         # When running the pipeline
         reply = await sre_investigation.investigate_alert(
             alert=sample_alert,
+            config=config,
             holmes=sparse_holmes,
             post_to_slack=False,
         )

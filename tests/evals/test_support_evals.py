@@ -36,7 +36,6 @@ def _build_ticket(case: dict[str, Any]) -> support_entities.Ticket:
     return support_entities.Ticket.model_validate(case["ticket"])
 
 
-@pytest.mark.usefixtures("patch_ticket_reviewer", "patch_response_drafter")
 class TestSupportGoldenCases:
     """Run each golden case through the pipeline and verify quality rubrics."""
 
@@ -45,7 +44,7 @@ class TestSupportGoldenCases:
         GOLDEN_CASES,
         ids=[c["id"] for c in GOLDEN_CASES],
     )
-    async def test_golden_case(self, case: dict[str, Any]) -> None:
+    async def test_golden_case(self, case: dict[str, Any], fake_support_config: Any) -> None:
         # Given a golden test case with a known ticket
         ticket = _build_ticket(case)
         expected = case["expected"]
@@ -53,6 +52,7 @@ class TestSupportGoldenCases:
         # When running the support review pipeline
         reply = await support_review.review_ticket(
             ticket=ticket,
+            config=fake_support_config,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
         )

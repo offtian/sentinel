@@ -6,6 +6,7 @@ from unittest import mock
 from sentinel.domain.charts import validation
 from sentinel.interfaces.graphs import chart_generation
 from tests import factories
+from tests.functional.conftest import _build_fake_config
 
 
 class TestGenerateChart:
@@ -26,6 +27,11 @@ class TestGenerateChart:
         )
         validation_result = factories.make_validation_result()
 
+        fake_config = _build_fake_config({})
+        fake_config.chart_parser_model = "test-model"
+        fake_config.chart_generator_model = "test-model"
+        fake_config.chart_max_retries = 3
+
         # When running the pipeline with all steps mocked
         with (
             mock.patch.object(chart_generation, "_parse_request") as mock_parse,
@@ -43,8 +49,7 @@ class TestGenerateChart:
             result = asyncio.run(
                 chart_generation.generate_chart(
                     request=request,
-                    parser_model="test-model",
-                    generator_model="test-model",
+                    config=fake_config,
                 )
             )
 
@@ -58,6 +63,11 @@ class TestGenerateChart:
         request = factories.make_chart_request(team="nonexistent")
         spec = factories.make_chart_spec()
 
+        fake_config = _build_fake_config({})
+        fake_config.chart_parser_model = "test-model"
+        fake_config.chart_generator_model = "test-model"
+        fake_config.chart_max_retries = 3
+
         # When the policy load fails
         with (
             mock.patch.object(chart_generation, "_parse_request") as mock_parse,
@@ -69,8 +79,7 @@ class TestGenerateChart:
             result = asyncio.run(
                 chart_generation.generate_chart(
                     request=request,
-                    parser_model="test-model",
-                    generator_model="test-model",
+                    config=fake_config,
                 )
             )
 

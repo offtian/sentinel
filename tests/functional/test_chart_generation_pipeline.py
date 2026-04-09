@@ -13,6 +13,7 @@ from unittest import mock
 
 from sentinel.domain.charts import entities, validation
 from sentinel.interfaces.graphs import chart_generation
+from tests.functional.conftest import _build_fake_config
 
 
 _FAKE_DEPLOYMENT = """\
@@ -85,6 +86,11 @@ class TestChartGenerationPipeline:
             kubeconform_ok=True,
         )
 
+        fake_config = _build_fake_config({})
+        fake_config.chart_parser_model = "test-model"
+        fake_config.chart_generator_model = "test-model"
+        fake_config.chart_max_retries = 3
+
         # When running the full pipeline with mocked helpers
         with (
             mock.patch.object(chart_generation, "_parse_request") as mock_parse,
@@ -110,8 +116,7 @@ class TestChartGenerationPipeline:
             result = asyncio.run(
                 chart_generation.generate_chart(
                     request=request,
-                    parser_model="test-model",
-                    generator_model="test-model",
+                    config=fake_config,
                 )
             )
 
@@ -162,6 +167,11 @@ class TestChartGenerationPipeline:
             kubeconform_ok=True,
         )
 
+        fake_config = _build_fake_config({})
+        fake_config.chart_parser_model = "test-model"
+        fake_config.chart_generator_model = "test-model"
+        fake_config.chart_max_retries = 3
+
         # When the first attempt fails but the second succeeds
         with (
             mock.patch.object(chart_generation, "_parse_request") as mock_parse,
@@ -179,8 +189,7 @@ class TestChartGenerationPipeline:
             result = asyncio.run(
                 chart_generation.generate_chart(
                     request=request,
-                    parser_model="test-model",
-                    generator_model="test-model",
+                    config=fake_config,
                     max_retries=3,
                 )
             )
@@ -199,6 +208,11 @@ class TestChartGenerationPipeline:
             requested_at=datetime(2026, 4, 3, tzinfo=UTC),
         )
 
+        fake_config = _build_fake_config({})
+        fake_config.chart_parser_model = "test-model"
+        fake_config.chart_generator_model = "test-model"
+        fake_config.chart_max_retries = 3
+
         # When the parser agent raises
         with mock.patch.object(chart_generation, "_parse_request") as mock_parse:
             mock_parse.side_effect = RuntimeError("LLM timeout")
@@ -206,8 +220,7 @@ class TestChartGenerationPipeline:
             result = asyncio.run(
                 chart_generation.generate_chart(
                     request=request,
-                    parser_model="test-model",
-                    generator_model="test-model",
+                    config=fake_config,
                 )
             )
 
