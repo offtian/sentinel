@@ -37,6 +37,11 @@ class SRESettings(BaseSettings):
     grafana_tempo_datasource_uid: str = ""
 
     holmesgpt_enabled: bool = True
+    # Investigation backend: "direct" (default — queries vendors directly) or
+    # "sdk" (uses HolmesGPT SDK ToolCallingLLM with built-in toolsets).
+    holmes_backend: str = "sdk"
+    # LLM model used by HolmesGPT SDK when holmes_backend="sdk".
+    holmes_sdk_model: str = "openai/gpt-4.1"
     sre_auto_investigate: bool = True
     sre_slack_channel: str = ""
 
@@ -55,6 +60,10 @@ class SRESettings(BaseSettings):
     # Kagent
     kagent_investigation_timeout_seconds: int = 120
     kagent_namespace: str = "kagent-system"
+
+    # Challenger adapter for A/B comparison mode.
+    # Values: "" (disabled), "native_k8s", "kagent"
+    challenger_adapter: str = ""
 
     # MCP
     mcp_servers: str = ""  # JSON list: [{"name": "...", "url": "..."}, ...]
@@ -83,6 +92,7 @@ class SupportSettings(BaseSettings):
     jira_project_keys: str = ""
     confluence_base_url: str = ""
     confluence_space_keys: str = ""
+    notion_token: str = ""
     support_auto_draft: bool = True
     support_slack_channel: str = ""
     # Options: "confluence" | "mock" | "bedrock_knowledge_base" (future)
