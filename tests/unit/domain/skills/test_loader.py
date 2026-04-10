@@ -14,7 +14,7 @@ from unittest import mock
 
 import pytest
 
-from sentinel.plugins import skills as skills_mod
+from sentinel.domain import skills as skills_mod
 from sentinel.utils import logs
 
 

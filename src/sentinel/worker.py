@@ -23,8 +23,8 @@ from typing import Any
 import databases
 
 from sentinel import bootstrap
+from sentinel import config as config_mod
 from sentinel.application.automations import runner as automation_runner
-from sentinel.config import get_config
 from sentinel.data import database
 from sentinel.data import db as async_db
 from sentinel.domain.jobs import entities
@@ -34,6 +34,7 @@ from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre import operations as sre_ops
 from sentinel.domain.support import entities as support_entities
 from sentinel.domain.support import operations as support_ops
+from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.graphs import common, sre_investigation, support_review
 from sentinel.settings import get_settings
 from sentinel.utils import logs
@@ -117,7 +118,7 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     """Execute the SRE investigation pipeline for a job payload."""
     alert = sre_entities.Alert.model_validate(payload)
 
-    cfg = get_config()
+    cfg = config_mod.get_config()
     holmes = cfg.build_holmes_adapter()
     pd_client = cfg.pagerduty_client if get_settings().pagerduty_api_key else None
 
@@ -143,6 +144,7 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
 
     result = await sre_investigation.investigate_alert(
         alert=alert,
+        agent_for=cfg.agent_for,
         holmes=holmes,
         pagerduty_client=pd_client,
         persist_fn=_persist,
@@ -155,7 +157,7 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
 async def _run_support_review(payload: dict[str, object]) -> str:
     """Execute the support review pipeline for a job payload."""
     ticket = support_entities.Ticket.model_validate(payload)
-    cfg = get_config()
+    cfg = config_mod.get_config()
 
     db = _get_optional_db()
     et = pipeline_tracer.ExecutionTracer(db=db)
@@ -176,6 +178,7 @@ async def _run_support_review(payload: dict[str, object]) -> str:
 
     result = await support_review.review_ticket(
         ticket=ticket,
+        agent_for=cfg.agent_for,
         document_searcher=cfg.build_document_searcher(),
         ticket_searcher=cfg.build_ticket_searcher(),
         persist_fn=_persist,
@@ -288,6 +291,8 @@ async def _run_once(*, worker_id: str) -> None:
 
 async def _main() -> None:
     bootstrap.initialise()
+    cfg = config_mod.get_config()
+    cfg.load_agents(agent_module=agent_module)
     args = _parse_args()
 
     worker_id = os.environ.get("HOSTNAME", f"worker-{os.getpid()}")

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest import mock
+
 import pytest
 
 from sentinel.interfaces.graphs import support_review
@@ -12,13 +14,17 @@ from tests.functional.conftest import (
 )
 
 
-@pytest.mark.usefixtures("patch_ticket_reviewer", "patch_response_drafter")
 class TestSupportReviewPipeline:
+    @pytest.fixture(autouse=True)
+    def _setup(self, fake_support_config: mock.MagicMock) -> None:
+        self._config = fake_support_config
+
     async def test_full_pipeline_returns_populated_reply(self, sample_ticket):
         # Given a support ticket with documentation and past tickets available
         # When running the full support review pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
+            agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
         )
@@ -37,6 +43,7 @@ class TestSupportReviewPipeline:
         # When running the review pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
+            agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
         )
@@ -51,6 +58,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
+            agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
         )
@@ -63,6 +71,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
+            agent_for=self._config.agent_for,
             document_searcher=None,
             ticket_searcher=None,
         )
@@ -77,6 +86,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
+            agent_for=self._config.agent_for,
             document_searcher=EmptyDocumentSearcher(),
             ticket_searcher=EmptyPastTicketSearcher(),
         )
@@ -90,6 +100,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
+            agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=None,
         )
@@ -113,6 +124,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=billing_ticket,
+            agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
         )

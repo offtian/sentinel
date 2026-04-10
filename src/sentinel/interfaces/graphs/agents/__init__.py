@@ -4,9 +4,9 @@ PydanticAI agent definitions for Sentinel pipelines.
 Each sub-module owns one agent: its Dependencies dataclass, output model,
 base Jinja system prompt, module-level helper functions (instructions,
 dynamic system-prompt injection), and a ``build_agent(*, model, skills)``
-factory. ``sentinel.config.Configuration.load_agents`` calls every factory
-at startup and the resulting instances are retrieved via
-``Configuration.agent_for(name)``.
+factory. ``sentinel.config.BaseConfiguration.load_agents`` calls every
+factory at startup and the resulting instances are retrieved via
+``BaseConfiguration.agent_for(name)``.
 
 Sub-modules are re-exported here so callers can do::
 

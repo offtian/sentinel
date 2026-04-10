@@ -5,8 +5,8 @@ import dataclasses
 from pydantic import BaseModel
 from pydantic_ai import Agent
 
+from sentinel.domain import prompts
 from sentinel.interfaces.graphs.agents import utils
-from sentinel.plugins import prompts
 
 
 class TicketClassification(BaseModel):
@@ -42,7 +42,3 @@ def build_agent(
         system_prompt=system_prompt,
         instrument=True,
     )
-
-
-SYSTEM_PROMPT = BASE_SYSTEM_PROMPT
-agent = build_agent()

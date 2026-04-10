@@ -6,6 +6,7 @@ import pytest
 
 from sentinel.interfaces.graphs import sre_investigation
 from tests import factories
+from tests.functional.conftest import _build_fake_config
 
 
 class TestComparisonModeInPipeline:
@@ -19,8 +20,7 @@ class TestComparisonModeInPipeline:
         state.comparison_result = None
         deps = sre_investigation.Dependencies(
             status_update_client=mock.AsyncMock(),
-            classifier_model="test",
-            analyser_model="test",
+            agent_for=_build_fake_config({}).agent_for,
             holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
             challenger_adapter=challenger,
@@ -46,8 +46,7 @@ class TestComparisonModeInPipeline:
         state.comparison_result = None
         deps = sre_investigation.Dependencies(
             status_update_client=mock.AsyncMock(),
-            classifier_model="test",
-            analyser_model="test",
+            agent_for=_build_fake_config({}).agent_for,
             holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
         )
@@ -74,8 +73,7 @@ class TestComparisonModeInPipeline:
         state.comparison_result = None
         deps = sre_investigation.Dependencies(
             status_update_client=mock.AsyncMock(),
-            classifier_model="test",
-            analyser_model="test",
+            agent_for=_build_fake_config({}).agent_for,
             holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
             challenger_adapter=failing_challenger,

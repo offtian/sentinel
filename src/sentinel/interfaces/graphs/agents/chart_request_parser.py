@@ -11,9 +11,9 @@ import dataclasses
 
 from pydantic_ai import Agent, RunContext
 
+from sentinel.domain import prompts
 from sentinel.domain.charts import entities
 from sentinel.interfaces.graphs.agents import utils
-from sentinel.plugins import prompts
 
 
 @dataclasses.dataclass
@@ -53,7 +53,3 @@ def build_agent(
     )
     agent_instance.instructions(_build_context)
     return agent_instance
-
-
-SYSTEM_PROMPT = BASE_SYSTEM_PROMPT
-agent = build_agent()

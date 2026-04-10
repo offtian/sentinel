@@ -7,17 +7,23 @@ from sentinel.interfaces.graphs.agents import chart_request_parser
 
 
 class TestChartRequestParserAgent:
-    def test_agent_exists_and_is_typed_correctly(self):
-        # Given the agent module
+    def test_build_agent_returns_typed_agent(self):
+        # Given the agent factory
+
+        # When building an agent
+        agent = chart_request_parser.build_agent()
 
         # Then the agent is a PydanticAI Agent
-        assert isinstance(chart_request_parser.agent, Agent)
+        assert isinstance(agent, Agent)
 
     def test_output_type_is_chart_spec(self):
-        # Given the agent
+        # Given an agent built from the factory
+
+        # When checking its output type
+        agent = chart_request_parser.build_agent()
 
         # Then its output type is ChartSpec
-        assert chart_request_parser.agent._output_type is entities.ChartSpec
+        assert agent._output_type is entities.ChartSpec
 
     def test_dependencies_dataclass_has_required_fields(self):
         # Given the Dependencies dataclass
@@ -32,9 +38,9 @@ class TestChartRequestParserAgent:
         assert deps.requester == "alice"
         assert deps.team == "platform"
 
-    def test_system_prompt_is_loaded(self):
-        # Given the system prompt
+    def test_base_system_prompt_is_loaded(self):
+        # Given the base system prompt constant
 
         # Then it is a non-empty string
-        assert isinstance(chart_request_parser.SYSTEM_PROMPT, str)
-        assert len(chart_request_parser.SYSTEM_PROMPT) > 50
+        assert isinstance(chart_request_parser.BASE_SYSTEM_PROMPT, str)
+        assert len(chart_request_parser.BASE_SYSTEM_PROMPT) > 50

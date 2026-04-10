@@ -2,13 +2,19 @@ from sentinel.interfaces.graphs.agents import intent_router
 
 
 class TestIntentRouterAgent:
-    def test_agent_has_system_prompt(self):
-        assert intent_router.SYSTEM_PROMPT
-        assert "SRE Investigation" in intent_router.SYSTEM_PROMPT
-        assert "Support Review" in intent_router.SYSTEM_PROMPT
+    def test_base_system_prompt_loaded(self):
+        # Given the base system prompt constant
+        # Then it contains expected content
+        assert intent_router.BASE_SYSTEM_PROMPT
+        assert "SRE Investigation" in intent_router.BASE_SYSTEM_PROMPT
+        assert "Support Review" in intent_router.BASE_SYSTEM_PROMPT
 
-    def test_agent_output_type_is_intent_classification(self):
-        assert intent_router.agent.output_type is intent_router.IntentClassification
+    def test_build_agent_output_type_is_intent_classification(self):
+        # Given an agent built from the factory
+        agent = intent_router.build_agent()
+
+        # Then its output type is IntentClassification
+        assert agent.output_type is intent_router.IntentClassification
 
     def test_intent_enum_values(self):
         assert intent_router.Intent.SRE.value == "sre"

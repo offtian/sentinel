@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from collections.abc import Awaitable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
+from typing import Any
 
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
@@ -15,8 +16,7 @@ from sentinel.domain.sre import holmes_adapter, investigation
 from sentinel.domain.vendor_adapters.pagerduty import PagerDutyClient
 from sentinel.interfaces.graphs import common
 from sentinel.interfaces.graphs._node_helpers import instrumented_node_run
-from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser, utils
-from sentinel.settings import get_settings
+from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser
 from sentinel.utils import logs, metrics
 from sentinel.vendors import slack
 
@@ -24,8 +24,7 @@ from sentinel.vendors import slack
 @dataclasses.dataclass
 class Dependencies:
     status_update_client: common.StatusUpdateClient
-    classifier_model: str
-    analyser_model: str
+    agent_for: Callable[[str], Any]
     holmes: holmes_adapter.BaseHolmesAdapter
     pagerduty_client: PagerDutyClient | None = None
     post_to_slack: bool = True
@@ -60,9 +59,9 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
             await ctx.deps.status_update_client.update_status("Classifying alert...")
 
             try:
-                result = await alert_classifier.agent.run(
+                classifier_agent = ctx.deps.agent_for("alert_classifier")
+                result = await classifier_agent.run(
                     user_prompt=f"Alert: {ctx.state.alert.title}\n\n{ctx.state.alert.description}",
-                    model=utils.get_model_with_gateway(ctx.deps.classifier_model),
                     deps=alert_classifier.Dependencies(
                         alert_title=ctx.state.alert.title,
                         alert_description=ctx.state.alert.description,
@@ -216,9 +215,9 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
             await ctx.deps.status_update_client.update_status("Analysing root cause...")
 
             try:
-                result = await root_cause_analyser.agent.run(
+                analyser_agent = ctx.deps.agent_for("root_cause_analyser")
+                result = await analyser_agent.run(
                     user_prompt=f"Analyse this alert: {ctx.state.alert.title}",
-                    model=utils.get_model_with_gateway(ctx.deps.analyser_model),
                     deps=root_cause_analyser.Dependencies(
                         alert_title=ctx.state.alert.title,
                         alert_description=ctx.state.alert.description,
@@ -508,10 +507,9 @@ class PublishFindings(BaseNode[State, Dependencies, common.InvestigationReply]):
 async def investigate_alert(
     alert: sre_entities.Alert,
     *,
+    agent_for: Callable[[str], Any],
     holmes: holmes_adapter.BaseHolmesAdapter,
     status_update_client: common.StatusUpdateClient | None = None,
-    classifier_model: str = "",
-    analyser_model: str = "",
     pagerduty_client: PagerDutyClient | None = None,
     post_to_slack: bool = True,
     persist_fn: common.PersistInvestigationFn | None = None,
@@ -529,8 +527,7 @@ async def investigate_alert(
     state = State(alert=alert)
     dependencies = Dependencies(
         status_update_client=status_update_client or common.NoOpStatusUpdateClient(),
-        classifier_model=classifier_model or get_settings().alert_classifier_llm,
-        analyser_model=analyser_model or get_settings().root_cause_llm,
+        agent_for=agent_for,
         holmes=holmes,
         pagerduty_client=pagerduty_client,
         post_to_slack=post_to_slack,

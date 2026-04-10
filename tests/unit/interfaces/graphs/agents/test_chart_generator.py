@@ -27,17 +27,23 @@ class TestChartGeneratorOutput:
 
 
 class TestChartGeneratorAgent:
-    def test_agent_exists_and_is_typed_correctly(self):
-        # Given the agent module
+    def test_build_agent_returns_typed_agent(self):
+        # Given the agent factory
+
+        # When building an agent
+        agent = chart_generator.build_agent()
 
         # Then the agent is a PydanticAI Agent
-        assert isinstance(chart_generator.agent, Agent)
+        assert isinstance(agent, Agent)
 
     def test_output_type_is_chart_generator_output(self):
-        # Given the agent
+        # Given an agent built from the factory
+
+        # When checking its output type
+        agent = chart_generator.build_agent()
 
         # Then its output type is ChartGeneratorOutput
-        assert chart_generator.agent._output_type is chart_generator.ChartGeneratorOutput
+        assert agent._output_type is chart_generator.ChartGeneratorOutput
 
     def test_dependencies_dataclass_has_required_fields(self):
         # Given the Dependencies dataclass
@@ -51,9 +57,9 @@ class TestChartGeneratorAgent:
         # Then fields are set
         assert deps.service_name == "api-gateway"
 
-    def test_system_prompt_is_loaded(self):
-        # Given the system prompt
+    def test_base_system_prompt_is_loaded(self):
+        # Given the base system prompt constant
 
         # Then it is a non-empty string
-        assert isinstance(chart_generator.SYSTEM_PROMPT, str)
-        assert len(chart_generator.SYSTEM_PROMPT) > 50
+        assert isinstance(chart_generator.BASE_SYSTEM_PROMPT, str)
+        assert len(chart_generator.BASE_SYSTEM_PROMPT) > 50

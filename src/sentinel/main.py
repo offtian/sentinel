@@ -6,6 +6,8 @@ import uvicorn
 from slack_bolt.adapter.socket_mode.aiohttp import AsyncSocketModeHandler
 
 from sentinel import bootstrap
+from sentinel import config as config_mod
+from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.slack import (
     event_handlers as _event_handlers,  # noqa: F401 — registers @app decorators
 )
@@ -33,6 +35,8 @@ async def _main() -> None:
     # Initialise early so Slack handler has logging before the FastAPI
     # lifespan fires.  Idempotent — the lifespan's second call is a no-op.
     bootstrap.initialise()
+    cfg = config_mod.get_config()
+    cfg.load_agents(agent_module=agent_module)
 
     if get_settings().slack_app_token:
         await asyncio.gather(_run_api(), _run_slack())

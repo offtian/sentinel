@@ -5,8 +5,8 @@ import dataclasses
 from pydantic import BaseModel
 from pydantic_ai import Agent
 
+from sentinel.domain import prompts
 from sentinel.interfaces.graphs.agents import utils
-from sentinel.plugins import prompts
 
 
 class AlertClassification(BaseModel):
@@ -47,11 +47,3 @@ def build_agent(
         system_prompt=system_prompt,
         instrument=True,
     )
-
-
-# Module-level instance kept as a no-skills fallback so legacy imports and
-# unit tests that patch ``alert_classifier.agent`` keep working. The real
-# production agent is built by ``Configuration.load_agents()`` with the
-# configured skill list and model.
-SYSTEM_PROMPT = BASE_SYSTEM_PROMPT
-agent = build_agent()

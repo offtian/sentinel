@@ -6,7 +6,7 @@ Each ``.j2`` template has two blocks: ``system`` (the system prompt) and
 
 Usage::
 
-    from sentinel.plugins.prompts import load_system_prompt, render_user_prompt
+    from sentinel.domain.prompts import load_system_prompt, render_user_prompt
 
     SYSTEM_PROMPT = load_system_prompt("alert_classifier")
     user_msg = render_user_prompt("alert_classifier", alert_title="...", ...)

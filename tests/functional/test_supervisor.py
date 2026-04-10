@@ -8,6 +8,14 @@ from sentinel.application.supervisor import orchestrator
 from sentinel.domain.supervisor import entities as supervisor_entities
 from sentinel.interfaces.graphs import sre_investigation, support_review
 from tests import factories
+from tests.functional.conftest import (
+    StubDocumentSearcher,
+    StubPastTicketSearcher,
+    _build_fake_config,
+    _fake_alert_classifier_run,
+    _fake_ticket_reviewer_run,
+    _make_fake_agent,
+)
 
 
 @pytest.mark.asyncio
@@ -15,14 +23,14 @@ class TestSuperviseSreInvestigation:
     async def test_publishes_when_quality_passes(
         self,
         mock_holmes,
-        patch_alert_classifier,
-        patch_root_cause_analyser,
+        fake_sre_config,
     ) -> None:
         # Given a standard alert with mocked agents that produce good output
         alert = factories.make_alert()
         investigate = partial(
             sre_investigation.investigate_alert,
             alert,
+            agent_for=fake_sre_config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
         )
@@ -44,23 +52,23 @@ class TestSuperviseSreInvestigation:
     async def test_retries_and_escalates_on_persistent_low_quality(
         self,
         mock_holmes,
-        patch_alert_classifier,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # Given agents that produce a degraded reply (no root cause analysis)
-        # We patch root_cause_analyser to raise an exception, which causes the
-        # pipeline to produce a fallback reply with generic text.
-        from sentinel.interfaces.graphs.agents import root_cause_analyser
-
-        async def failing_run(*, user_prompt, model, deps, **kwargs):
+        # Given agents that produce a degraded reply (root cause analysis fails)
+        async def failing_run(*, user_prompt, deps, **kwargs):
             raise RuntimeError("LLM unavailable")
 
-        monkeypatch.setattr(root_cause_analyser.agent, "run", failing_run)
+        config = _build_fake_config(
+            {
+                "alert_classifier": _make_fake_agent(_fake_alert_classifier_run),
+                "root_cause_analyser": _make_fake_agent(failing_run),
+            }
+        )
 
         alert = factories.make_alert()
         investigate = partial(
             sre_investigation.investigate_alert,
             alert,
+            agent_for=config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
         )
@@ -83,21 +91,23 @@ class TestSuperviseSreInvestigation:
     async def test_zero_retries_decides_immediately(
         self,
         mock_holmes,
-        patch_alert_classifier,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         # Given agents that produce degraded output
-        from sentinel.interfaces.graphs.agents import root_cause_analyser
-
-        async def failing_run(*, user_prompt, model, deps, **kwargs):
+        async def failing_run(*, user_prompt, deps, **kwargs):
             raise RuntimeError("LLM unavailable")
 
-        monkeypatch.setattr(root_cause_analyser.agent, "run", failing_run)
+        config = _build_fake_config(
+            {
+                "alert_classifier": _make_fake_agent(_fake_alert_classifier_run),
+                "root_cause_analyser": _make_fake_agent(failing_run),
+            }
+        )
 
         alert = factories.make_alert()
         investigate = partial(
             sre_investigation.investigate_alert,
             alert,
+            agent_for=config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
         )
@@ -118,16 +128,14 @@ class TestSuperviseSreInvestigation:
 class TestSuperviseSupportReview:
     async def test_publishes_when_quality_passes(
         self,
-        patch_ticket_reviewer,
-        patch_response_drafter,
+        fake_support_config,
     ) -> None:
         # Given a standard ticket with mocked agents that produce good output
-        from tests.functional.conftest import StubDocumentSearcher, StubPastTicketSearcher
-
         ticket = factories.make_ticket()
         review = partial(
             support_review.review_ticket,
             ticket,
+            agent_for=fake_support_config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
         )
@@ -147,23 +155,23 @@ class TestSuperviseSupportReview:
 
     async def test_retries_and_escalates_on_persistent_low_quality(
         self,
-        patch_ticket_reviewer,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         # Given agents that produce degraded output (drafter fails)
-        from sentinel.interfaces.graphs.agents import response_drafter
-
-        async def failing_run(*, user_prompt, model, deps, **kwargs):
+        async def failing_run(*, user_prompt, deps, **kwargs):
             raise RuntimeError("LLM unavailable")
 
-        monkeypatch.setattr(response_drafter.agent, "run", failing_run)
-
-        from tests.functional.conftest import StubDocumentSearcher, StubPastTicketSearcher
+        config = _build_fake_config(
+            {
+                "ticket_reviewer": _make_fake_agent(_fake_ticket_reviewer_run),
+                "response_drafter": _make_fake_agent(failing_run),
+            }
+        )
 
         ticket = factories.make_ticket()
         review = partial(
             support_review.review_ticket,
             ticket,
+            agent_for=config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
         )
@@ -184,8 +192,7 @@ class TestSuperviseSupportReview:
 
     async def test_no_documentation_yields_rejection(
         self,
-        patch_ticket_reviewer,
-        patch_response_drafter,
+        fake_support_config,
     ) -> None:
         # Given a ticket with no documentation available (empty searchers)
         from tests.functional.conftest import EmptyDocumentSearcher, EmptyPastTicketSearcher
@@ -194,6 +201,7 @@ class TestSuperviseSupportReview:
         review = partial(
             support_review.review_ticket,
             ticket,
+            agent_for=fake_support_config.agent_for,
             document_searcher=EmptyDocumentSearcher(),
             ticket_searcher=EmptyPastTicketSearcher(),
         )

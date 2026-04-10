@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from unittest import mock
 
-from sentinel import config, settings
+from sentinel import settings
+from sentinel.plugins import config as plugin_config_mod
 
 
 class TestBuildK8sInvestigationAdapterMcpWiring:
@@ -14,11 +15,11 @@ class TestBuildK8sInvestigationAdapterMcpWiring:
         test_settings.mcp_servers = '[{"name": "kubectl", "url": "http://localhost:9090"}]'
         test_settings.k8s_mcp_server_url = ""
 
-        cfg = config.Configuration(settings=test_settings)
+        cfg = plugin_config_mod.CommonConfiguration(settings=test_settings)
+        stub_runner = mock.AsyncMock()
 
         # When building the K8s adapter
-        with mock.patch("sentinel.interfaces.graphs.agents.k8s_runner.run_k8s_agent"):
-            adapter = cfg.build_k8s_investigation_adapter()
+        adapter = cfg.build_k8s_investigation_adapter(agent_runner=stub_runner)
 
         # Then MCP toolsets are injected
         assert adapter is not None
@@ -32,11 +33,11 @@ class TestBuildK8sInvestigationAdapterMcpWiring:
         test_settings.mcp_servers = '[{"name": "kubectl", "url": "http://localhost:9090"}]'
         test_settings.k8s_mcp_server_url = "http://localhost:9091"
 
-        cfg = config.Configuration(settings=test_settings)
+        cfg = plugin_config_mod.CommonConfiguration(settings=test_settings)
+        stub_runner = mock.AsyncMock()
 
         # When building the K8s adapter
-        with mock.patch("sentinel.interfaces.graphs.agents.k8s_runner.run_k8s_agent"):
-            adapter = cfg.build_k8s_investigation_adapter()
+        adapter = cfg.build_k8s_investigation_adapter(agent_runner=stub_runner)
 
         # Then both MCP toolsets are injected
         assert adapter is not None
@@ -50,11 +51,11 @@ class TestBuildK8sInvestigationAdapterMcpWiring:
         test_settings.mcp_servers = ""
         test_settings.k8s_mcp_server_url = ""
 
-        cfg = config.Configuration(settings=test_settings)
+        cfg = plugin_config_mod.CommonConfiguration(settings=test_settings)
+        stub_runner = mock.AsyncMock()
 
         # When building the K8s adapter
-        with mock.patch("sentinel.interfaces.graphs.agents.k8s_runner.run_k8s_agent"):
-            adapter = cfg.build_k8s_investigation_adapter()
+        adapter = cfg.build_k8s_investigation_adapter(agent_runner=stub_runner)
 
         # Then no MCP toolsets are injected
         assert adapter is not None

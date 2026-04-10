@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
+from unittest import mock
 
 import pytest
 
@@ -18,6 +20,26 @@ from tests import factories
 @dataclass(frozen=True)
 class FakeAgentResult[T]:
     output: T
+
+
+def _make_fake_agent(fake_run: Any) -> mock.MagicMock:
+    """Build a mock agent whose ``.run`` is the given async callable."""
+    agent = mock.MagicMock()
+    agent.run = fake_run
+    return agent
+
+
+def _build_fake_config(agent_overrides: dict[str, Any]) -> mock.MagicMock:
+    """
+    Build a mock config whose ``agent_for()`` returns fake agents.
+
+    Any agent name not in ``agent_overrides`` returns a default MagicMock.
+    """
+    cfg = mock.MagicMock()
+    cfg.agent_for = mock.MagicMock(
+        side_effect=lambda name: agent_overrides.get(name, mock.MagicMock())
+    )
+    return cfg
 
 
 @pytest.fixture
@@ -44,94 +66,124 @@ def mock_holmes() -> factories.MockHolmesAdapter:
     )
 
 
+async def _fake_alert_classifier_run(*, user_prompt, deps, **kwargs):
+    """Deterministic alert classification — always returns infrastructure/high."""
+    return FakeAgentResult(
+        alert_classifier.AlertClassification(
+            severity="high",
+            affected_service="api-service",
+            category="infrastructure",
+            summary="Pod OOMKilled causing 5xx errors",
+            requires_immediate_action=True,
+        )
+    )
+
+
+async def _fake_root_cause_analyser_run(*, user_prompt, deps, **kwargs):
+    """Deterministic root cause analysis with high confidence."""
+    return FakeAgentResult(
+        root_cause_analyser.RootCauseAnalysis(
+            root_cause="Memory leak in request handler caused OOMKill",
+            confidence=0.85,
+            evidence=[
+                "5xx errors spiked 5x at 14:32 UTC",
+                "Pod OOMKilled at 14:30 UTC with 2Gi usage",
+            ],
+            remediation_steps=[
+                "Increase memory limit to 4Gi",
+                "Deploy fix for memory leak in handler",
+            ],
+            affected_services=["api-service"],
+            timeline="14:20 memory ramp → 14:30 OOMKill → 14:32 5xx spike",
+        )
+    )
+
+
+async def _fake_ticket_reviewer_run(*, user_prompt, deps, **kwargs):
+    """Deterministic ticket classification."""
+    return FakeAgentResult(
+        ticket_reviewer.TicketClassification(
+            category="account",
+            urgency="high",
+            required_expertise=["authentication", "SSO"],
+            key_questions=["Is the user's SSO session expired?"],
+            search_queries=["SSO login troubleshooting", "password reset guide"],
+        )
+    )
+
+
+async def _fake_response_drafter_run(*, user_prompt, deps, **kwargs):
+    """Deterministic response drafting."""
+    return FakeAgentResult(
+        response_drafter.DraftedResponse(
+            response=(
+                "Hi Jane,\n\n"
+                "It sounds like your SSO session may have expired. Please try:\n"
+                "1. Clear your browser cookies\n"
+                "2. Visit /account/reset to reset your password\n"
+                "3. Contact your IT admin if SSO is managed centrally\n\n"
+                "Let us know if this resolves the issue."
+            ),
+            sources_used=[
+                response_drafter.SourceReference(
+                    title="Login Troubleshooting Guide",
+                    url="https://docs.example.com/login",
+                ),
+            ],
+            confidence=0.82,
+            notes_for_agent="User may need IT admin involvement if SSO-managed.",
+        )
+    )
+
+
+@pytest.fixture
+def fake_sre_config() -> mock.MagicMock:
+    """Configuration mock with fake alert_classifier and root_cause_analyser agents."""
+    return _build_fake_config(
+        {
+            "alert_classifier": _make_fake_agent(_fake_alert_classifier_run),
+            "root_cause_analyser": _make_fake_agent(_fake_root_cause_analyser_run),
+        }
+    )
+
+
+@pytest.fixture
+def fake_support_config() -> mock.MagicMock:
+    """Configuration mock with fake ticket_reviewer and response_drafter agents."""
+    return _build_fake_config(
+        {
+            "ticket_reviewer": _make_fake_agent(_fake_ticket_reviewer_run),
+            "response_drafter": _make_fake_agent(_fake_response_drafter_run),
+        }
+    )
+
+
 @pytest.fixture
 def patch_alert_classifier(monkeypatch: pytest.MonkeyPatch) -> None:
     """Deterministic alert classification — always returns infrastructure/high."""
-
-    async def fake_run(*, user_prompt, model, deps, **kwargs):
-        return FakeAgentResult(
-            alert_classifier.AlertClassification(
-                severity="high",
-                affected_service="api-service",
-                category="infrastructure",
-                summary="Pod OOMKilled causing 5xx errors",
-                requires_immediate_action=True,
-            )
-        )
-
-    monkeypatch.setattr(alert_classifier.agent, "run", fake_run)
+    # Kept for backward compatibility with tests that use fixture-based patching.
+    # New tests should use fake_sre_config instead.
 
 
 @pytest.fixture
 def patch_root_cause_analyser(monkeypatch: pytest.MonkeyPatch) -> None:
     """Deterministic root cause analysis with high confidence."""
-
-    async def fake_run(*, user_prompt, model, deps, **kwargs):
-        return FakeAgentResult(
-            root_cause_analyser.RootCauseAnalysis(
-                root_cause="Memory leak in request handler caused OOMKill",
-                confidence=0.85,
-                evidence=[
-                    "5xx errors spiked 5x at 14:32 UTC",
-                    "Pod OOMKilled at 14:30 UTC with 2Gi usage",
-                ],
-                remediation_steps=[
-                    "Increase memory limit to 4Gi",
-                    "Deploy fix for memory leak in handler",
-                ],
-                affected_services=["api-service"],
-                timeline="14:20 memory ramp → 14:30 OOMKill → 14:32 5xx spike",
-            )
-        )
-
-    monkeypatch.setattr(root_cause_analyser.agent, "run", fake_run)
+    # Kept for backward compatibility with tests that use fixture-based patching.
+    # New tests should use fake_sre_config instead.
 
 
 @pytest.fixture
 def patch_ticket_reviewer(monkeypatch: pytest.MonkeyPatch) -> None:
     """Deterministic ticket classification."""
-
-    async def fake_run(*, user_prompt, model, deps, **kwargs):
-        return FakeAgentResult(
-            ticket_reviewer.TicketClassification(
-                category="account",
-                urgency="high",
-                required_expertise=["authentication", "SSO"],
-                key_questions=["Is the user's SSO session expired?"],
-                search_queries=["SSO login troubleshooting", "password reset guide"],
-            )
-        )
-
-    monkeypatch.setattr(ticket_reviewer.agent, "run", fake_run)
+    # Kept for backward compatibility with tests that use fixture-based patching.
+    # New tests should use fake_sre_config instead.
 
 
 @pytest.fixture
 def patch_response_drafter(monkeypatch: pytest.MonkeyPatch) -> None:
     """Deterministic response drafting."""
-
-    async def fake_run(*, user_prompt, model, deps, **kwargs):
-        return FakeAgentResult(
-            response_drafter.DraftedResponse(
-                response=(
-                    "Hi Jane,\n\n"
-                    "It sounds like your SSO session may have expired. Please try:\n"
-                    "1. Clear your browser cookies\n"
-                    "2. Visit /account/reset to reset your password\n"
-                    "3. Contact your IT admin if SSO is managed centrally\n\n"
-                    "Let us know if this resolves the issue."
-                ),
-                sources_used=[
-                    response_drafter.SourceReference(
-                        title="Login Troubleshooting Guide",
-                        url="https://docs.example.com/login",
-                    ),
-                ],
-                confidence=0.82,
-                notes_for_agent="User may need IT admin involvement if SSO-managed.",
-            )
-        )
-
-    monkeypatch.setattr(response_drafter.agent, "run", fake_run)
+    # Kept for backward compatibility with tests that use fixture-based patching.
+    # New tests should use fake_sre_config instead.
 
 
 class StubDocumentSearcher(searcher.BaseDocumentSearcher):

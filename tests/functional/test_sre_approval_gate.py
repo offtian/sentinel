@@ -7,11 +7,10 @@ from tests import factories
 from tests.factories import make_alert
 
 
-@pytest.mark.usefixtures("patch_alert_classifier", "patch_root_cause_analyser")
+@pytest.mark.asyncio
 class TestApprovalGate:
-    @pytest.mark.asyncio
     async def test_low_confidence_triggers_approval_request(
-        self, mock_holmes: factories.MockHolmesAdapter
+        self, mock_holmes: factories.MockHolmesAdapter, fake_sre_config
     ) -> None:
         # Given a configured approval threshold of 0.8
         approval_calls: list[tuple[object, ...]] = []
@@ -25,9 +24,8 @@ class TestApprovalGate:
         # When the pipeline runs (default RCA confidence is 0.85 -> total ~0.705 which is < 0.8)
         result = await sre_investigation.investigate_alert(
             alert=alert,
+            agent_for=fake_sre_config.agent_for,
             holmes=mock_holmes,
-            classifier_model="test",
-            analyser_model="test",
             post_to_slack=False,
             require_approval_below=0.8,
             request_approval_fn=track_approval,
@@ -41,9 +39,8 @@ class TestApprovalGate:
         assert result.root_cause is not None
         assert result.confidence is not None
 
-    @pytest.mark.asyncio
     async def test_high_confidence_skips_approval(
-        self, mock_holmes: factories.MockHolmesAdapter
+        self, mock_holmes: factories.MockHolmesAdapter, fake_sre_config
     ) -> None:
         # Given a low approval threshold of 0.3
         approval_calls: list[tuple[object, ...]] = []
@@ -57,9 +54,8 @@ class TestApprovalGate:
         # When the pipeline runs (confidence ~0.705 which is > 0.3)
         result = await sre_investigation.investigate_alert(
             alert=alert,
+            agent_for=fake_sre_config.agent_for,
             holmes=mock_holmes,
-            classifier_model="test",
-            analyser_model="test",
             post_to_slack=False,
             require_approval_below=0.3,
             request_approval_fn=track_approval,
@@ -70,9 +66,8 @@ class TestApprovalGate:
         # And the reply has no approval status (published directly)
         assert result.approval_status is None
 
-    @pytest.mark.asyncio
     async def test_no_approval_fn_skips_gate(
-        self, mock_holmes: factories.MockHolmesAdapter
+        self, mock_holmes: factories.MockHolmesAdapter, fake_sre_config
     ) -> None:
         # Given a threshold but no approval function
         alert = make_alert()
@@ -80,9 +75,8 @@ class TestApprovalGate:
         # When the pipeline runs
         result = await sre_investigation.investigate_alert(
             alert=alert,
+            agent_for=fake_sre_config.agent_for,
             holmes=mock_holmes,
-            classifier_model="test",
-            analyser_model="test",
             post_to_slack=False,
             require_approval_below=0.8,
             request_approval_fn=None,
@@ -92,9 +86,8 @@ class TestApprovalGate:
         assert result.approval_status is None
         assert result.root_cause is not None
 
-    @pytest.mark.asyncio
     async def test_zero_threshold_disables_approval(
-        self, mock_holmes: factories.MockHolmesAdapter
+        self, mock_holmes: factories.MockHolmesAdapter, fake_sre_config
     ) -> None:
         # Given threshold of 0.0 (disabled) with an approval function
         approval_calls: list[tuple[object, ...]] = []
@@ -108,9 +101,8 @@ class TestApprovalGate:
         # When the pipeline runs
         result = await sre_investigation.investigate_alert(
             alert=alert,
+            agent_for=fake_sre_config.agent_for,
             holmes=mock_holmes,
-            classifier_model="test",
-            analyser_model="test",
             post_to_slack=False,
             require_approval_below=0.0,
             request_approval_fn=track_approval,

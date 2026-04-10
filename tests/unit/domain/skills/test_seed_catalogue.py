@@ -8,7 +8,7 @@ to catch accidental deletions or schema drift.
 
 from __future__ import annotations
 
-from sentinel.plugins import skills as skills_mod
+from sentinel.domain import skills as skills_mod
 
 
 EXPECTED_SEED_SKILLS = frozenset(

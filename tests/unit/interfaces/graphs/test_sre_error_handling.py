@@ -8,28 +8,33 @@ from sentinel.interfaces.graphs import common, sre_investigation
 from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser
 from tests import factories
 from tests.factories import make_alert
-from tests.functional.conftest import FakeAgentResult
+from tests.functional.conftest import (
+    FakeAgentResult,
+    _build_fake_config,
+    _make_fake_agent,
+)
 
 
 class TestClassifyAlertErrorHandling:
     @pytest.mark.asyncio
-    async def test_returns_failed_reply_when_agent_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_returns_failed_reply_when_agent_raises(self) -> None:
         # Given a ClassifyAlert node where the agent raises a timeout error
-        async def failing_run(*, user_prompt, model, deps, **kwargs):
+        async def failing_run(*, user_prompt, deps, **kwargs):
             raise TimeoutError("LLM request timed out")
 
-        monkeypatch.setattr(alert_classifier.agent, "run", failing_run)
+        config = _build_fake_config(
+            {
+                "alert_classifier": _make_fake_agent(failing_run),
+            }
+        )
 
         alert = make_alert()
 
         # When the full pipeline is run
         result = await sre_investigation.investigate_alert(
             alert=alert,
+            agent_for=config.agent_for,
             holmes=factories.MockHolmesAdapter(),
-            classifier_model="test-model",
-            analyser_model="test-model",
             post_to_slack=False,
         )
 
@@ -41,9 +46,7 @@ class TestClassifyAlertErrorHandling:
 
 class TestInvestigateWithHolmesErrorHandling:
     @pytest.mark.asyncio
-    async def test_continues_pipeline_when_holmes_fails(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_continues_pipeline_when_holmes_fails(self) -> None:
         # Given Holmes adapter that raises an error
         class FailingHolmes(holmes_adapter.BaseHolmesAdapter):
             @property
@@ -56,7 +59,7 @@ class TestInvestigateWithHolmesErrorHandling:
                 raise ConnectionError("Datadog API unreachable")
 
         # And working classifier and analyser agents
-        async def fake_classify(*, user_prompt, model, deps):
+        async def fake_classify(*, user_prompt, deps, **kwargs):
             return FakeAgentResult(
                 alert_classifier.AlertClassification(
                     severity="high",
@@ -67,7 +70,7 @@ class TestInvestigateWithHolmesErrorHandling:
                 )
             )
 
-        async def fake_analyse(*, user_prompt, model, deps):
+        async def fake_analyse(*, user_prompt, deps, **kwargs):
             return FakeAgentResult(
                 root_cause_analyser.RootCauseAnalysis(
                     root_cause="Possible issue based on alert context",
@@ -79,17 +82,20 @@ class TestInvestigateWithHolmesErrorHandling:
                 )
             )
 
-        monkeypatch.setattr(alert_classifier.agent, "run", fake_classify)
-        monkeypatch.setattr(root_cause_analyser.agent, "run", fake_analyse)
+        config = _build_fake_config(
+            {
+                "alert_classifier": _make_fake_agent(fake_classify),
+                "root_cause_analyser": _make_fake_agent(fake_analyse),
+            }
+        )
 
         alert = make_alert()
 
         # When the pipeline runs with a failing Holmes adapter
         result = await sre_investigation.investigate_alert(
             alert=alert,
+            agent_for=config.agent_for,
             holmes=FailingHolmes(),
-            classifier_model="test-model",
-            analyser_model="test-model",
             post_to_slack=False,
         )
 
@@ -100,11 +106,9 @@ class TestInvestigateWithHolmesErrorHandling:
 
 class TestAnalyseRootCauseErrorHandling:
     @pytest.mark.asyncio
-    async def test_continues_with_fallback_when_analyser_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_continues_with_fallback_when_analyser_raises(self) -> None:
         # Given a working classifier but a failing analyser
-        async def fake_classify(*, user_prompt, model, deps):
+        async def fake_classify(*, user_prompt, deps, **kwargs):
             return FakeAgentResult(
                 alert_classifier.AlertClassification(
                     severity="high",
@@ -115,20 +119,23 @@ class TestAnalyseRootCauseErrorHandling:
                 )
             )
 
-        async def failing_analyse(*, user_prompt, model, deps):
+        async def failing_analyse(*, user_prompt, deps, **kwargs):
             raise RuntimeError("LLM returned malformed response")
 
-        monkeypatch.setattr(alert_classifier.agent, "run", fake_classify)
-        monkeypatch.setattr(root_cause_analyser.agent, "run", failing_analyse)
+        config = _build_fake_config(
+            {
+                "alert_classifier": _make_fake_agent(fake_classify),
+                "root_cause_analyser": _make_fake_agent(failing_analyse),
+            }
+        )
 
         alert = make_alert()
 
         # When the pipeline runs
         result = await sre_investigation.investigate_alert(
             alert=alert,
+            agent_for=config.agent_for,
             holmes=factories.MockHolmesAdapter(),
-            classifier_model="test-model",
-            analyser_model="test-model",
             post_to_slack=False,
         )
 
@@ -158,7 +165,7 @@ class TestPublishFindingsErrorHandling:
             persisted.append(reply)
 
         # And working agents
-        async def fake_classify(*, user_prompt, model, deps):
+        async def fake_classify(*, user_prompt, deps, **kwargs):
             return FakeAgentResult(
                 alert_classifier.AlertClassification(
                     severity="high",
@@ -169,7 +176,7 @@ class TestPublishFindingsErrorHandling:
                 )
             )
 
-        async def fake_analyse(*, user_prompt, model, deps):
+        async def fake_analyse(*, user_prompt, deps, **kwargs):
             return FakeAgentResult(
                 root_cause_analyser.RootCauseAnalysis(
                     root_cause="Test root cause",
@@ -181,17 +188,20 @@ class TestPublishFindingsErrorHandling:
                 )
             )
 
-        monkeypatch.setattr(alert_classifier.agent, "run", fake_classify)
-        monkeypatch.setattr(root_cause_analyser.agent, "run", fake_analyse)
+        config = _build_fake_config(
+            {
+                "alert_classifier": _make_fake_agent(fake_classify),
+                "root_cause_analyser": _make_fake_agent(fake_analyse),
+            }
+        )
 
         alert = make_alert()
 
         # When the pipeline runs with Slack failing
         result = await sre_investigation.investigate_alert(
             alert=alert,
+            agent_for=config.agent_for,
             holmes=factories.MockHolmesAdapter(),
-            classifier_model="test-model",
-            analyser_model="test-model",
             post_to_slack=True,
             persist_fn=track_persist,
         )

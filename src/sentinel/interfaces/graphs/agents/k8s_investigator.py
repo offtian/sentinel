@@ -13,8 +13,8 @@ import dataclasses
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
+from sentinel.domain import prompts
 from sentinel.interfaces.graphs.agents import utils
-from sentinel.plugins import prompts
 
 
 class K8sInvestigationOutput(BaseModel):
@@ -69,7 +69,3 @@ def build_agent(
     )
     agent_instance.instructions(_build_k8s_context)
     return agent_instance
-
-
-SYSTEM_PROMPT = BASE_SYSTEM_PROMPT
-agent = build_agent()

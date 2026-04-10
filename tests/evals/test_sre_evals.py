@@ -48,7 +48,6 @@ def _build_holmes(case: dict[str, Any]) -> factories.MockHolmesAdapter:
     )
 
 
-@pytest.mark.usefixtures("patch_alert_classifier", "patch_root_cause_analyser")
 class TestSreGoldenCases:
     """Run each golden case through the pipeline and verify quality rubrics."""
 
@@ -60,6 +59,7 @@ class TestSreGoldenCases:
     async def test_golden_case(
         self,
         case: dict[str, Any],
+        fake_sre_config: Any,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         # Given a golden test case with known alert and Holmes data
@@ -75,6 +75,7 @@ class TestSreGoldenCases:
         # When running the investigation pipeline
         reply = await sre_investigation.investigate_alert(
             alert=alert,
+            agent_for=fake_sre_config.agent_for,
             holmes=holmes,
             post_to_slack=False,
         )
