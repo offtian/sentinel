@@ -12,9 +12,9 @@ import dataclasses
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
+from sentinel.domain import prompts
 from sentinel.domain.charts import entities
 from sentinel.interfaces.graphs.agents import utils
-from sentinel.plugins import prompts
 
 
 class ChartGeneratorOutput(BaseModel):

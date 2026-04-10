@@ -208,8 +208,8 @@ containers = ["sentinel"]
 layers = [
     "main",
     "worker",
-    "interfaces",
     "plugins",
+    "interfaces",
     "application",
     "evals",
     "domain",

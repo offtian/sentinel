@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sentinel.plugins.toolsets import kubernetes as k8s_toolsets
+from sentinel.domain.tools import kubernetes_toolset as k8s_toolsets
 
 
 class TestBuildKubernetesToolset:

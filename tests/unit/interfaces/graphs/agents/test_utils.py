@@ -1,7 +1,7 @@
 """
 Unit tests for agent utility functions.
 
-Collaborators (``sentinel.plugins.skills``) are mocked so tests never touch disk.
+Collaborators (``sentinel.domain.skills``) are mocked so tests never touch disk.
 """
 
 from __future__ import annotations
@@ -10,8 +10,8 @@ from unittest import mock
 
 import pytest
 
+from sentinel.domain import skills as skills_mod
 from sentinel.interfaces.graphs.agents import utils as agents_utils
-from sentinel.plugins import skills as skills_mod
 
 
 def _fake_handle(

@@ -14,7 +14,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _PACKAGE_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = _PACKAGE_ROOT.parent.parent  # src/sentinel -> src -> repo root
 PLUGINS_DIR = _PACKAGE_ROOT / "plugins"
-PROMPTS_DIR = PLUGINS_DIR / "prompts"
+DOMAIN_DIR = _PACKAGE_ROOT / "domain"
+PROMPTS_DIR = DOMAIN_DIR / "prompts"
 
 
 class SRESettings(BaseSettings):

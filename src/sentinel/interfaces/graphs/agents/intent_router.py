@@ -6,8 +6,8 @@ import enum
 from pydantic import BaseModel
 from pydantic_ai import Agent
 
+from sentinel.domain import prompts
 from sentinel.interfaces.graphs.agents import utils
-from sentinel.plugins import prompts
 
 
 class Intent(str, enum.Enum):

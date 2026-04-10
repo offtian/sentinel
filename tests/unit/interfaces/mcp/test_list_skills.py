@@ -16,8 +16,8 @@ import json
 
 import pytest
 
+from sentinel.domain import skills as skills_mod
 from sentinel.interfaces.mcp import server as mcp_server
-from sentinel.plugins import skills as skills_mod
 
 
 EXPECTED_SEED_SKILLS = frozenset(

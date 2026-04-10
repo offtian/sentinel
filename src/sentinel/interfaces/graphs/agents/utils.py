@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sentinel.plugins import skills as skills_mod
+from sentinel.domain import skills as skills_mod
 
 
 def get_model_with_gateway(model_name: str) -> str:
@@ -41,7 +41,7 @@ def compose_system_prompt(*, base_prompt: str, skill_names: tuple[str, ...]) -> 
     (not alphabetised) so operators control the presentation order in
     ``config.load_agents()``.
 
-    :raises sentinel.plugins.skills.SkillNotFoundError: if any name in
+    :raises sentinel.domain.skills.SkillNotFoundError: if any name in
         ``skill_names`` is not in the installed catalogue.
     """
     if not skill_names:
