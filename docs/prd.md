@@ -76,7 +76,7 @@ Acceptance criteria:
 - [x] Results are posted to a configurable Slack channel with formatted blocks
 - [x] Results are added as a note on the PagerDuty incident
 - [ ] Investigation completes within 2 minutes of alert receipt — not yet benchmarked in production
-- [ ] SRE agents auto-load MCP toolsets discovered from `MCP_SERVERS` (today only the K8s agent does)
+- [x] SRE agents auto-load MCP toolsets discovered from `MCP_SERVERS` — shared via `Configuration.build_mcp_toolsets()`, injected as `classifier_toolsets` and `analyser_toolsets`
 - [ ] Alert classifier output drives runbook **skill** selection (e.g. `k8s-crashloop-runbook`) appended to root-cause-analyser context
 - [ ] Anthropic prompt-cache markers applied to all SRE agent system prompts via LiteLLM `extra_body`
 
@@ -94,7 +94,7 @@ Acceptance criteria:
 - [x] Feedback API allows accepting/rejecting/modifying suggestions (`POST /api/support/reviews/{id}/feedback`)
 - [x] Feedback stats endpoint tracks acceptance rates over time (`GET /api/support/stats`)
 - [ ] Review completes within 3 minutes of ticket creation — not yet benchmarked in production
-- [ ] Support agents auto-load MCP toolsets discovered from `MCP_SERVERS`
+- [x] Support agents auto-load MCP toolsets discovered from `MCP_SERVERS` — shared via `Configuration.build_mcp_toolsets()`, injected as `reviewer_toolsets` and `drafter_toolsets`
 - [ ] Ticket classifier output drives response **skill** selection (e.g. `auth-error-response`, `rate-limit-response`)
 - [ ] Anthropic prompt-cache markers applied to ticket reviewer + response drafter system prompts
 
@@ -174,8 +174,8 @@ Acceptance criteria:
 - [x] `src/sentinel/plugins/skills/<name>/SKILL.md` directory layout with frontmatter (`name`, `description`, `applies_to`, `version`)
 - [x] `plugins.skills.load_skills_for(category=..., max=N)` helper returns matching skills, sorted deterministically
 - [x] Skills are appended to the system prompt by `interfaces/graphs/agents/utils.py` so every agent picks them up uniformly
-- [ ] `Configuration.build_mcp_toolsets()` is the single place that builds the shared MCP toolset list, consumed by all SRE and Support pipeline dependencies
-- [ ] `MCP_SERVERS` documented in `.env.default` with examples for Datadog MCP, GitHub MCP, Confluence MCP
+- [x] `Configuration.build_mcp_toolsets()` is the single place that builds the shared MCP toolset list, consumed by all SRE and Support pipeline dependencies — thread-safe with double-checked locking, memoised per instance
+- [x] `MCP_SERVERS` documented in `.env.default` with examples for Datadog MCP, GitHub MCP, Confluence MCP
 - [ ] `bootstrap.initialise()` configures an OTLP exporter (Logfire in dev, Datadog APM in prod) so PydanticAI's `instrument=True` spans are emitted
 - [x] FastMCP server (`interfaces/mcp/server.py`) gains a `list_skills` tool exposing the installed skill catalogue to external agents
 
@@ -251,7 +251,7 @@ AgentGateway becomes relevant when:
 | Investigation < 2min benchmark | Production deployment (separate repo) | Post-deploy |
 | Review < 3min benchmark | Production deployment (separate repo) | Post-deploy |
 | Pipeline OTel/Logfire exporter | Section 4 acceptance criteria | Phase D |
-| Universal MCP injection across all agents | Section 7 | Phase D |
+| ~~Universal MCP injection across all agents~~ | ~~Section 7~~ | **Done** — PR #6 |
 | Prompt versioning + replay snapshots | Sections 4 & 6 | Phase D |
 | Anthropic prompt caching across agents | Sections 1 & 2 | Phase D |
 
@@ -305,4 +305,4 @@ AgentGateway becomes relevant when:
 
 **Serving suggestion:** Kubernetes via Helm chart with separate API deployment (user-facing, 2 replicas) and Worker deployment (background processing, 2 replicas). PostgreSQL for state. LiteLLM sidecar or shared gateway for LLM routing.
 
-**Test suite:** 540+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.
+**Test suite:** 545+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.
