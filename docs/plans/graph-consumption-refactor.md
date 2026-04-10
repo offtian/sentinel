@@ -1,8 +1,8 @@
 # Plan: Graph Consumption Refactor
 
-**Status:** in-progress
+**Status:** complete
 **Created:** 2026-04-09
-**Last updated:** 2026-04-09
+**Last updated:** 2026-04-10
 
 ## Goal
 
@@ -32,16 +32,16 @@ Make pipeline graph nodes read agents from `Configuration.agent_for()` instead o
 
 ## Steps
 
-- [ ] Step 1: Update `sre_investigation.py` Dependencies and nodes to use `config.agent_for()`
-- [ ] Step 2: Update `support_review.py` Dependencies and nodes to use `config.agent_for()`
-- [ ] Step 3: Update `chart_generation.py` to use `config.agent_for()`
-- [ ] Step 4: Update `k8s_runner.py` to use `config.agent_for()`
-- [ ] Step 5: Update callers (worker, chat app, slack handlers)
-- [ ] Step 6: Update functional tests (conftest, test files)
-- [ ] Step 7: Update unit tests (error handling, comparison mode)
-- [ ] Step 8: Remove module-level `agent = build_agent()` from all 8 agent modules (Step 29)
-- [ ] Step 9: Remove `append_skills_to_prompt` / `render_skills_section` / `SYSTEM_PROMPT` dead code (Step 30)
-- [ ] Step 10: Run tests and lint, fix any issues
+- [x] Step 1: Update `sre_investigation.py` Dependencies and nodes to use `config.agent_for()`
+- [x] Step 2: Update `support_review.py` Dependencies and nodes to use `config.agent_for()`
+- [x] Step 3: Update `chart_generation.py` to use `config.agent_for()`
+- [x] Step 4: Update `k8s_runner.py` to use `config.agent_for()`
+- [x] Step 5: Update callers (worker, chat app, slack handlers)
+- [x] Step 6: Update functional tests (conftest, test files)
+- [x] Step 7: Update unit tests (error handling, comparison mode)
+- [x] Step 8: Remove module-level `agent = build_agent()` from all 8 agent modules (Step 29)
+- [x] Step 9: Remove `append_skills_to_prompt` / `render_skills_section` / `SYSTEM_PROMPT` dead code (Step 30)
+- [x] Step 10: Run tests and lint, fix any issues
 
 ## Changes
 

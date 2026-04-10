@@ -60,15 +60,18 @@ After completing a fix, feature, or refactor — commit automatically without as
 
 - **Plans** go in `docs/plans/<feature-name>.md` — NOT `docs/superpowers/plans/`
 - **Reviews** go in `docs/reviews/` — NOT anywhere else
+- **Plan index** at `docs/plans/INDEX.md` — read this FIRST to understand plan status (saves tokens vs reading all plans)
 - Use the template at `docs/plans/_template.md` for new plans
 
 ### For planned features (multi-step)
 
-1. Create `docs/plans/<feature-name>.md` using the template at `docs/plans/_template.md`
-2. Fill in: goal, scope, design decisions, step-by-step plan with checkboxes
-3. Get user confirmation before writing code
-4. Check off steps as you go; update the plan if the approach changes
-5. On completion: run `/update-docs` to sync status across documentation
+1. Check `docs/plans/INDEX.md` to see if a plan already exists
+2. Create `docs/plans/<feature-name>.md` using the template at `docs/plans/_template.md`
+3. Add an entry to `docs/plans/INDEX.md` under the appropriate status section
+4. Fill in: goal, scope, design decisions, step-by-step plan with checkboxes
+5. Get user confirmation before writing code
+6. Check off steps as you go; update the plan if the approach changes
+7. On completion: update status in both the plan file and `INDEX.md`, then run `/update-docs`
 
 ### For any completed work (including impromptu fixes)
 
