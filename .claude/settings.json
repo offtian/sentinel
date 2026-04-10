@@ -6,9 +6,29 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check-plan.sh",
-            "timeout": 5,
+            "command": ".claude/hooks/protect-files.sh",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/check-plan.sh",
+            "timeout": 5000,
             "statusMessage": "Checking for plan file..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/auto-format.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/review-rules.sh"
           }
         ]
       }
@@ -18,8 +38,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/verify-python.sh",
-            "timeout": 180,
+            "command": ".claude/hooks/verify-python.sh",
+            "timeout": 180000,
             "statusMessage": "Running just clean, just lint-fix, just lint..."
           }
         ]
