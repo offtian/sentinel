@@ -20,6 +20,46 @@ Sentinel is an AI-powered automation platform with two core capabilities:
 - **Observable** - Structured logging (structlog), Datadog APM, Sentry error tracking
 - **Testable** - Mock adapters for all external services; no LLM calls in unit tests
 
+## Architecture Decisions
+
+### Execution Model
+
+- **PostgreSQL job queue** with `SELECT ... FOR UPDATE SKIP LOCKED` instead of Redis/RabbitMQ/Celery. Supports horizontal scaling by adding worker replicas. No additional infrastructure dependency.
+- **Async/await throughout** -- no blocking I/O, no Celery task serialisation overhead.
+- **Worker replicas** scale independently from API replicas. Helm HPA configured (disabled by default).
+
+### Scheduled Automations
+
+Scheduled automations live in Sentinel, triggered by Kubernetes CronJobs. The worker gets a `--run-once` mode for CronJob execution. This avoids introducing a new runtime (kagent, Temporal, Argo Workflows) until the need is proven. For Toby's "every Thursday at 5pm" use case, a CronJob creates a K8s Job that hits the Sentinel API, which enqueues a `SCHEDULED_AUTOMATION` job for the worker.
+
+### HolmesGPT Resolution
+
+HolmesGPT SDK has a dependency conflict with pydantic-ai>=1.0.7. Rather than waiting for an upstream fix, `DirectToolsetAdapter` calls the existing DatadogClient and PagerDutyClient vendor adapters directly. This gives real observability data without the SDK. HolmesGPT can be reconsidered later.
+
+### OSS Framework Positioning
+
+| Framework | Position |
+|-----------|----------|
+| PydanticAI + Pydantic Graph | Keep -- current orchestration layer, well-integrated |
+| LiteLLM | Keep -- model routing gateway, already deployed |
+| LangFuse | Adopt via LiteLLM callbacks -- no direct dependency |
+| kagent | Narrow pilot for K8s troubleshooting -- not a replacement |
+| agentgateway | Defer until multiple MCP backends or agent runtimes need centralised routing |
+| Claude Agent SDK / OpenAI Agent SDK | Evaluate -- may complement PydanticAI for specific workflows |
+| LangGraph / LangChain | Evaluate -- compare with Pydantic Graph for complex branching |
+| FastMCP | **Adopted everywhere** — server at `interfaces/mcp/`, client builder at `plugins/toolsets/mcp.py` consumed by every pipeline agent via `Configuration.build_mcp_toolsets()` |
+| Logfire | Adopt for dev — exports PydanticAI spans via OTel; production swaps the exporter for Datadog APM OTLP |
+| Anthropic prompt caching | Adopt — wired via LiteLLM `extra_body` `cache_control` on agent system prompts |
+| Skills (file-based runbooks) | Adopt — `domain/skills/` catalogue loaded by `domain.skills.load_skills_for()` |
+
+### Quality Over Time
+
+Quality improvement relies on three feedback loops:
+1. **LangFuse** -- per-call cost, latency, and prompt versioning
+2. **Eval framework** -- golden test cases with automated scoring, run on prompt changes
+3. **Feedback API** -- track accept/reject/modify rates on support suggestions
+4. **Skill catalogue** -- when a human rejects an investigation or modifies a response, the supervisor can attach the failure context to the relevant Skill so the runbook accumulates real failure modes over time
+
 ## Layer Architecture
 
 ```
@@ -38,7 +78,7 @@ domain/        → Business entities, search abstractions, vendor adapters, conf
     ↓
 evals/         → Evaluation framework (pydantic_evals): cases/, evaluators/, runner, reporting, rendering
     ↓
-plugins/       → Plugin adapters: toolsets (PydanticAI tool wrappers), prompts (Jinja2 templates)
+plugins/       → Plugin adapters: toolsets (PydanticAI tool wrappers), MCP client builder
     ↓
 data/          → SQLModel database models, Alembic migrations
     ↓
@@ -46,7 +86,7 @@ vendors/       → External SDK wrappers (Slack, PagerDuty, Jira, Datadog)
     ↓
 utils/         → Logging, shared helpers
     ↓
-_config        → Centralised configuration (environs)
+config         → Centralised configuration (environs + Configuration class)
 ```
 
 **Rule**: Lower layers cannot import from higher layers. This is enforced via `import-linter` contracts in `pyproject.toml`.
@@ -119,6 +159,65 @@ Sentinel integrates with MCP (Model Context Protocol) in both directions:
 
 - **MCP Server** (`interfaces/mcp/server.py`) — FastMCP server exposing observability, documentation, and investigation tools to external agents
 - **MCP Client** (`plugins/toolsets/mcp.py`) — consumes external MCP servers (e.g., kubectl MCP server) as PydanticAI toolsets, configured via `MCP_SERVERS` env var
+
+## Agent Capability Plane
+
+Sentinel agents share a uniform capability plane composed of Skills (file-based
+runbooks), MCP tool servers, Anthropic prompt caching, and OTel telemetry.
+Adding a new runbook, tool server, or model should be a config change, not a
+code change.
+
+```mermaid
+flowchart LR
+    subgraph Delivered
+      B1[Skills: runbooks +<br/>response patterns<br/>config-driven per agent]
+      B2[Universal MCP injection<br/>via Configuration.build_mcp_toolsets]
+    end
+    subgraph Today
+      A3[instrument=True but no exporter]
+      A4[No prompt versioning]
+      A5[No reproducibility snapshot]
+    end
+    subgraph Proposed
+      B3[OTel/Logfire exporter<br/>for PydanticAI spans]
+      B4[Prompt version + SHA256<br/>recorded in audit log]
+      B5[Replay snapshot per pipeline run<br/>persisted in pipeline_runs]
+      B6[Anthropic prompt cache markers<br/>on system prompts via LiteLLM]
+    end
+    A3 --> B3
+    A4 --> B4
+    A4 --> B5
+```
+
+### Agent Inventory
+
+| Agent | Pipeline | Toolsets | Remaining |
+|---|---|---|---|
+| `alert_classifier.py` | SRE | shared MCP toolsets | + category-triggered skills |
+| `root_cause_analyser.py` | SRE | `analyser_toolsets` + shared MCP | + runbook skills keyed off classifier category |
+| `k8s_investigator.py` (via `k8s_runner.py`) | SRE (K8s) | `k8s_toolset` + MCP from `MCP_SERVERS` + `K8S_MCP_SERVER_URL` | complete |
+| `intent_router.py` | Slack bot | none | n/a |
+| `ticket_reviewer.py` | Support | `reviewer_toolsets` + shared MCP | + category-triggered skills |
+| `response_drafter.py` | Support | `drafter_toolsets` + shared MCP | + response pattern skills |
+| `chart_request_parser.py` | Chart-coding | none | n/a |
+| `chart_generator.py` | Chart-coding | shared MCP | + chart best-practice skills |
+
+### Skills
+
+- On-disk layout: `src/sentinel/domain/skills/<name>/SKILL.md` with frontmatter (`name`, `description`, `applies_to`, `version`)
+- Loader: `domain/skills/__init__.py:load_skills_for(category=..., max=N)` returns matching skills sorted deterministically
+- Config-driven assignment: `SKILLS_BY_AGENT` dict in `config.py` maps agent names to skill names
+- Injection: `compose_system_prompt(base_prompt=..., skill_names=(...))` resolves skill names against the installed catalogue
+- Initial catalogue: `k8s-crashloop-runbook`, `database-connection-runbook`, `latency-spike-runbook`, `auth-error-response`, `rate-limit-response`, `chart-helm-best-practices`
+- Skills are git-tracked and content-hashed (SHA-256) for replay
+
+### Universal MCP Injection
+
+- `Configuration.build_mcp_toolsets()` in `config.py` is the single memoised builder that parses `MCP_SERVERS` and returns a tuple of `MCPServerSSE` / `MCPServerStdio` instances
+- Consumed by every non-router pipeline agent
+- The K8s agent keeps its current path (already wired via `k8s_runner.py`)
+- The FastMCP server at `interfaces/mcp/server.py` has a `list_skills` tool so external agents can discover the installed runbook catalogue
+- New external servers can be added via `MCP_SERVERS` env var alone
 
 ## AI Support Pipeline
 
@@ -309,7 +408,7 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 
 ## Test Count
 
-475+ tests covering:
+555+ tests covering:
 
 - Domain entities and operations (SRE, Support, Confidence, Search, Pipeline errors, Approval, Supervisor)
 - Webhook parsers (PagerDuty, Datadog) with dedup handling
@@ -324,3 +423,31 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 - Evaluation framework (pydantic_evals based)
 - Domain layer persistence (queries and operations via databases library)
 - Pipeline traceability (trace_id correlation, pipeline/node/agent recording)
+
+## Key Reference Files
+
+| Pattern | Source File |
+|---------|-----------|
+| Pydantic Graph pipeline | `src/sentinel/interfaces/graphs/sre_investigation.py` |
+| Search abstraction | `src/sentinel/domain/search/searcher.py` |
+| PydanticAI agents | `src/sentinel/interfaces/graphs/agents/alert_classifier.py` |
+| LiteLLM gateway helper | `src/sentinel/interfaces/graphs/agents/utils.py` |
+| Configuration pattern | `src/sentinel/config.py`, `src/sentinel/settings.py` |
+| Import-linter contracts | `pyproject.toml` |
+| Confidence scoring | `src/sentinel/domain/confidence/entities.py` |
+| Automation runner | `src/sentinel/application/automations/runner.py` |
+| Quality gate | `src/sentinel/domain/supervisor/quality_gate.py` |
+| Supervisor orchestrator | `src/sentinel/application/supervisor/orchestrator.py` |
+| Approval entities | `src/sentinel/domain/approval/entities.py` |
+| Investigation adapter hierarchy | `src/sentinel/domain/sre/investigation.py` |
+| K8s native agent | `src/sentinel/domain/sre/k8s_native_agent.py` |
+| Kagent adapter | `src/sentinel/domain/sre/kagent_adapter.py` |
+| K8s tools | `src/sentinel/domain/tools/kubernetes.py` |
+| MCP server | `src/sentinel/interfaces/mcp/server.py` |
+| MCP client builder | `src/sentinel/plugins/toolsets/mcp.py` |
+| Evaluation metrics | `src/sentinel/domain/evaluation/metrics.py` |
+| Helm chart | `helm/sentinel/values.yaml` |
+| Skills loader | `src/sentinel/domain/skills/__init__.py` |
+| Universal MCP builder | `src/sentinel/config.py` `Configuration.build_mcp_toolsets()` |
+| Prompt templates | `src/sentinel/domain/prompts/` |
+| OTel bootstrap | `src/sentinel/bootstrap_otel.py` |

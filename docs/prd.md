@@ -171,8 +171,8 @@ As a **platform engineer**, I want **Sentinel agents to share a uniform capabili
 
 Acceptance criteria:
 
-- [x] `src/sentinel/plugins/skills/<name>/SKILL.md` directory layout with frontmatter (`name`, `description`, `applies_to`, `version`)
-- [x] `plugins.skills.load_skills_for(category=..., max=N)` helper returns matching skills, sorted deterministically
+- [x] `src/sentinel/domain/skills/<name>/SKILL.md` directory layout with frontmatter (`name`, `description`, `applies_to`, `version`)
+- [x] `domain.skills.load_skills_for(category=..., max=N)` helper returns matching skills, sorted deterministically
 - [x] Skills are appended to the system prompt by `interfaces/graphs/agents/utils.py` so every agent picks them up uniformly
 - [x] `Configuration.build_mcp_toolsets()` is the single place that builds the shared MCP toolset list, consumed by all SRE and Support pipeline dependencies — thread-safe with double-checked locking, memoised per instance
 - [x] `MCP_SERVERS` documented in `.env.default` with examples for Datadog MCP, GitHub MCP, Confluence MCP
@@ -305,4 +305,4 @@ AgentGateway becomes relevant when:
 
 **Serving suggestion:** Kubernetes via Helm chart with separate API deployment (user-facing, 2 replicas) and Worker deployment (background processing, 2 replicas). PostgreSQL for state. LiteLLM sidecar or shared gateway for LLM routing.
 
-**Test suite:** 545+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.
+**Test suite:** 555+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.

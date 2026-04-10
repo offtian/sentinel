@@ -177,7 +177,7 @@ Ticks (from `docs/prd.md`):
   - Audit row has matching `prompt_sha256` and `pipeline_run_id`
   Commit: `test: golden round-trip for investigate_alert replay bundle`
 
-- [ ] **Step 15: Docs sweep.** Tick PRD §4 + §6 boxes; "Replay CLI" subsection in `claude-plan.md`; note CLI re-execution deferred to slice 6. Commit: `docs: mark prompt versioning + replay snapshot slice complete`
+- [ ] **Step 15: Docs sweep.** Tick PRD §4 + §6 boxes; update `docs/plans/INDEX.md` status; note CLI re-execution deferred to slice 6. Commit: `docs: mark prompt versioning + replay snapshot slice complete`
 
 - [ ] **Step 16: Full gate** — `just test && just test-integration && just lint`.
 
@@ -209,7 +209,7 @@ Ticks (from `docs/prd.md`):
 3. **Storage cost of `prompt_text`.** 10k runs/day × 5 KB = 50 MB/day = ~18 GB/year. Acceptable. Deduplication via `prompt_snapshots(sha256, text)` table is follow-up at 100k runs/day.
 4. **`input_hash` exclusion list drift.** New pipeline adding `dispatched_at` breaks replays silently. **Mitigation:** single frozenset; CI test fails if a payload's timestamp field isn't excluded.
 5. **`git rev-parse HEAD` subprocess at import time.** `lru_cache(maxsize=1)` + 2s timeout + fallback. Unit tests monkeypatch.
-6. **`SENTINEL_GIT_SHA` not set in Docker image.** Would get `"unknown:alert_classifier"`. **Mitigation:** Dockerfile build step must inject `ENV SENTINEL_GIT_SHA=${GIT_SHA}`. Document in `claude-plan.md`.
+6. **`SENTINEL_GIT_SHA` not set in Docker image.** Would get `"unknown:alert_classifier"`. **Mitigation:** Dockerfile build step must inject `ENV SENTINEL_GIT_SHA=${GIT_SHA}`. Document in `docs/architecture.md`.
 7. **Slice 4 (OTel) adding `audit_log.prompt_sha256` first.** Step 6 migration uses `IF NOT EXISTS`; Step 9 is idempotent on ORM side.
 8. **`Dependencies` dataclasses growing.** Adding `run_id` + `prompt_handle` pushes to ~15 fields. Both default `None` so no test breaks. Group-object refactor is follow-up.
 9. **Concurrent pipeline runs and `lru_cache`.** `load_system_prompt` is process-local; if prompts edited in place during a long-running process, cache hides the change. **Acceptable** — desired property for deterministic replay. Document in CLI header.
