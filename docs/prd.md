@@ -88,7 +88,7 @@ Acceptance criteria:
 
 - [x] Jira webhook ingests `issue_created` and `issue_updated` events
 - [x] Ticket classifier extracts category, urgency, key questions, and search queries
-- [x] Documentation search runs in parallel across Confluence and similar Jira tickets
+- [x] Documentation search runs in parallel across Confluence and similar Jira tickets — keyword-only; hybrid search (BM25 + embeddings) needed for production-grade semantic matching
 - [x] Response drafter produces a professional response with source attribution and confidence score
 - [x] Results are posted to a configurable Slack channel
 - [x] Feedback API allows accepting/rejecting/modifying suggestions (`POST /api/support/reviews/{id}/feedback`)
@@ -183,6 +183,11 @@ Acceptance criteria:
 
 ## Completion Status
 
+### Pipeline Completion Estimates
+
+- **AI SRE Pipeline** — ~85% complete. Core pipeline functional end-to-end. Key gaps: HolmesGPT full SDK (DirectToolsetAdapter works), dynamic skill selection from classifier output, production benchmarking.
+- **AI Support Pipeline** — ~80% complete. Core pipeline functional end-to-end. Key gaps: hybrid documentation search (keyword-only today), Notion/S3 doc sources, production benchmarking.
+
 ### Resolved — Originally Out of Scope
 
 The following items were originally listed as out of scope but have since been delivered:
@@ -246,14 +251,22 @@ AgentGateway becomes relevant when:
 
 ### Remaining Gaps
 
+**Next priority: HolmesGPT full SDK integration** — resolve pydantic-ai >=1.0.7 dependency conflict or formally adopt DirectToolsetAdapter as the permanent production implementation. See Phase E below.
+
 | Gap | Blocked By | Target |
 |-----|------------|--------|
+| **HolmesGPT SDK integration** | pydantic-ai >=1.0.7 dependency conflict (documented in pyproject.toml). DirectToolsetAdapter is the working production implementation (14 tests, circuit breaker, concurrent Datadog/Grafana queries). Adapter hierarchy preserves swap-back capability. | **Phase E — next** |
+| Dynamic skill selection from classifier output | Sections 1 & 2 — routing wiring not yet connected | Phase E |
+| Hybrid documentation search (BM25 + embeddings) | Section 2 — Confluence keyword-only search misses semantic matches | Phase E |
 | Investigation < 2min benchmark | Production deployment (separate repo) | Post-deploy |
 | Review < 3min benchmark | Production deployment (separate repo) | Post-deploy |
 | Pipeline OTel/Logfire exporter | Section 4 acceptance criteria | Phase D |
 | ~~Universal MCP injection across all agents~~ | ~~Section 7~~ | **Done** — PR #6 |
 | Prompt versioning + replay snapshots | Sections 4 & 6 | Phase D |
 | Anthropic prompt caching across agents | Sections 1 & 2 | Phase D |
+| LiteLLM deployment mode | Gateway proxy adds SPOF + network hop; SDK mode (in-process) is better for single-service architecture | Phase D |
+| Eval framework maturity | pydantic_evals lacks dashboard, regression tracking, community metrics. Consider DeepEval or Braintrust. | Phase D |
+| Real incident data validation | All development has been against synthetic data. Architecture is sound but unvalidated against real PagerDuty alerts, Jira tickets, and incident data. | Post-deploy |
 
 ---
 
