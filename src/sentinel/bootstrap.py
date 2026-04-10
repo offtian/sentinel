@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from sentinel import settings
+from sentinel import bootstrap_otel, settings
 from sentinel.utils import logs
 
 
@@ -42,4 +42,6 @@ def initialise() -> None:
         return
     _configure_llm_env()
     logs.configure_logging()
+
+    bootstrap_otel.init_traces()
     _initialised = True
