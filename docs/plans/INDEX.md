@@ -20,6 +20,7 @@
 | [k8s-chart-coding-agent](k8s-chart-coding-agent.md) | Spec for chart-coding pipeline (natural language to Helm charts) | PR #1 |
 | [k8s-chart-coding-agent-implementation](k8s-chart-coding-agent-implementation.md) | Detailed implementation of chart-coding pipeline | PR #1 |
 | [database-traceability-refactor](database-traceability-refactor.md) | DB migration and traceability refactoring | PR #2 |
+| [holmesgpt](holmesgpt.md) | Formalize DirectToolsetAdapter, add K8s queries, HolmesGPT SDK integration | PR #TBD |
 
 ### In Progress
 

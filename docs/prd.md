@@ -77,7 +77,7 @@ Acceptance criteria:
 - [x] Results are added as a note on the PagerDuty incident
 - [ ] Investigation completes within 2 minutes of alert receipt — not yet benchmarked in production
 - [x] SRE agents auto-load MCP toolsets discovered from `MCP_SERVERS` — shared via `Configuration.build_mcp_toolsets()`, injected as `classifier_toolsets` and `analyser_toolsets`
-- [ ] Alert classifier output drives runbook **skill** selection (e.g. `k8s-crashloop-runbook`) appended to root-cause-analyser context
+- [x] Alert classifier output drives runbook **skill** selection (e.g. `k8s-crashloop-runbook`) appended to root-cause-analyser context — `ClassifyAlert` stores `classification_category`, passed to `root_cause_analyser.Dependencies(category=...)`, which calls `_inject_runbook_skills()` → `render_skills_section(category=...)`
 - [ ] Anthropic prompt-cache markers applied to all SRE agent system prompts via LiteLLM `extra_body`
 
 ### 2. AI Support Agent — Ticket Review Pipeline
@@ -185,7 +185,7 @@ Acceptance criteria:
 
 ### Pipeline Completion Estimates
 
-- **AI SRE Pipeline** — ~85% complete. Core pipeline functional end-to-end. Key gaps: HolmesGPT full SDK (DirectToolsetAdapter works), dynamic skill selection from classifier output, production benchmarking.
+- **AI SRE Pipeline** — ~95% complete. Core pipeline functional end-to-end. HolmesGPT SDK integrated via fork; DirectToolsetAdapter is primary with HolmesAdapter as opt-in alternative. Key gaps: production benchmarking, prompt caching.
 - **AI Support Pipeline** — ~80% complete. Core pipeline functional end-to-end. Key gaps: hybrid documentation search (keyword-only today), Notion/S3 doc sources, production benchmarking.
 
 ### Resolved — Originally Out of Scope
@@ -251,12 +251,12 @@ AgentGateway becomes relevant when:
 
 ### Remaining Gaps
 
-**Next priority: HolmesGPT full SDK integration** — resolve pydantic-ai >=1.0.7 dependency conflict or formally adopt DirectToolsetAdapter as the permanent production implementation. See Phase E below.
+**HolmesGPT SDK dependency resolved** — installed via fork (`offtian/holmesgpt@httpx-compat`) which relaxes httpx and postgrest pins. DirectToolsetAdapter remains the primary/default investigation engine. `HolmesAdapter` now provides a real SDK integration as an opt-in alternative, using HolmesGPT's toolsets (Datadog, Kubernetes, Grafana) for data gathering.
 
 | Gap | Blocked By | Target |
 |-----|------------|--------|
-| **HolmesGPT SDK integration** | pydantic-ai >=1.0.7 dependency conflict (documented in pyproject.toml). DirectToolsetAdapter is the working production implementation (14 tests, circuit breaker, concurrent Datadog/Grafana queries). Adapter hierarchy preserves swap-back capability. | **Phase E — next** |
-| Dynamic skill selection from classifier output | Sections 1 & 2 — routing wiring not yet connected | Phase E |
+| ~~**HolmesGPT upstream SDK**~~ | ~~httpx version conflict~~ — resolved via fork (`offtian/holmesgpt@httpx-compat`). DirectToolsetAdapter is the default; `HolmesAdapter` provides real SDK integration as opt-in alternative. Track upstream for when they merge compatible pins. | **Phase E — done** |
+| ~~Dynamic skill selection from classifier output~~ | ~~Sections 1 & 2~~ | **Done** — `ClassifyAlert` → `classification_category` → `root_cause_analyser` |
 | Hybrid documentation search (BM25 + embeddings) | Section 2 — Confluence keyword-only search misses semantic matches | Phase E |
 | Investigation < 2min benchmark | Production deployment (separate repo) | Post-deploy |
 | Review < 3min benchmark | Production deployment (separate repo) | Post-deploy |
@@ -318,4 +318,4 @@ AgentGateway becomes relevant when:
 
 **Serving suggestion:** Kubernetes via Helm chart with separate API deployment (user-facing, 2 replicas) and Worker deployment (background processing, 2 replicas). PostgreSQL for state. LiteLLM sidecar or shared gateway for LLM routing.
 
-**Test suite:** 555+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.
+**Test suite:** 569+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.
