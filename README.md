@@ -158,7 +158,7 @@ Documents are organised by audience and purpose. Review in this order for onboar
 | 2 | [Architecture](docs/architecture.md) | Engineers | Layer diagram, pipeline flows, vendor adapters, deployment, database schema |
 | 3 | [PRD](docs/prd.md) | Product + Engineering | Requirements, acceptance criteria checkboxes (canonical status tracker) |
 | 4 | [Claude Plan](docs/claude-plan.md) | AI agents | Architecture decisions, capability plane roadmap, operational context |
-| 5 | [AGENT.md](AGENT.md) | AI agents | Coding conventions, testing rules, naming patterns |
+| 5 | [AGENTS.md](AGENTS.md) | AI agents | Coding conventions, testing rules, naming patterns |
 | 6 | [CLAUDE.md](CLAUDE.md) | AI agents | Essential commands, gotchas, documentation workflow |
 | 7 | [Plans](docs/plans/) | Engineering | Per-feature implementation plans with step-by-step checklists |
 

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-See @AGENT.md for coding conventions, patterns, and testing rules.
+See @AGENTS.md for coding conventions, patterns, and testing rules.
 See @README.md for project overview, API endpoints, and architecture diagram.
 
 ## Essential Commands
@@ -32,11 +32,11 @@ just test tests/unit/path/test_file.py::TestClass # Single test class
 - Pipeline nodes use `NodeError` / `PipelineNodeFailed` from `domain/pipeline/errors.py`
 - `DetermineConfidence` enforces approval gate: below `require_approval_below_confidence` (default 0.7) requires human approval
 - Webhook endpoints use shared `_handle_webhook()` for deduplication
-- Agent system prompts are Jinja2 templates in `plugins/prompts/`
+- Agent system prompts are Jinja2 templates in `domain/prompts/`
 
 ## Testing
 
-- 475+ tests across `tests/unit/`, `tests/integration/`, `tests/functional/`
+- 555+ tests across `tests/unit/`, `tests/integration/`, `tests/functional/`
 - Factories in `tests/factories/__init__.py`: `make_alert()`, `make_ticket()`, `make_investigation()`, `make_finding()`, `make_doc_source()`, `make_response_suggestion()`, `make_confidence_score()`
 - Functional tests monkeypatch PydanticAI agents — see `tests/functional/conftest.py`
 
@@ -54,7 +54,13 @@ After completing a fix, feature, or refactor — commit automatically without as
 - **Requirements & status** — `docs/prd.md` (acceptance criteria checkboxes are the canonical tracker)
 - **Operational context** — `docs/claude-plan.md` (architecture decisions, repo structure, gotchas)
 - **Architecture** — `docs/architecture.md` (design principles, layer diagram, pipeline flows)
-- **Architecture review** — `SENTINEL_ARCHITECTURE_REVIEW.md` (frozen historical snapshot, do not update)
+- **Architecture reviews** — `docs/reviews/` (frozen historical snapshots, do not update)
+
+### Plan and review locations (overrides superpowers defaults)
+
+- **Plans** go in `docs/plans/<feature-name>.md` — NOT `docs/superpowers/plans/`
+- **Reviews** go in `docs/reviews/` — NOT anywhere else
+- Use the template at `docs/plans/_template.md` for new plans
 
 ### For planned features (multi-step)
 
@@ -73,5 +79,5 @@ After implementing ANY change that resolves a requirement or changes architectur
 
 ### What NOT to update
 
-- `SENTINEL_ARCHITECTURE_REVIEW.md` — frozen historical document
+- `docs/reviews/*` — frozen historical snapshots
 - Status tables in `docs/claude-plan.md` — status lives only in `docs/prd.md`

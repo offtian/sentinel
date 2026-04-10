@@ -1,4 +1,4 @@
-# AGENT.md
+# AGENTS.md
 
 Conventions and coding patterns for AI agents working in this repository.
 
