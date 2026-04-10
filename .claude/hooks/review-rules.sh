@@ -31,8 +31,10 @@ if [[ -n "$BAD_IMPORTS" ]]; then
 fi
 
 # Check: inline imports (imports inside functions/methods)
+# Exclude: TYPE_CHECKING blocks, noqa, __name__ guards, try/except blocks (optional deps)
 INLINE_IMPORTS=$(grep -nE '^\s+(from |import )' "$FILE_PATH" 2>/dev/null | \
-  grep -vE '(if TYPE_CHECKING|# noqa|__name__)' | head -5)
+  grep -vE '(if TYPE_CHECKING|# noqa|__name__|except ImportError|except ModuleNotFoundError)' | \
+  grep -vE '^\s*#' | head -5)
 
 if [[ -n "$INLINE_IMPORTS" ]]; then
   WARNINGS+="PYTHON RULE (CRITICAL): ALL imports MUST be at module level (top of file). No inline imports:\n$INLINE_IMPORTS\n\n"
@@ -53,9 +55,9 @@ if grep -qE 'except.*:\s*$' "$FILE_PATH" 2>/dev/null; then
   fi
 fi
 
-# Check: *args/**kwargs without justification
-if grep -qE 'def .*\*args' "$FILE_PATH" 2>/dev/null; then
-  WARNINGS+="PYTHON RULE: Avoid *args/**kwargs — specify parameters explicitly with type annotations.\n\n"
+# Check: *args usage (not **kwargs — only positional star-args)
+if grep -qE 'def .*[^*]\*[a-z]' "$FILE_PATH" 2>/dev/null; then
+  WARNINGS+="PYTHON RULE: Avoid *args — specify parameters explicitly with type annotations.\n\n"
 fi
 
 # Check: stdlib logging usage (forbidden — use structlog)

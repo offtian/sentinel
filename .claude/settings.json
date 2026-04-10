@@ -6,7 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/protect-files.sh"
+            "command": ".claude/hooks/protect-files.sh",
+            "timeout": 5000
           },
           {
             "type": "command",
