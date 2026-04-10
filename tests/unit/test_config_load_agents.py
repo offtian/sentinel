@@ -1,5 +1,5 @@
 """
-Unit tests for ``PluginConfiguration.load_agents`` and ``Configuration.agent_for``.
+Unit tests for ``CommonConfiguration.load_agents`` and ``BaseConfiguration.agent_for``.
 
 Covers:
 - Every pipeline agent gets built with its configured model and skills.
@@ -21,9 +21,9 @@ import pytest
 
 from sentinel import config as config_mod
 from sentinel import settings as settings_mod
+from sentinel.domain import skills as skills_mod
 from sentinel.interfaces.graphs import agents
 from sentinel.plugins import config as plugin_config_mod
-from sentinel.plugins import skills as skills_mod
 
 
 _ALL_AGENT_MODULES = (
@@ -64,15 +64,15 @@ def stub_factories() -> dict[str, mock.MagicMock]:
         yield stubs
 
 
-def _make_config() -> plugin_config_mod.PluginConfiguration:
-    return plugin_config_mod.PluginConfiguration(settings=settings_mod.get_settings())
+def _make_config() -> plugin_config_mod.CommonConfiguration:
+    return plugin_config_mod.CommonConfiguration(settings=settings_mod.get_settings())
 
 
 class TestLoadAgents:
     def test_populates_every_expected_agent(
         self, stub_factories: dict[str, mock.MagicMock]
     ) -> None:
-        # Given a fresh PluginConfiguration and patched agent factories
+        # Given a fresh CommonConfiguration and patched agent factories
         cfg = _make_config()
 
         # When load_agents is called with an empty skill mapping
@@ -96,7 +96,7 @@ class TestLoadAgents:
     def test_every_factory_called_exactly_once(
         self, stub_factories: dict[str, mock.MagicMock]
     ) -> None:
-        # Given a fresh PluginConfiguration
+        # Given a fresh CommonConfiguration
         cfg = _make_config()
 
         # When load_agents is called
@@ -110,7 +110,7 @@ class TestLoadAgents:
     def test_factories_receive_normalised_model_identifiers(
         self, stub_factories: dict[str, mock.MagicMock]
     ) -> None:
-        # Given a fresh PluginConfiguration
+        # Given a fresh CommonConfiguration
         cfg = _make_config()
 
         # When load_agents is called
@@ -184,7 +184,7 @@ class TestLoadAgents:
             cfg.agent_for("alert_classifier")
 
     def test_unknown_skill_name_raises_loudly_end_to_end(self) -> None:
-        # Given a PluginConfiguration and a typoed skill name — no factory stubs
+        # Given a CommonConfiguration and a typoed skill name — no factory stubs
         # because we want the real compose_system_prompt to run and raise
         cfg = _make_config()
         skill_map = {"alert_classifier": ("nonexistent-typoed-skill",)}

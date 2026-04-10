@@ -1,18 +1,20 @@
 """
-Base application configuration: lightweight shell and singleton cache.
+Base application configuration: interface and singleton cache.
 
-The ``Configuration`` class defines the interface that all layers depend
-on — settings access, model-name normalisation, and the agent registry.
-The **real** wiring lives in ``sentinel.plugins.config.PluginConfiguration``
-which inherits from this base and adds vendor adapters, searchers,
-toolsets, and agent loading.
+The ``BaseConfiguration`` class defines the interface that all layers depend
+on — settings access, model-name normalisation, the agent registry, and
+stub methods for vendor adapters, searchers, and toolset builders.
 
-Entry-points call ``sentinel.plugins.config.boot()`` once at startup;
-every other module retrieves the cached instance via ``get_config()``.
+The concrete implementation lives in
+``sentinel.plugins.config.CommonConfiguration`` which inherits from this
+base and adds all domain/plugin wiring.  ``get_config()`` auto-creates
+the concrete instance via ``importlib`` on first access, so callers
+never need to import from the plugins layer.
 """
 
 from __future__ import annotations
 
+import importlib
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, PrivateAttr
@@ -26,7 +28,7 @@ from sentinel.settings import Settings, get_settings
 #
 # Operators declare which on-disk Skills are baked into each agent's system
 # prompt here. Skill names must match directory names under
-# ``src/sentinel/plugins/skills/<name>/SKILL.md``. Unknown names raise
+# ``src/sentinel/domain/skills/<name>/SKILL.md``. Unknown names raise
 # ``SkillNotFoundError`` loudly at ``load_agents()`` time so typos surface
 # at startup rather than silently dropping runbooks.
 #
@@ -82,23 +84,36 @@ def _normalise_model_name(model_name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-class Configuration(BaseModel):
+class BaseConfiguration(BaseModel):
     """
-    Lightweight configuration base holding settings and the agent registry.
+    Application configuration interface.
 
-    Subclassed by ``sentinel.plugins.config.PluginConfiguration`` which adds
-    vendor adapters, search infrastructure, and toolset builders.
+    Defines settings access, model-name normalisation, the agent registry,
+    and stub methods for vendor adapters, searchers, and toolset builders.
+
+    The concrete implementation
+    ``sentinel.plugins.config.CommonConfiguration`` overrides the stubs
+    with real wiring.  ``get_config()`` auto-creates the concrete
+    instance so callers never interact with this base directly.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     settings: Settings
 
-    # Agent instances — populated by PluginConfiguration.load_agents().
+    # Agent instances — populated by CommonConfiguration.load_agents().
     # Private so Pydantic doesn't try to validate PydanticAI Agent objects.
     # Typed as Any because the registry holds heterogeneous
     # Agent[Deps, Output] specialisations with different type parameters.
     _agents: dict[str, Any] = PrivateAttr(default_factory=dict)
+
+    # -- Vendor adapters (populated by load_vendors) -------------------------
+
+    observability_client: Any | None = None
+    pagerduty_client: Any | None = None
+    jira_client: Any | None = None
+    confluence_client: Any | None = None
+    observability_circuit_breaker: Any | None = None
 
     # -- LLM model names (normalised for pydantic-ai) -------------------------
 
@@ -148,7 +163,7 @@ class Configuration(BaseModel):
         """
         Store pre-built agent instances in the registry.
 
-        Called by ``PluginConfiguration.load_agents()`` after constructing
+        Called by ``CommonConfiguration.load_agents()`` after constructing
         each agent via its ``build_agent`` factory.
         """
         self._agents = dict(agents)
@@ -166,21 +181,94 @@ class Configuration(BaseModel):
             raise KeyError(msg)
         return self._agents[name]
 
+    # -- Lifecycle (overridden by CommonConfiguration) -----------------------
 
-_config: Configuration | None = None
+    def load_vendors(self) -> None:
+        """
+        Build long-lived vendor adapter instances.
+
+        Override in ``CommonConfiguration``.
+        """
+
+    def load_agents(self, *, agent_module: Any) -> None:
+        """
+        Build every pipeline agent with its configured skills baked in.
+
+        Override in ``CommonConfiguration``.
+
+        :param agent_module: The ``sentinel.interfaces.graphs.agents``
+            module (or a compatible stub for testing).
+        """
+
+    # -- Builder stubs (overridden by CommonConfiguration) -------------------
+
+    def build_holmes_adapter(self) -> Any:
+        """Build the appropriate Holmes adapter. Override in subclass."""
+        raise NotImplementedError
+
+    def build_k8s_investigation_adapter(self, *, agent_runner: Any) -> Any:
+        """Build the K8s investigation adapter. Override in subclass."""
+        raise NotImplementedError
+
+    def build_document_searcher(self) -> Any:
+        """Build the configured document searcher. Override in subclass."""
+        raise NotImplementedError
+
+    def build_ticket_searcher(self) -> Any:
+        """Build the configured past-ticket searcher. Override in subclass."""
+        raise NotImplementedError
+
+    def build_metrics_searcher(self) -> Any:
+        """Build a metrics searcher. Override in subclass."""
+        raise NotImplementedError
+
+    def build_observability_toolset(self, *, service_name: str = "") -> Any:
+        """Build the observability toolset. Override in subclass."""
+        raise NotImplementedError
+
+    def build_support_search_toolset(self) -> Any:
+        """Build the support search toolset. Override in subclass."""
+        raise NotImplementedError
+
+    def build_ticket_triage_toolset(self) -> Any:
+        """Build the ticket triage toolset. Override in subclass."""
+        raise NotImplementedError
 
 
-def get_config(config: Configuration | None = None) -> Configuration:
+_CONFIG_CLASS_PATH = "sentinel.plugins.config"
+_CONFIG_CLASS_NAME = "CommonConfiguration"
+
+_config: BaseConfiguration | None = None
+
+
+def _build_default_config() -> BaseConfiguration:
+    """
+    Build a ``CommonConfiguration`` via importlib.
+
+    Dynamically imports the concrete class to avoid a static dependency
+    from the ``config`` layer to the ``plugins`` layer.
+    """
+    module = importlib.import_module(_CONFIG_CLASS_PATH)
+    kls = getattr(module, _CONFIG_CLASS_NAME)
+    instance: BaseConfiguration = kls(settings=get_settings())
+    instance.load_vendors()
+    return instance
+
+
+def get_config(config: BaseConfiguration | None = None) -> BaseConfiguration:
     """
     Return the cached application configuration.
 
-    On first call, pass a pre-built ``PluginConfiguration`` (typically via
-    ``sentinel.plugins.config.boot()``).  Subsequent calls return the
-    cached instance.
+    On first access, dynamically builds a ``CommonConfiguration`` with
+    vendor adapters loaded.  Callers that need agents should call
+    ``get_config().load_agents(agent_module=...)`` at startup.
 
-    :param config: Pre-built configuration to cache on first call.
+    :param config: Pre-built configuration to cache (used by tests).
     """
     global _config  # noqa: PLW0603
     if _config is None:
-        _config = config or Configuration(settings=get_settings())
+        if config is not None:
+            _config = config
+        else:
+            _config = _build_default_config()
     return _config

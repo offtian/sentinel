@@ -25,6 +25,7 @@ import httpx
 import streamlit as st
 
 from sentinel import bootstrap
+from sentinel import config as config_mod
 from sentinel.domain.charts import entities as chart_entities
 from sentinel.domain.search import factory as search_factory
 from sentinel.domain.sre import entities as sre_entities
@@ -34,8 +35,6 @@ from sentinel.interfaces.chat.status_update import StreamlitStatusUpdateClient
 from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.graphs import chart_generation, common, sre_investigation, support_review
 from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
-from sentinel.plugins.config import boot as boot_config
-from sentinel.plugins.config import get_plugin_config
 from sentinel.settings import get_settings
 
 
@@ -117,7 +116,7 @@ async def _classify_intent(
     trace_collector: common.TraceCollector | None = None,
 ) -> intent_router.IntentClassification:
     """Route the user message to SRE or Support via the intent router agent."""
-    cfg = get_plugin_config()
+    cfg = config_mod.get_config()
     router_agent = cfg.agent_for("intent_router")
     result = await router_agent.run(
         user_prompt=text,
@@ -176,7 +175,7 @@ async def _run_sre(
 
     reply = await sre_investigation.investigate_alert(
         alert=alert,
-        agent_for=get_plugin_config().agent_for,
+        agent_for=config_mod.get_config().agent_for,
         holmes=holmes_adapter.HolmesAdapter(enabled=get_settings().holmesgpt_enabled),
         status_update_client=status_client,
         post_to_slack=False,
@@ -231,7 +230,7 @@ async def _run_support(
 
     return await support_review.review_ticket(
         ticket=ticket,
-        agent_for=get_plugin_config().agent_for,
+        agent_for=config_mod.get_config().agent_for,
         document_searcher=search_factory.build_document_searcher(),
         ticket_searcher=search_factory.build_ticket_searcher(),
         status_update_client=status_client,
@@ -255,7 +254,7 @@ async def _run_chart_generation(
     on_status("Parsing chart request...")
     return await chart_generation.generate_chart(
         request=request,
-        agent_for=get_plugin_config().agent_for,
+        agent_for=config_mod.get_config().agent_for,
     )
 
 
@@ -916,5 +915,6 @@ def _render() -> None:
 
 
 bootstrap.initialise()
-boot_config(agent_module=agent_module)
+cfg = config_mod.get_config()
+cfg.load_agents(agent_module=agent_module)
 _render()

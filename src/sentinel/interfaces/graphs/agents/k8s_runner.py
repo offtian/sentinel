@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING, Any
 
 from sentinel.domain.sre import entities, investigation, k8s_native_agent
 from sentinel.domain.tools import kubernetes as k8s_tools
+from sentinel.domain.tools import kubernetes_toolset as k8s_toolset_mod
 from sentinel.interfaces.graphs.agents import k8s_investigator
-from sentinel.plugins.toolsets import kubernetes as k8s_toolset_mod
 
 
 if TYPE_CHECKING:
@@ -28,7 +28,7 @@ async def run_k8s_agent(
     k8s_client: k8s_tools.K8sClient | None,
     model_name: str,
     mcp_toolsets: Sequence[Any],
-    config: config_mod.Configuration | None = None,
+    config: config_mod.BaseConfiguration | None = None,
 ) -> k8s_native_agent.AgentResult:
     """
     Run the PydanticAI K8s investigator agent with toolsets.

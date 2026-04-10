@@ -23,10 +23,10 @@ from typing import TYPE_CHECKING
 from fastmcp import FastMCP
 
 from sentinel.data import db as async_db
+from sentinel.domain import skills as skills_mod
 from sentinel.interfaces.mcp.tools import documentation as doc_tools
 from sentinel.interfaces.mcp.tools import investigation as inv_tools
 from sentinel.interfaces.mcp.tools import observability as obs_tools
-from sentinel.plugins import skills as skills_mod
 from sentinel.utils import logs
 
 
@@ -175,11 +175,12 @@ if __name__ == "__main__":
     import importlib
 
     bootstrap_mod = importlib.import_module("sentinel.bootstrap")
-    plugin_config_mod = importlib.import_module("sentinel.plugins.config")
+    config_mod = importlib.import_module("sentinel.config")
     agents_mod = importlib.import_module("sentinel.interfaces.graphs.agents")
 
     bootstrap_mod.initialise()
-    config = plugin_config_mod.boot(agent_module=agents_mod)
+    config = config_mod.get_config()
+    config.load_agents(agent_module=agents_mod)
     configure(
         observability_client=config.observability_client,
         document_searcher_builder=config.build_document_searcher,

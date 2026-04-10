@@ -7,6 +7,7 @@ import fastapi
 from prometheus_client import make_asgi_app
 
 from sentinel import bootstrap, bootstrap_otel
+from sentinel import config as config_mod
 from sentinel.data import database
 from sentinel.data import db as async_db
 from sentinel.interfaces.api.routers.automations.router import router as automations_router
@@ -14,7 +15,6 @@ from sentinel.interfaces.api.routers.jobs.router import router as jobs_router
 from sentinel.interfaces.api.routers.sre.router import router as sre_router
 from sentinel.interfaces.api.routers.support.router import router as support_router
 from sentinel.interfaces.graphs import agents as agent_module
-from sentinel.plugins.config import boot as boot_config
 from sentinel.settings import get_settings
 from sentinel.utils import logs
 
@@ -22,7 +22,8 @@ from sentinel.utils import logs
 @asynccontextmanager
 async def lifespan(app: fastapi.FastAPI) -> AsyncGenerator[None]:
     bootstrap.initialise()
-    boot_config(agent_module=agent_module)
+    cfg = config_mod.get_config()
+    cfg.load_agents(agent_module=agent_module)
     bootstrap_otel.init_otel()
 
     if get_settings().database_url:

@@ -1,22 +1,14 @@
 """
-Plugin configuration: wire vendor adapters, searchers, toolsets, and agents.
+Common configuration: wire vendor adapters, searchers, toolsets, and agents.
 
-``PluginConfiguration`` inherits from the lightweight base
-``sentinel.config.Configuration`` and adds all domain/plugin integration.
-It is the **central truth** for how domain services and plugins are
-composed at runtime.
+``CommonConfiguration`` inherits from the lightweight base
+``sentinel.config.BaseConfiguration`` and adds all domain/plugin
+integration.  It is the **central truth** for how domain services
+and plugins are composed at runtime.
 
-Startup entry-points call ``boot()`` to create, wire, and cache the
-full configuration.  The resulting instance is retrievable from any
-layer via ``sentinel.config.get_config()``.
-
-Usage::
-
-    from sentinel.interfaces.graphs import agents
-    from sentinel.plugins.config import boot
-
-    config = boot(agent_module=agents)
-    holmes = config.build_holmes_adapter()
+``sentinel.config.get_config()`` auto-creates a ``CommonConfiguration``
+via importlib on first access, so callers never need to import this
+module directly.
 """
 
 from __future__ import annotations
@@ -28,7 +20,7 @@ from pydantic_ai.mcp import MCPServerSSE
 from pydantic_ai.toolsets import FunctionToolset
 
 from sentinel import config as base_config_mod
-from sentinel.config import Configuration, get_config
+from sentinel.config import BaseConfiguration
 from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
 from sentinel.domain.search import factory as search_factory
 from sentinel.domain.search import searcher
@@ -44,18 +36,17 @@ from sentinel.domain.vendor_adapters.pagerduty import PagerDutyClient
 from sentinel.plugins.toolsets import documentation as doc_toolsets
 from sentinel.plugins.toolsets import mcp as mcp_toolset_mod
 from sentinel.plugins.toolsets import observability as obs_toolsets
-from sentinel.settings import get_settings
 from sentinel.utils import logs
 
 
 logger = logs.get_logger()
 
 
-class PluginConfiguration(Configuration):
+class CommonConfiguration(BaseConfiguration):
     """
     Full application configuration with domain and plugin wiring.
 
-    Extends the lightweight base ``Configuration`` with vendor adapters,
+    Extends the lightweight base ``BaseConfiguration`` with vendor adapters,
     search infrastructure, toolset builders, and agent loading.
     """
 
@@ -176,9 +167,9 @@ class PluginConfiguration(Configuration):
 
         :param agent_module: The ``sentinel.interfaces.graphs.agents``
             module (or a compatible stub for testing).
-        :raises sentinel.plugins.skills.SkillNotFoundError: if any
+        :raises sentinel.domain.skills.SkillNotFoundError: if any
             ``SKILLS_BY_AGENT`` entry names a skill that is not installed
-            on disk under ``src/sentinel/plugins/skills/``.
+            on disk under ``src/sentinel/domain/skills/``.
         """
         agents = {
             "alert_classifier": agent_module.alert_classifier.build_agent(
@@ -267,40 +258,3 @@ class PluginConfiguration(Configuration):
         return doc_toolsets.build_ticket_triage_toolset(
             ticket_searcher=self.build_ticket_searcher(),
         )
-
-
-def get_plugin_config() -> PluginConfiguration:
-    """
-    Return the cached ``PluginConfiguration``.
-
-    A typed convenience wrapper around ``get_config()`` for callers that
-    need access to vendor adapters, toolset builders, or other
-    ``PluginConfiguration``-specific methods.
-
-    :raises RuntimeError: if ``boot()`` has not been called yet.
-    """
-    config = get_config()
-    if not isinstance(config, PluginConfiguration):
-        msg = "boot() must be called before get_plugin_config()"
-        raise TypeError(msg)
-    return config
-
-
-def boot(*, agent_module: Any = None) -> PluginConfiguration:
-    """
-    Create, wire, and cache the full application configuration.
-
-    Builds a ``PluginConfiguration``, loads vendor adapters, optionally
-    loads agents, and caches the result via ``get_config()``.  Subsequent
-    calls to ``get_config()`` return the same instance.
-
-    :param agent_module: The ``sentinel.interfaces.graphs.agents`` module.
-        When provided, agents are built and registered immediately.
-    """
-    cfg = PluginConfiguration(settings=get_settings())
-    cfg.load_vendors()
-    if agent_module is not None:
-        cfg.load_agents(agent_module=agent_module)
-    config = get_config(config=cfg)
-    logger.info("Plugin configuration booted")
-    return config  # type: ignore[return-value]

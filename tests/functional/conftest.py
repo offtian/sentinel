@@ -31,7 +31,7 @@ def _make_fake_agent(fake_run: Any) -> mock.MagicMock:
 
 def _build_fake_config(agent_overrides: dict[str, Any]) -> mock.MagicMock:
     """
-    Build a mock Configuration whose ``agent_for()`` returns fake agents.
+    Build a mock config whose ``agent_for()`` returns fake agents.
 
     Any agent name not in ``agent_overrides`` returns a default MagicMock.
     """

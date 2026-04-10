@@ -15,7 +15,7 @@ class TestBuildK8sInvestigationAdapterMcpWiring:
         test_settings.mcp_servers = '[{"name": "kubectl", "url": "http://localhost:9090"}]'
         test_settings.k8s_mcp_server_url = ""
 
-        cfg = plugin_config_mod.PluginConfiguration(settings=test_settings)
+        cfg = plugin_config_mod.CommonConfiguration(settings=test_settings)
         stub_runner = mock.AsyncMock()
 
         # When building the K8s adapter
@@ -33,7 +33,7 @@ class TestBuildK8sInvestigationAdapterMcpWiring:
         test_settings.mcp_servers = '[{"name": "kubectl", "url": "http://localhost:9090"}]'
         test_settings.k8s_mcp_server_url = "http://localhost:9091"
 
-        cfg = plugin_config_mod.PluginConfiguration(settings=test_settings)
+        cfg = plugin_config_mod.CommonConfiguration(settings=test_settings)
         stub_runner = mock.AsyncMock()
 
         # When building the K8s adapter
@@ -51,7 +51,7 @@ class TestBuildK8sInvestigationAdapterMcpWiring:
         test_settings.mcp_servers = ""
         test_settings.k8s_mcp_server_url = ""
 
-        cfg = plugin_config_mod.PluginConfiguration(settings=test_settings)
+        cfg = plugin_config_mod.CommonConfiguration(settings=test_settings)
         stub_runner = mock.AsyncMock()
 
         # When building the K8s adapter
