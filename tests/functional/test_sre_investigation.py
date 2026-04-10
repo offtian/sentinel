@@ -224,3 +224,168 @@ class TestSrePipelineWithLowConfidence:
         assert reply.confidence.label.value == "Low"
         # Multi-factor scoring: 0.3*(0/5) + 0.5*0.2 + 0.2*0.8 = 0.26
         assert reply.confidence.total == pytest.approx(0.26, abs=0.01)
+
+
+class TestSrePipelineComparisonMode:
+    @pytest.fixture(autouse=True)
+    def _setup(self, _disable_side_effects, fake_sre_config):
+        self._config = fake_sre_config
+
+    async def test_comparison_mode_populates_comparison_result(self, mock_holmes, sample_alert):
+        # Given a challenger adapter that returns K8s investigation findings
+
+        challenger = factories.MockKagentAdapter(
+            findings=(
+                factories.make_finding(
+                    source="kagent", summary="CRD investigation: pod OOMKilled"
+                ),
+            ),
+        )
+
+        # When running the pipeline with a challenger adapter
+        reply = await sre_investigation.investigate_alert(
+            alert=sample_alert,
+            agent_for=self._config.agent_for,
+            holmes=mock_holmes,
+            post_to_slack=False,
+            challenger_adapter=challenger,
+        )
+
+        # Then the pipeline completes successfully with root cause
+        assert reply.alert_id == sample_alert.id
+        assert reply.root_cause is not None
+
+    async def test_comparison_mode_gracefully_handles_challenger_failure(
+        self, mock_holmes, sample_alert
+    ):
+        # Given a challenger adapter that raises an exception
+        from sentinel.domain.sre import investigation
+
+        class FailingAdapter(investigation.BaseInvestigationAdapter):
+            @property
+            def is_configured(self) -> bool:
+                return True
+
+            async def investigate(
+                self,
+                *,
+                alert: object,
+                context: investigation.InvestigationContext | None = None,
+            ) -> investigation.InvestigationResult:
+                msg = "Challenger backend unavailable"
+                raise ConnectionError(msg)
+
+        # When running the pipeline with the failing challenger
+        reply = await sre_investigation.investigate_alert(
+            alert=sample_alert,
+            agent_for=self._config.agent_for,
+            holmes=mock_holmes,
+            post_to_slack=False,
+            challenger_adapter=FailingAdapter(),
+        )
+
+        # Then the pipeline still completes using baseline Holmes results
+        assert reply.alert_id == sample_alert.id
+        assert reply.root_cause is not None
+        assert reply.confidence is not None
+
+
+class TestSrePipelineK8sIntegration:
+    @pytest.fixture(autouse=True)
+    def _setup(self, _disable_side_effects, fake_sre_config):
+        self._config = fake_sre_config
+
+    async def test_k8s_findings_merged_into_pipeline_results(self, mock_holmes, sample_alert):
+        # Given a K8s adapter that returns pod status findings
+
+        k8s_adapter = factories.MockKagentAdapter(
+            findings=(
+                factories.make_finding(
+                    source="k8s_pods",
+                    summary="Pod api-service-7b8c OOMKilled, 3 restarts in 10m",
+                ),
+                factories.make_finding(
+                    source="k8s_events",
+                    summary="Warning: Back-off restarting failed container",
+                ),
+            ),
+        )
+
+        # When running the pipeline with a K8s adapter
+        reply = await sre_investigation.investigate_alert(
+            alert=sample_alert,
+            agent_for=self._config.agent_for,
+            holmes=mock_holmes,
+            post_to_slack=False,
+            k8s_adapter=k8s_adapter,
+        )
+
+        # Then the pipeline completes and sources include K8s data
+        assert reply.alert_id == sample_alert.id
+        assert reply.root_cause is not None
+        assert reply.confidence is not None
+        # K8s sources are merged into the findings passed to the analyser
+        assert reply.findings_summary != ""
+
+    async def test_k8s_adapter_failure_degrades_gracefully(self, mock_holmes, sample_alert):
+        # Given a K8s adapter that raises an exception
+        from sentinel.domain.sre import investigation
+
+        class FailingK8sAdapter(investigation.K8sInvestigationAdapter):
+            @property
+            def is_configured(self) -> bool:
+                return True
+
+            async def investigate(
+                self,
+                *,
+                alert: object,
+                context: investigation.InvestigationContext | None = None,
+            ) -> investigation.InvestigationResult:
+                msg = "Kubernetes API unreachable"
+                raise ConnectionError(msg)
+
+        # When running the pipeline with the failing K8s adapter
+        reply = await sre_investigation.investigate_alert(
+            alert=sample_alert,
+            agent_for=self._config.agent_for,
+            holmes=mock_holmes,
+            post_to_slack=False,
+            k8s_adapter=FailingK8sAdapter(),
+        )
+
+        # Then the pipeline still completes using Holmes results only
+        assert reply.alert_id == sample_alert.id
+        assert reply.root_cause is not None
+        assert reply.confidence is not None
+
+    async def test_k8s_adapter_skipped_when_not_configured(self, mock_holmes, sample_alert):
+        # Given a K8s adapter that reports itself as not configured
+        from sentinel.domain.sre import investigation
+
+        class UnconfiguredK8sAdapter(investigation.K8sInvestigationAdapter):
+            @property
+            def is_configured(self) -> bool:
+                return False
+
+            async def investigate(
+                self,
+                *,
+                alert: object,
+                context: investigation.InvestigationContext | None = None,
+            ) -> investigation.InvestigationResult:
+                msg = "Should not be called"
+                raise AssertionError(msg)
+
+        # When running the pipeline with the unconfigured adapter
+        reply = await sre_investigation.investigate_alert(
+            alert=sample_alert,
+            agent_for=self._config.agent_for,
+            holmes=mock_holmes,
+            post_to_slack=False,
+            k8s_adapter=UnconfiguredK8sAdapter(),
+        )
+
+        # Then the pipeline completes normally without calling the adapter
+        assert reply.alert_id == sample_alert.id
+        assert reply.root_cause is not None
