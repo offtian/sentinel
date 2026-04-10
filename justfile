@@ -117,6 +117,10 @@ downgrade-db-migration:
 docker-build:
     docker build -t sentinel:latest .
 
+# Prune Docker to free disk space (volumes, images, containers, build cache)
+docker-prune:
+    docker system prune --all --volumes --force
+
 # Start Docker Compose stack
 docker-compose-up:
     docker compose up -d
