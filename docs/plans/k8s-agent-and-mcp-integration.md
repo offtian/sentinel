@@ -331,7 +331,7 @@ The local testing chat app (`interfaces/chat/app.py`) gains:
 - [x] Step 32: Add `mcp-deployment.yaml` and `mcp-service.yaml` templates
 - [x] Step 33: Update `values.yaml` with `k8sAgent`, `kagent`, `mcpServer` blocks
 - [x] Step 34: Update `networkpolicy.yaml` with K8s API, kagent, MCP egress rules
-- [ ] Step 35: Update documentation (`docs/prd.md`, `docs/architecture.md`, `docs/claude-plan.md`)
+- [ ] Step 35: Update documentation (`docs/prd.md`, `docs/architecture.md`, `docs/plans/INDEX.md`)
 
 ### Phase G: Streamlit Chat App
 - [x] Step 36: Add investigation backend selector to sidebar (Holmes / Native K8s / Kagent / Both)

@@ -155,18 +155,16 @@ Documents are organised by audience and purpose. Review in this order for onboar
 | Priority | Document | Audience | Purpose |
 |----------|----------|----------|---------|
 | 1 | **This README** | Everyone | Project overview, quick start, API surface |
-| 2 | [Architecture](docs/architecture.md) | Engineers | Layer diagram, pipeline flows, vendor adapters, deployment, database schema |
+| 2 | [Architecture](docs/architecture.md) | Engineers | Layer diagram, pipeline flows, vendor adapters, decisions, capability plane |
 | 3 | [PRD](docs/prd.md) | Product + Engineering | Requirements, acceptance criteria checkboxes (canonical status tracker) |
-| 4 | [Claude Plan](docs/claude-plan.md) | AI agents | Architecture decisions, capability plane roadmap, operational context |
+| 4 | [Plan Index](docs/plans/INDEX.md) | Engineering | Status of all implementation plans at a glance |
 | 5 | [AGENTS.md](AGENTS.md) | AI agents | Coding conventions, testing rules, naming patterns |
 | 6 | [CLAUDE.md](CLAUDE.md) | AI agents | Essential commands, gotchas, documentation workflow |
-| 7 | [Plans](docs/plans/) | Engineering | Per-feature implementation plans with step-by-step checklists |
 
 **Ownership rules:**
-- **Status tracking** lives only in `docs/prd.md` (acceptance criteria checkboxes)
-- **Architecture details** live in `docs/architecture.md` — other docs link here, not duplicate
-- **Decisions and roadmap** live in `docs/claude-plan.md` — why we chose X, what's next
-- **`SENTINEL_ARCHITECTURE_REVIEW.md`** is a frozen historical snapshot — never update
+- **Status tracking** lives only in `docs/prd.md` (acceptance criteria) and `docs/plans/INDEX.md` (plan progress)
+- **Architecture, decisions, and roadmap** live in `docs/architecture.md` — other docs link here, not duplicate
+- **`docs/reviews/*`** are frozen historical snapshots — never update
 
 ## License
 

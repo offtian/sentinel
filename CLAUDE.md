@@ -52,8 +52,8 @@ After completing a fix, feature, or refactor — commit automatically without as
 ### Source of truth
 
 - **Requirements & status** — `docs/prd.md` (acceptance criteria checkboxes are the canonical tracker)
-- **Operational context** — `docs/claude-plan.md` (architecture decisions, repo structure, gotchas)
-- **Architecture** — `docs/architecture.md` (design principles, layer diagram, pipeline flows)
+- **Architecture** — `docs/architecture.md` (design principles, layer diagram, pipeline flows, decisions, capability plane)
+- **Plan status** — `docs/plans/INDEX.md` (read this first, not individual plans)
 - **Architecture reviews** — `docs/reviews/` (frozen historical snapshots, do not update)
 
 ### Plan and review locations (overrides superpowers defaults)
@@ -83,4 +83,4 @@ After implementing ANY change that resolves a requirement or changes architectur
 ### What NOT to update
 
 - `docs/reviews/*` — frozen historical snapshots
-- Status tables in `docs/claude-plan.md` — status lives only in `docs/prd.md`
+- Status lives only in `docs/prd.md` (acceptance criteria) and `docs/plans/INDEX.md` (plan progress)

@@ -157,7 +157,7 @@ injection is kept as a second-layer mechanism on top of configured static skills
 - [ ] **Step 28: Graph consumption** — update `sre_investigation.py`, `support_review.py`, `chart_generation.py` to read agents off `cfg.agent_for(name)` instead of importing `<agent_module>.agent` directly. Drop the `classifier_model` / `analyser_model` / `reviewer_model` / `drafter_model` / `chart_parser_model` / `chart_generator_model` fields from each graph's `Dependencies` dataclass (models now live on the pre-built agent). Add a `config: Configuration` field to each graph `Dependencies`. Update every functional test that patches `<module>.agent` or passes `*_model` kwargs. This is the breaking change for the functional test suite. **Not yet executed — awaiting user sign-off on blast radius.**
 - [ ] **Step 29: Remove module-level `agent = build_agent()` fallback** from all 8 agent modules once graph consumption has moved over and nothing imports the module-level singleton any more.
 - [ ] **Step 30: Remove the import-time `append_skills_to_prompt` / `render_skills_section` wiring** from agent modules (the old category-literal wiring) — these become dead code once `compose_system_prompt` via config owns all static skill composition.
-- [ ] **Step 31: Docs** — sync `docs/claude-plan.md` and PRD with the config-driven model; update `Outcome` section here.
+- [ ] **Step 31: Docs** — sync PRD and `docs/plans/INDEX.md` with the config-driven model; update `Outcome` section here.
 
 ## Test Plan
 

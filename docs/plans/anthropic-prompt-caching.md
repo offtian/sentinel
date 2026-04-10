@@ -115,7 +115,7 @@ def load_system_prompt(template_name: str) -> PromptHandle: ...
   - Second test case: OpenAI model → no cache_control
   Commit: `test: assert Anthropic cache_control markers reach LiteLLM for alert classifier`
 
-- [ ] **Step 10: Documentation sweep** — Tick PRD §1 and §2 boxes. Cross-reference this plan in `claude-plan.md` "Prompt caching" subsection. Commit: `docs: mark Anthropic prompt caching slice complete`
+- [ ] **Step 10: Documentation sweep** — Tick PRD §1 and §2 boxes. Update `docs/plans/INDEX.md` status. Commit: `docs: mark Anthropic prompt caching slice complete`
 
 - [ ] **Step 11: Full gate** — `just test && just lint`. Address import-linter violations.
 

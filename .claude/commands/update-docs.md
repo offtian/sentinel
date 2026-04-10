@@ -29,15 +29,15 @@ Wait for user confirmation before making any changes.
 For each approved suggestion:
 1. Check off the criterion in `docs/prd.md` (change `- [ ]` to `- [x]`)
 2. If the change affects architecture (new layers, new patterns, new integrations), update `docs/architecture.md`
-3. If `docs/claude-plan.md` references the topic, verify the operational context is still accurate
+3. If a plan in `docs/plans/` was completed, update its status and move it to the Complete section in `docs/plans/INDEX.md`
 
 ## Step 6: Check for stale content
 
-Scan `docs/claude-plan.md` for any references that may be outdated based on recent changes (renamed files, moved modules, changed patterns). Flag these for the user.
+Scan `docs/plans/INDEX.md` for any plan status that may be outdated based on recent changes. Flag these for the user.
 
 ## Rules
 
-- NEVER update `SENTINEL_ARCHITECTURE_REVIEW.md` — it is a frozen historical document
+- NEVER update `docs/reviews/*` — these are frozen historical documents
 - Status tracking lives ONLY in `docs/prd.md` acceptance criteria checkboxes
-- `docs/claude-plan.md` contains operational context, not status — only update if facts changed
+- Plan progress tracking lives in `docs/plans/INDEX.md`
 - Be conservative: only suggest checking off criteria with clear evidence
