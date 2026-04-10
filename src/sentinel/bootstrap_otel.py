@@ -11,6 +11,7 @@ All failures are swallowed and logged — metrics must never block startup.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from opentelemetry import metrics as otel_metrics
@@ -28,6 +29,7 @@ from sentinel.utils import metrics as sentinel_metrics
 
 
 _initialised = False
+_traces_initialised = False
 
 
 def init_otel() -> None:
@@ -84,3 +86,45 @@ def instrument_sqlalchemy(engine: Any) -> None:
         SQLAlchemyInstrumentor().instrument(engine=engine)
     except Exception as exc:
         logs.log_exception(exc, params={"step": "instrument_sqlalchemy"})
+
+
+def init_traces() -> None:
+    """
+    Initialise OpenTelemetry traces via Logfire SDK.
+
+    Configure Logfire with ``send_to_logfire=False`` so spans export to the
+    OTLP endpoint (Tempo) specified by ``otel_traces_endpoint`` instead of
+    Logfire cloud.  PydanticAI agents with ``instrument=True`` then emit
+    enriched spans automatically.
+
+    Idempotent and exception-safe.
+    """
+    global _traces_initialised  # noqa: PLW0603
+    try:
+        settings = get_settings()
+        if not settings.otel_traces_enabled or not settings.otel_traces_endpoint:
+            logs.log_event("otel.traces.disabled")
+            return
+        if _traces_initialised:
+            return
+
+        import logfire
+
+        os.environ.setdefault("OTEL_EXPORTER_OTLP_ENDPOINT", settings.otel_traces_endpoint)
+
+        logfire.configure(
+            send_to_logfire=False,
+            service_name=settings.otel_service_name,
+        )
+
+        _traces_initialised = True
+        logs.log_event(
+            "otel.traces.initialised",
+            params={
+                "backend": "logfire-sdk",
+                "endpoint": settings.otel_traces_endpoint,
+                "service": settings.otel_service_name,
+            },
+        )
+    except Exception as exc:
+        logs.log_exception(exc, params={"step": "init_traces"})
