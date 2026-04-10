@@ -24,7 +24,7 @@ class TestSupportReviewPipeline:
         # When running the full support review pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
-            config=self._config,
+            agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
         )
@@ -43,7 +43,7 @@ class TestSupportReviewPipeline:
         # When running the review pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
-            config=self._config,
+            agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
         )
@@ -58,7 +58,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
-            config=self._config,
+            agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
         )
@@ -71,7 +71,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
-            config=self._config,
+            agent_for=self._config.agent_for,
             document_searcher=None,
             ticket_searcher=None,
         )
@@ -86,7 +86,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
-            config=self._config,
+            agent_for=self._config.agent_for,
             document_searcher=EmptyDocumentSearcher(),
             ticket_searcher=EmptyPastTicketSearcher(),
         )
@@ -100,7 +100,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
-            config=self._config,
+            agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=None,
         )
@@ -124,7 +124,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=billing_ticket,
-            config=self._config,
+            agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
         )

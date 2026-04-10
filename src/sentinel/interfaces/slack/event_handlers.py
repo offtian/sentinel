@@ -6,7 +6,6 @@ from typing import Any
 
 from slack_bolt.context.ack.async_ack import AsyncAck
 
-from sentinel.config import get_config
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre.holmes_adapter import HolmesAdapter
 from sentinel.domain.support import entities as support_entities
@@ -14,6 +13,7 @@ from sentinel.interfaces.graphs import common, sre_investigation, support_review
 from sentinel.interfaces.graphs.agents import intent_router
 from sentinel.interfaces.slack.app import app
 from sentinel.interfaces.slack.status_update import SlackStatusUpdateClient
+from sentinel.plugins.config import get_plugin_config
 from sentinel.settings import get_settings
 from sentinel.utils import logs
 
@@ -25,7 +25,7 @@ from sentinel.utils import logs
 
 async def _classify_intent(text: str) -> intent_router.Intent:
     """Route user message to SRE or Support via the intent router agent."""
-    cfg = get_config()
+    cfg = get_plugin_config()
     router_agent = cfg.agent_for("intent_router")
     result = await router_agent.run(
         user_prompt=text,
@@ -173,7 +173,7 @@ async def _run_sre(
 
     reply = await sre_investigation.investigate_alert(
         alert=alert,
-        config=get_config(),
+        agent_for=get_plugin_config().agent_for,
         holmes=HolmesAdapter(enabled=get_settings().holmesgpt_enabled),
         status_update_client=status,
         post_to_slack=False,  # we post directly in this thread instead
@@ -213,10 +213,10 @@ async def _run_support(
         raw_payload={"slack_text": text, "user_id": user_id},
     )
 
-    cfg = get_config()
+    cfg = get_plugin_config()
     reply = await support_review.review_ticket(
         ticket=ticket,
-        config=cfg,
+        agent_for=cfg.agent_for,
         document_searcher=cfg.build_document_searcher(),
         ticket_searcher=cfg.build_ticket_searcher(),
         status_update_client=status,

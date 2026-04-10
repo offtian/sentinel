@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import Any
 
 from sentinel.application.charts import commit as chart_commit
 from sentinel.domain.charts import confidence as chart_confidence
@@ -23,26 +24,22 @@ from sentinel.interfaces.graphs.agents import chart_generator, chart_request_par
 from sentinel.utils import logs
 
 
-if TYPE_CHECKING:
-    from sentinel import config as config_mod
-
-
 logger = logs.get_logger()
 
 
 async def _parse_request(
     *,
     request: entities.ChartRequest,
-    config: config_mod.Configuration,
+    agent_for: Callable[[str], Any],
 ) -> entities.ChartSpec:
     """
     Run the chart request parser agent.
 
     :param request: The raw chart request from the user.
-    :param config: Application configuration with pre-built agents.
+    :param agent_for: Callable that returns a pre-built agent by name.
     :returns: A structured ChartSpec extracted from the request.
     """
-    parser_agent = config.agent_for("chart_request_parser")
+    parser_agent = agent_for("chart_request_parser")
     result = await parser_agent.run(
         user_prompt=request.raw_message,
         deps=chart_request_parser.Dependencies(
@@ -69,7 +66,7 @@ async def _generate_chart_files(
     *,
     spec: entities.ChartSpec,
     policy: entities.TeamPolicy,
-    config: config_mod.Configuration,
+    agent_for: Callable[[str], Any],
     error_context: str = "",
 ) -> tuple[entities.GeneratedFile, ...]:
     """
@@ -77,7 +74,7 @@ async def _generate_chart_files(
 
     :param spec: The merged chart specification.
     :param policy: The team's policy constraints.
-    :param config: Application configuration with pre-built agents.
+    :param agent_for: Callable that returns a pre-built agent by name.
     :param error_context: Errors from a previous attempt for self-heal.
     :returns: A tuple of generated chart files.
     """
@@ -90,7 +87,7 @@ async def _generate_chart_files(
             "Every file must be self-contained and pass helm template + kubeconform."
         )
 
-    generator_agent = config.agent_for("chart_generator")
+    generator_agent = agent_for("chart_generator")
     result = await generator_agent.run(
         user_prompt=user_prompt,
         deps=chart_generator.Dependencies(
@@ -143,20 +140,20 @@ def _make_reply(
 async def _parse_and_load_policy(
     *,
     request: entities.ChartRequest,
-    config: config_mod.Configuration,
+    agent_for: Callable[[str], Any],
     timings: list[pipeline_types.ChartStepTiming],
 ) -> pipeline_types.ChartGenerationReply | tuple[entities.ChartSpec, entities.TeamPolicy]:
     """
     Run request parsing and policy loading concurrently.
 
     :param request: The raw chart request from the user.
-    :param config: Application configuration with pre-built agents.
+    :param agent_for: Callable that returns a pre-built agent by name.
     :param timings: Mutable list to append step timings to.
     :returns: A (spec, policy) tuple on success, or an early-exit reply on failure.
     """
     step_start = time.monotonic()
     parse_result, policy_result = await asyncio.gather(
-        _parse_request(request=request, config=config),
+        _parse_request(request=request, agent_for=agent_for),
         _load_policy(team=request.team),
         return_exceptions=True,
     )
@@ -201,7 +198,7 @@ async def _generate_and_validate_loop(
     spec: entities.ChartSpec,
     policy: entities.TeamPolicy,
     violations: tuple[entities.PolicyViolation, ...],
-    config: config_mod.Configuration,
+    agent_for: Callable[[str], Any],
     max_retries: int,
     timings: list[pipeline_types.ChartStepTiming],
 ) -> tuple[entities.ChartOutput | None, entities.ValidationResult | None, int, str]:
@@ -221,7 +218,7 @@ async def _generate_and_validate_loop(
             files = await _generate_chart_files(
                 spec=spec,
                 policy=policy,
-                config=config,
+                agent_for=agent_for,
                 error_context=error_context,
             )
         except Exception as exc:
@@ -278,26 +275,28 @@ async def _generate_and_validate_loop(
 async def generate_chart(
     *,
     request: entities.ChartRequest,
-    config: config_mod.Configuration,
-    max_retries: int | None = None,
+    agent_for: Callable[[str], Any],
+    chart_parser_model: str = "",
+    chart_generator_model: str = "",
+    max_retries: int = 2,
 ) -> pipeline_types.ChartGenerationReply:
     """
     Run the full chart generation pipeline.
 
     :param request: The raw chart request from the user.
-    :param config: Application configuration with pre-built agents.
-    :param max_retries: Override for K8S_CHART_MAX_RETRIES.
+    :param agent_for: Callable that returns a pre-built agent by name.
+    :param chart_parser_model: Model name for the parser (used in reply metadata).
+    :param chart_generator_model: Model name for the generator (used in reply metadata).
+    :param max_retries: Maximum generation retry attempts on validation failure.
     :returns: A ChartGenerationReply with results.
     """
     pipeline_start = time.monotonic()
     timings: list[pipeline_types.ChartStepTiming] = []
-    if max_retries is None:
-        max_retries = config.chart_max_retries
 
     # Steps 1+2: Parse request and load policy concurrently
     result = await _parse_and_load_policy(
         request=request,
-        config=config,
+        agent_for=agent_for,
         timings=timings,
     )
     if isinstance(result, pipeline_types.ChartGenerationReply):
@@ -322,7 +321,7 @@ async def generate_chart(
         spec=merged_spec,
         policy=policy,
         violations=violations,
-        config=config,
+        agent_for=agent_for,
         max_retries=max_retries,
         timings=timings,
     )
@@ -332,8 +331,8 @@ async def generate_chart(
             service_name=spec.service_name,
             pipeline_start=pipeline_start,
             timings=timings,
-            parser_model=config.chart_parser_model,
-            generator_model=config.chart_generator_model,
+            parser_model=chart_parser_model,
+            generator_model=chart_generator_model,
             validation_passed=False,
             policy_violations=len(violations),
             generation_attempts=generation_attempts,
@@ -378,8 +377,8 @@ async def generate_chart(
         service_name=spec.service_name,
         pipeline_start=pipeline_start,
         timings=timings,
-        parser_model=config.chart_parser_model,
-        generator_model=config.chart_generator_model,
+        parser_model=chart_parser_model,
+        generator_model=chart_generator_model,
         files_generated=len(chart_output.files),
         validation_passed=True,
         policy_violations=len(violations),

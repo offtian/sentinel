@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
@@ -17,14 +17,10 @@ from sentinel.interfaces.graphs.agents import response_drafter, ticket_reviewer
 from sentinel.utils import logs, metrics
 
 
-if TYPE_CHECKING:
-    from sentinel import config as config_mod
-
-
 @dataclasses.dataclass
 class Dependencies:
     status_update_client: common.StatusUpdateClient
-    config: config_mod.Configuration
+    agent_for: Callable[[str], Any]
     document_searcher: searcher.BaseDocumentSearcher | None = None
     ticket_searcher: searcher.BasePastTicketSearcher | None = None
     persist_fn: common.PersistTicketReviewFn | None = None
@@ -50,7 +46,7 @@ class ClassifyTicket(BaseNode[State, Dependencies, common.SupportReply]):
             await ctx.deps.status_update_client.update_status("Reviewing ticket...")
 
             try:
-                reviewer_agent = ctx.deps.config.agent_for("ticket_reviewer")
+                reviewer_agent = ctx.deps.agent_for("ticket_reviewer")
                 result = await reviewer_agent.run(
                     user_prompt=f"Ticket: {ctx.state.ticket.summary}\n\n{ctx.state.ticket.description}",
                     deps=ticket_reviewer.Dependencies(
@@ -197,7 +193,7 @@ class DraftResponse(BaseNode[State, Dependencies, common.SupportReply]):
             await ctx.deps.status_update_client.update_status("Drafting response...")
 
             try:
-                drafter_agent = ctx.deps.config.agent_for("response_drafter")
+                drafter_agent = ctx.deps.agent_for("response_drafter")
                 result = await drafter_agent.run(
                     user_prompt=f"Draft a response for: {ctx.state.ticket.summary}",
                     deps=response_drafter.Dependencies(
@@ -322,7 +318,7 @@ class DetermineConfidence(BaseNode[State, Dependencies, common.SupportReply]):
 async def review_ticket(
     ticket: support_entities.Ticket,
     *,
-    config: config_mod.Configuration,
+    agent_for: Callable[[str], Any],
     document_searcher: searcher.BaseDocumentSearcher | None = None,
     ticket_searcher: searcher.BasePastTicketSearcher | None = None,
     status_update_client: common.StatusUpdateClient | None = None,
@@ -339,7 +335,7 @@ async def review_ticket(
     state = State(ticket=ticket)
     dependencies = Dependencies(
         status_update_client=status_update_client or common.NoOpStatusUpdateClient(),
-        config=config,
+        agent_for=agent_for,
         document_searcher=document_searcher,
         ticket_searcher=ticket_searcher,
         persist_fn=persist_fn,

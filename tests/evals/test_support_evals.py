@@ -52,7 +52,7 @@ class TestSupportGoldenCases:
         # When running the support review pipeline
         reply = await support_review.review_ticket(
             ticket=ticket,
-            config=fake_support_config,
+            agent_for=fake_support_config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
         )

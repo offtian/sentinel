@@ -20,7 +20,7 @@ class TestComparisonModeInPipeline:
         state.comparison_result = None
         deps = sre_investigation.Dependencies(
             status_update_client=mock.AsyncMock(),
-            config=_build_fake_config({}),
+            agent_for=_build_fake_config({}).agent_for,
             holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
             challenger_adapter=challenger,
@@ -46,7 +46,7 @@ class TestComparisonModeInPipeline:
         state.comparison_result = None
         deps = sre_investigation.Dependencies(
             status_update_client=mock.AsyncMock(),
-            config=_build_fake_config({}),
+            agent_for=_build_fake_config({}).agent_for,
             holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
         )
@@ -73,7 +73,7 @@ class TestComparisonModeInPipeline:
         state.comparison_result = None
         deps = sre_investigation.Dependencies(
             status_update_client=mock.AsyncMock(),
-            config=_build_fake_config({}),
+            agent_for=_build_fake_config({}).agent_for,
             holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
             challenger_adapter=failing_challenger,

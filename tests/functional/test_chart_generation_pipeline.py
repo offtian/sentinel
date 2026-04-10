@@ -116,7 +116,7 @@ class TestChartGenerationPipeline:
             result = asyncio.run(
                 chart_generation.generate_chart(
                     request=request,
-                    config=fake_config,
+                    agent_for=fake_config.agent_for,
                 )
             )
 
@@ -189,7 +189,7 @@ class TestChartGenerationPipeline:
             result = asyncio.run(
                 chart_generation.generate_chart(
                     request=request,
-                    config=fake_config,
+                    agent_for=fake_config.agent_for,
                     max_retries=3,
                 )
             )
@@ -220,7 +220,7 @@ class TestChartGenerationPipeline:
             result = asyncio.run(
                 chart_generation.generate_chart(
                     request=request,
-                    config=fake_config,
+                    agent_for=fake_config.agent_for,
                 )
             )
 

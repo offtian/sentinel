@@ -49,7 +49,7 @@ class TestGenerateChart:
             result = asyncio.run(
                 chart_generation.generate_chart(
                     request=request,
-                    config=fake_config,
+                    agent_for=fake_config.agent_for,
                 )
             )
 
@@ -79,7 +79,7 @@ class TestGenerateChart:
             result = asyncio.run(
                 chart_generation.generate_chart(
                     request=request,
-                    config=fake_config,
+                    agent_for=fake_config.agent_for,
                 )
             )
 

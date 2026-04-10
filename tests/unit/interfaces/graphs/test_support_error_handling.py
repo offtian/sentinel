@@ -31,7 +31,7 @@ class TestClassifyTicketErrorHandling:
         # When the pipeline runs
         result = await support_review.review_ticket(
             ticket=ticket,
-            config=config,
+            agent_for=config.agent_for,
         )
 
         # Then the reply indicates failure instead of crashing
@@ -64,7 +64,7 @@ class TestSearchDocumentationErrorHandling:
         # When the pipeline runs with a failing searcher
         result = await support_review.review_ticket(
             ticket=ticket,
-            config=config,
+            agent_for=config.agent_for,
             document_searcher=FailingSearcher(),
         )
 
@@ -92,7 +92,7 @@ class TestDraftResponseErrorHandling:
         # When the pipeline runs
         result = await support_review.review_ticket(
             ticket=ticket,
-            config=config,
+            agent_for=config.agent_for,
             document_searcher=StubDocumentSearcher(),
         )
 

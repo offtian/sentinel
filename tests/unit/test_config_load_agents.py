@@ -1,5 +1,5 @@
 """
-Unit tests for ``Configuration.load_agents`` and ``Configuration.agent_for``.
+Unit tests for ``PluginConfiguration.load_agents`` and ``Configuration.agent_for``.
 
 Covers:
 - Every pipeline agent gets built with its configured model and skills.
@@ -22,6 +22,7 @@ import pytest
 from sentinel import config as config_mod
 from sentinel import settings as settings_mod
 from sentinel.interfaces.graphs import agents
+from sentinel.plugins import config as plugin_config_mod
 from sentinel.plugins import skills as skills_mod
 
 
@@ -63,20 +64,20 @@ def stub_factories() -> dict[str, mock.MagicMock]:
         yield stubs
 
 
-def _make_config() -> config_mod.Configuration:
-    return config_mod.Configuration(settings=settings_mod.get_settings())
+def _make_config() -> plugin_config_mod.PluginConfiguration:
+    return plugin_config_mod.PluginConfiguration(settings=settings_mod.get_settings())
 
 
 class TestLoadAgents:
     def test_populates_every_expected_agent(
         self, stub_factories: dict[str, mock.MagicMock]
     ) -> None:
-        # Given a fresh Configuration and patched agent factories
+        # Given a fresh PluginConfiguration and patched agent factories
         cfg = _make_config()
 
         # When load_agents is called with an empty skill mapping
         with mock.patch.object(config_mod, "SKILLS_BY_AGENT", {}):
-            cfg.load_agents()
+            cfg.load_agents(agent_module=agents)
 
         # Then every pipeline agent name is available via agent_for
         expected = {
@@ -95,12 +96,12 @@ class TestLoadAgents:
     def test_every_factory_called_exactly_once(
         self, stub_factories: dict[str, mock.MagicMock]
     ) -> None:
-        # Given a fresh Configuration
+        # Given a fresh PluginConfiguration
         cfg = _make_config()
 
         # When load_agents is called
         with mock.patch.object(config_mod, "SKILLS_BY_AGENT", {}):
-            cfg.load_agents()
+            cfg.load_agents(agent_module=agents)
 
         # Then every agent module's build_agent was called exactly once
         for stub in stub_factories.values():
@@ -109,12 +110,12 @@ class TestLoadAgents:
     def test_factories_receive_normalised_model_identifiers(
         self, stub_factories: dict[str, mock.MagicMock]
     ) -> None:
-        # Given a fresh Configuration
+        # Given a fresh PluginConfiguration
         cfg = _make_config()
 
         # When load_agents is called
         with mock.patch.object(config_mod, "SKILLS_BY_AGENT", {}):
-            cfg.load_agents()
+            cfg.load_agents(agent_module=agents)
 
         # Then each factory received a model kwarg shaped "provider:name"
         for stub in stub_factories.values():
@@ -134,7 +135,7 @@ class TestLoadAgents:
 
         # When load_agents is called
         with mock.patch.object(config_mod, "SKILLS_BY_AGENT", skill_map):
-            cfg.load_agents()
+            cfg.load_agents(agent_module=agents)
 
         # Then the matching factories got the configured skill tuples
         assert stub_factories["alert_classifier"].call_args.kwargs["skills"] == ("skill-a",)
@@ -151,7 +152,7 @@ class TestLoadAgents:
         # Given a configuration with agents loaded
         cfg = _make_config()
         with mock.patch.object(config_mod, "SKILLS_BY_AGENT", {}):
-            cfg.load_agents()
+            cfg.load_agents(agent_module=agents)
 
         # When agent_for is called twice for the same name
         first = cfg.agent_for("alert_classifier")
@@ -166,7 +167,7 @@ class TestLoadAgents:
         # Given a configuration with agents loaded
         cfg = _make_config()
         with mock.patch.object(config_mod, "SKILLS_BY_AGENT", {}):
-            cfg.load_agents()
+            cfg.load_agents(agent_module=agents)
 
         # When agent_for is called with an unknown name
         # Then KeyError is raised and names the missing agent
@@ -183,7 +184,7 @@ class TestLoadAgents:
             cfg.agent_for("alert_classifier")
 
     def test_unknown_skill_name_raises_loudly_end_to_end(self) -> None:
-        # Given a Configuration and a typoed skill name — no factory stubs
+        # Given a PluginConfiguration and a typoed skill name — no factory stubs
         # because we want the real compose_system_prompt to run and raise
         cfg = _make_config()
         skill_map = {"alert_classifier": ("nonexistent-typoed-skill",)}
@@ -194,4 +195,4 @@ class TestLoadAgents:
             mock.patch.object(config_mod, "SKILLS_BY_AGENT", skill_map),
             pytest.raises(skills_mod.SkillNotFoundError, match="nonexistent-typoed-skill"),
         ):
-            cfg.load_agents()
+            cfg.load_agents(agent_module=agents)

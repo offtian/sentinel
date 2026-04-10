@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from collections.abc import Awaitable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import Any
 
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
@@ -21,14 +21,10 @@ from sentinel.utils import logs, metrics
 from sentinel.vendors import slack
 
 
-if TYPE_CHECKING:
-    from sentinel import config as config_mod
-
-
 @dataclasses.dataclass
 class Dependencies:
     status_update_client: common.StatusUpdateClient
-    config: config_mod.Configuration
+    agent_for: Callable[[str], Any]
     holmes: holmes_adapter.BaseHolmesAdapter
     pagerduty_client: PagerDutyClient | None = None
     post_to_slack: bool = True
@@ -63,7 +59,7 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
             await ctx.deps.status_update_client.update_status("Classifying alert...")
 
             try:
-                classifier_agent = ctx.deps.config.agent_for("alert_classifier")
+                classifier_agent = ctx.deps.agent_for("alert_classifier")
                 result = await classifier_agent.run(
                     user_prompt=f"Alert: {ctx.state.alert.title}\n\n{ctx.state.alert.description}",
                     deps=alert_classifier.Dependencies(
@@ -219,7 +215,7 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
             await ctx.deps.status_update_client.update_status("Analysing root cause...")
 
             try:
-                analyser_agent = ctx.deps.config.agent_for("root_cause_analyser")
+                analyser_agent = ctx.deps.agent_for("root_cause_analyser")
                 result = await analyser_agent.run(
                     user_prompt=f"Analyse this alert: {ctx.state.alert.title}",
                     deps=root_cause_analyser.Dependencies(
@@ -511,7 +507,7 @@ class PublishFindings(BaseNode[State, Dependencies, common.InvestigationReply]):
 async def investigate_alert(
     alert: sre_entities.Alert,
     *,
-    config: config_mod.Configuration,
+    agent_for: Callable[[str], Any],
     holmes: holmes_adapter.BaseHolmesAdapter,
     status_update_client: common.StatusUpdateClient | None = None,
     pagerduty_client: PagerDutyClient | None = None,
@@ -531,7 +527,7 @@ async def investigate_alert(
     state = State(alert=alert)
     dependencies = Dependencies(
         status_update_client=status_update_client or common.NoOpStatusUpdateClient(),
-        config=config,
+        agent_for=agent_for,
         holmes=holmes,
         pagerduty_client=pagerduty_client,
         post_to_slack=post_to_slack,

@@ -175,10 +175,11 @@ if __name__ == "__main__":
     import importlib
 
     bootstrap_mod = importlib.import_module("sentinel.bootstrap")
-    config_mod = importlib.import_module("sentinel.config")
+    plugin_config_mod = importlib.import_module("sentinel.plugins.config")
+    agents_mod = importlib.import_module("sentinel.interfaces.graphs.agents")
 
     bootstrap_mod.initialise()
-    config = config_mod.get_config()
+    config = plugin_config_mod.boot(agent_module=agents_mod)
     configure(
         observability_client=config.observability_client,
         document_searcher_builder=config.build_document_searcher,

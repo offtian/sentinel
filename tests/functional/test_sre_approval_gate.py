@@ -24,7 +24,7 @@ class TestApprovalGate:
         # When the pipeline runs (default RCA confidence is 0.85 -> total ~0.705 which is < 0.8)
         result = await sre_investigation.investigate_alert(
             alert=alert,
-            config=fake_sre_config,
+            agent_for=fake_sre_config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
             require_approval_below=0.8,
@@ -54,7 +54,7 @@ class TestApprovalGate:
         # When the pipeline runs (confidence ~0.705 which is > 0.3)
         result = await sre_investigation.investigate_alert(
             alert=alert,
-            config=fake_sre_config,
+            agent_for=fake_sre_config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
             require_approval_below=0.3,
@@ -75,7 +75,7 @@ class TestApprovalGate:
         # When the pipeline runs
         result = await sre_investigation.investigate_alert(
             alert=alert,
-            config=fake_sre_config,
+            agent_for=fake_sre_config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
             require_approval_below=0.8,
@@ -101,7 +101,7 @@ class TestApprovalGate:
         # When the pipeline runs
         result = await sre_investigation.investigate_alert(
             alert=alert,
-            config=fake_sre_config,
+            agent_for=fake_sre_config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
             require_approval_below=0.0,
