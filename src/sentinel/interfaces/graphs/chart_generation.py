@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
+
+from pydantic_ai.toolsets import AbstractToolset
 
 from sentinel.application.charts import commit as chart_commit
 from sentinel.domain.charts import confidence as chart_confidence
@@ -68,6 +70,7 @@ async def _generate_chart_files(
     policy: entities.TeamPolicy,
     agent_for: Callable[[str], Any],
     error_context: str = "",
+    chart_generator_toolsets: Sequence[AbstractToolset[object]] = (),
 ) -> tuple[entities.GeneratedFile, ...]:
     """
     Run the chart generator agent.
@@ -76,6 +79,7 @@ async def _generate_chart_files(
     :param policy: The team's policy constraints.
     :param agent_for: Callable that returns a pre-built agent by name.
     :param error_context: Errors from a previous attempt for self-heal.
+    :param chart_generator_toolsets: Toolsets injected at agent.run() time.
     :returns: A tuple of generated chart files.
     """
     user_prompt = f"Generate Helm chart for {spec.service_name}"
@@ -96,6 +100,7 @@ async def _generate_chart_files(
             spec_json=spec.model_dump_json(),
             policy_json=policy.model_dump_json(),
         ),
+        toolsets=list(chart_generator_toolsets) or None,
     )
     return result.output.files  # type: ignore[no-any-return]
 
@@ -201,6 +206,7 @@ async def _generate_and_validate_loop(
     agent_for: Callable[[str], Any],
     max_retries: int,
     timings: list[pipeline_types.ChartStepTiming],
+    chart_generator_toolsets: Sequence[AbstractToolset[object]] = (),
 ) -> tuple[entities.ChartOutput | None, entities.ValidationResult | None, int, str]:
     """
     Run the generate -> validate -> self-heal loop.
@@ -220,6 +226,7 @@ async def _generate_and_validate_loop(
                 policy=policy,
                 agent_for=agent_for,
                 error_context=error_context,
+                chart_generator_toolsets=chart_generator_toolsets,
             )
         except Exception as exc:
             logs.log_exception(
@@ -279,6 +286,7 @@ async def generate_chart(
     chart_parser_model: str = "",
     chart_generator_model: str = "",
     max_retries: int = 2,
+    chart_generator_toolsets: Sequence[AbstractToolset[object]] = (),
 ) -> pipeline_types.ChartGenerationReply:
     """
     Run the full chart generation pipeline.
@@ -324,6 +332,7 @@ async def generate_chart(
         agent_for=agent_for,
         max_retries=max_retries,
         timings=timings,
+        chart_generator_toolsets=chart_generator_toolsets,
     )
 
     if chart_output is None or validation_result is None:

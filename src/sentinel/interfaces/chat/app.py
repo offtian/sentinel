@@ -173,13 +173,18 @@ async def _run_sre(
         k8s_adapter = _build_k8s_adapter()
         k8s_result = await k8s_adapter.investigate(alert=alert)
 
+    cfg = config_mod.get_config()
+    shared_mcp = cfg.build_mcp_toolsets()
+
     reply = await sre_investigation.investigate_alert(
         alert=alert,
-        agent_for=config_mod.get_config().agent_for,
+        agent_for=cfg.agent_for,
         holmes=holmes_adapter.HolmesAdapter(enabled=get_settings().holmesgpt_enabled),
         status_update_client=status_client,
         post_to_slack=False,
         trace_collector=trace_collector,
+        classifier_toolsets=shared_mcp,
+        analyser_toolsets=shared_mcp,
     )
 
     # Stash K8s result for the UI to render alongside Holmes result
@@ -228,13 +233,18 @@ async def _run_support(
         raw_payload={"chat_text": text},
     )
 
+    cfg = config_mod.get_config()
+    shared_mcp = cfg.build_mcp_toolsets()
+
     return await support_review.review_ticket(
         ticket=ticket,
-        agent_for=config_mod.get_config().agent_for,
+        agent_for=cfg.agent_for,
         document_searcher=search_factory.build_document_searcher(),
         ticket_searcher=search_factory.build_ticket_searcher(),
         status_update_client=status_client,
         trace_collector=trace_collector,
+        reviewer_toolsets=shared_mcp,
+        drafter_toolsets=shared_mcp,
     )
 
 
@@ -252,9 +262,11 @@ async def _run_chart_generation(
     )
 
     on_status("Parsing chart request...")
+    cfg = config_mod.get_config()
     return await chart_generation.generate_chart(
         request=request,
-        agent_for=config_mod.get_config().agent_for,
+        agent_for=cfg.agent_for,
+        chart_generator_toolsets=cfg.build_mcp_toolsets(),
     )
 
 

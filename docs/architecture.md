@@ -7,6 +7,10 @@ Sentinel is an AI-powered automation platform with two core capabilities:
 1. **AI SRE** - Automatically triages and investigates production alerts from PagerDuty and Datadog, providing root cause analysis and remediation suggestions
 2. **AI Support Agent** - Automatically reviews Jira Service Desk tickets, searches documentation (Notion, Confluence, S3), and drafts response suggestions
 
+![Sentinel Architecture](images/architecture.svg)
+
+*[Edit diagram in Excalidraw](https://excalidraw.com/#json=wRNI3EjHOiZB6RasBgYXH,Rllv-zTRH2clCN2e4ED2gQ)*
+
 ## Design Principles
 
 - **Clean Architecture** - Strict layered boundaries enforced by import-linter

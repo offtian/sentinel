@@ -142,6 +142,11 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
             trace_id=et.trace_id,
         )
 
+    shared_mcp = cfg.build_mcp_toolsets()
+    observability_toolset = cfg.build_observability_toolset(
+        service_name=str(payload.get("service", "")),
+    )
+
     result = await sre_investigation.investigate_alert(
         alert=alert,
         agent_for=cfg.agent_for,
@@ -149,6 +154,8 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
         pagerduty_client=pd_client,
         persist_fn=_persist,
         trace_collector=et,
+        classifier_toolsets=shared_mcp,
+        analyser_toolsets=(observability_toolset, *shared_mcp),
     )
 
     return result.model_dump_json()
@@ -176,6 +183,8 @@ async def _run_support_review(payload: dict[str, object]) -> str:
             trace_id=et.trace_id,
         )
 
+    shared_mcp = cfg.build_mcp_toolsets()
+
     result = await support_review.review_ticket(
         ticket=ticket,
         agent_for=cfg.agent_for,
@@ -183,6 +192,8 @@ async def _run_support_review(payload: dict[str, object]) -> str:
         ticket_searcher=cfg.build_ticket_searcher(),
         persist_fn=_persist,
         trace_collector=et,
+        reviewer_toolsets=(cfg.build_ticket_triage_toolset(), *shared_mcp),
+        drafter_toolsets=(cfg.build_support_search_toolset(), *shared_mcp),
     )
 
     return result.model_dump_json()

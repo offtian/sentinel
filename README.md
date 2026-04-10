@@ -10,6 +10,10 @@ AI-powered automation platform for production operations and customer support.
 
 ## Architecture
 
+![Sentinel Architecture](docs/images/architecture.svg)
+
+*[Edit diagram in Excalidraw](https://excalidraw.com/#json=wRNI3EjHOiZB6RasBgYXH,Rllv-zTRH2clCN2e4ED2gQ)*
+
 Clean architecture with enforced layer boundaries:
 
 ```
