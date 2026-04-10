@@ -19,7 +19,7 @@ These live in the `sentinel` repository following clean architecture patterns. T
 ```
 sentinel/
 ├── src/sentinel/
-│   ├── _config.py                    # Centralised config (pydantic-settings)
+│   ├── config.py                     # Centralised config (environs + Configuration class)
 │   ├── main.py                       # Entrypoint
 │   ├── version/
 │   │   └── __init__.py
@@ -68,52 +68,20 @@ sentinel/
 │   │       └── runner.py             # Automation registry and execution
 │   │
 │   ├── domain/                       # Layer 3: Business logic
-│   │   ├── sre/
-│   │   │   ├── entities.py           # Alert, Investigation, RootCause, Remediation
-│   │   │   ├── investigation.py      # BaseInvestigationAdapter, K8sInvestigationAdapter ABCs, AuditEntry, InvestigationResult
-│   │   │   ├── holmes_adapter.py     # BaseHolmesAdapter (extends BaseInvestigationAdapter) + DirectToolsetAdapter
-│   │   │   ├── k8s_native_agent.py   # NativeK8sAgent — PydanticAI agent + K8s tools
-│   │   │   ├── kagent_adapter.py     # KagentAdapter — delegates to kagent CRDs
-│   │   │   ├── operations.py         # Investigation lifecycle management + persist_investigation
-│   │   │   └── queries.py            # fetch_investigation, fetch_by_alert_id, fetch_by_service
-│   │   ├── support/
-│   │   │   ├── entities.py           # Ticket, ResponseSuggestion, DocSource
-│   │   │   ├── operations.py         # Ticket review lifecycle + persist_ticket_review, update_review_status
-│   │   │   └── queries.py            # fetch_ticket_review, fetch_by_ticket, fetch_review_stats
-│   │   ├── confidence/               # Shared confidence scoring
-│   │   │   └── entities.py           # ConfidenceScore.from_factors(), from_total()
-│   │   ├── search/                   # Shared search abstractions
-│   │   │   └── searcher.py           # BaseDocumentSearcher, BaseMetricsSearcher
-│   │   ├── pipeline/                 # Pipeline error and state types
-│   │   │   ├── errors.py             # NodeError, PipelineNodeFailed
-│   │   │   ├── types.py              # PipelineState, GraphRunResult, shared graph types
-│   │   │   ├── operations.py         # persist/complete pipeline_run, node_execution, agent_call
-│   │   │   └── queries.py            # fetch_pipeline_run, fetch_node_executions, fetch_agent_calls
-│   │   ├── approval/                 # Human approval gate
-│   │   │   └── entities.py           # ApprovalRequest, ApprovalDecision
-│   │   ├── supervisor/               # Quality gate evaluation
-│   │   │   └── quality_gate.py       # evaluate_sre_quality(), evaluate_support_quality()
-│   │   ├── evaluation/               # Pipeline-agnostic evaluation metrics
-│   │   │   ├── metrics.py            # EvaluationMetrics (12 dimensions)
-│   │   │   ├── comparison.py         # ComparisonResult for adapter A/B testing
-│   │   │   ├── operations.py         # persist_comparison_run, persist_eval_run
-│   │   │   └── queries.py            # fetch_comparison_runs, fetch_eval_runs
-│   │   ├── audit/                    # Regulatory audit trail
-│   │   │   └── operations.py         # record_audit_entry
+│   │   ├── sre/                      # Alert, Investigation, adapters, queries, operations
+│   │   ├── support/                  # Ticket, ResponseSuggestion, queries, operations
+│   │   ├── confidence/               # ConfidenceScore.from_factors(), from_total()
+│   │   ├── search/                   # BaseDocumentSearcher, BaseMetricsSearcher
+│   │   ├── pipeline/                 # NodeError, PipelineNodeFailed, tracing ops/queries
+│   │   ├── approval/                 # ApprovalRequest, ApprovalDecision
+│   │   ├── supervisor/               # Quality gate evaluation functions
+│   │   ├── evaluation/               # EvaluationMetrics, ComparisonResult, ops/queries
+│   │   ├── audit/                    # Append-only audit trail operations
 │   │   ├── jobs/                     # Job queue domain logic
-│   │   │   ├── operations.py         # enqueue_job, claim_next_job, complete_job, fail_job
-│   │   │   └── queries.py            # fetch_job
-│   │   ├── tools/                    # Domain tool definitions
-│   │   │   ├── documentation.py      # Documentation search tool functions
-│   │   │   ├── kubernetes.py         # K8s query tool functions (pods, deployments, events, logs)
-│   │   │   └── observability.py      # Observability query tool functions
-│   │   └── vendor_adapters/          # Vendor-specific implementations
-│   │       ├── pagerduty.py          # PagerDuty API client
-│   │       ├── datadog_client.py     # Datadog API (logs, metrics, traces)
-│   │       ├── jira.py               # Jira Service Desk client
-│   │       ├── notion.py             # Notion search (S3-backed approach)
-│   │       ├── confluence.py         # Confluence REST API client
-│   │       └── s3.py                 # S3 document retrieval
+│   │   ├── skills/                   # File-based operational runbooks (SKILL.md files)
+│   │   ├── prompts/                  # Jinja2 agent system prompt templates
+│   │   ├── tools/                    # Domain tool definitions (K8s, observability, docs)
+│   │   └── vendor_adapters/          # PagerDuty, Datadog, Jira, Confluence, S3 clients
 │   │
 │   ├── evals/                        # Evaluation framework (pydantic_evals)
 │   │   ├── cases/                    # Test case definitions and golden datasets
@@ -122,21 +90,11 @@ sentinel/
 │   │   ├── reporting.py              # EvaluationReport with assertion/score averages
 │   │   └── rendering.py              # Rich console table output
 │   │
-│   ├── plugins/                      # Plugin adapters (toolsets, prompts, skills)
+│   ├── plugins/                      # Plugin adapters (toolsets, MCP client)
 │   │   ├── toolsets/                 # PydanticAI toolset wrappers
-│   │   │   ├── documentation.py      # Documentation toolset for agents
-│   │   │   ├── kubernetes.py         # K8s toolset for investigation agents
 │   │   │   ├── mcp.py                # MCP client toolset builder
-│   │   │   └── observability.py      # Observability toolset for agents
-│   │   ├── skills/                   # File-based operational runbooks
-│   │   │   ├── __init__.py           # load_skills_for(), compose_system_prompt(), all_installed_skills()
-│   │   │   ├── k8s-crashloop-runbook/SKILL.md
-│   │   │   ├── database-connection-runbook/SKILL.md
-│   │   │   ├── latency-spike-runbook/SKILL.md
-│   │   │   ├── auth-error-response/SKILL.md
-│   │   │   ├── rate-limit-response/SKILL.md
-│   │   │   └── chart-helm-best-practices/SKILL.md
-│   │   └── prompts/                  # Jinja2 agent system prompt templates
+│   │   │   └── ...                   # Documentation, K8s, observability toolsets
+│   │   └── config.py                 # CommonConfiguration plugin wiring
 │   │
 │   ├── data/                         # Layer 4: Persistence (models only)
 │   │   ├── database.py               # SQLAlchemy async engine singleton
@@ -189,16 +147,16 @@ containers = ["sentinel"]
 layers = [
     "main",
     "worker",
-    "config",
+    "plugins",
     "interfaces",
     "application",
     "evals",
-    "plugins",
     "domain",
-    "data",
     "vendors",
-    "bootstrap",
+    "bootstrap_otel | bootstrap",
     "utils",
+    "config",
+    "data",
     "settings",
     "version",
 ]
@@ -236,7 +194,7 @@ HolmesGPT SDK has a dependency conflict with pydantic-ai>=1.0.7. Rather than wai
 | FastMCP | **Adopted everywhere** — server at `interfaces/mcp/`, client builder at `plugins/toolsets/mcp.py` consumed by every pipeline agent via `Configuration.build_mcp_toolsets()` |
 | Logfire | Adopt for dev — exports PydanticAI spans via OTel; production swaps the exporter for Datadog APM OTLP |
 | Anthropic prompt caching | Adopt — wired via LiteLLM `extra_body` `cache_control` on agent system prompts |
-| Skills (file-based runbooks) | Adopt — `plugins/skills/` catalogue loaded by `plugins.skills.load_skills_for()` |
+| Skills (file-based runbooks) | Adopt — `domain/skills/` catalogue loaded by `domain.skills.load_skills_for()` |
 
 ### Quality Over Time
 
@@ -284,51 +242,49 @@ code change.
 flowchart LR
     subgraph Delivered
       B1[Skills: runbooks +<br/>response patterns<br/>config-driven per agent]
+      B2[Universal MCP injection<br/>via Configuration.build_mcp_toolsets]
     end
     subgraph Today
-      A2[K8s agent uses MCP only]
       A3[instrument=True but no exporter]
       A4[No prompt versioning]
       A5[No reproducibility snapshot]
     end
     subgraph Proposed
-      B2[All agents mount MCP toolsets<br/>via shared builder]
       B3[OTel/Logfire exporter<br/>for PydanticAI spans]
       B4[Prompt version + SHA256<br/>recorded in audit log]
       B5[Replay snapshot per pipeline run<br/>persisted in pipeline_runs]
       B6[Anthropic prompt cache markers<br/>on system prompts via LiteLLM]
     end
-    A2 --> B2
     A3 --> B3
     A4 --> B4
     A4 --> B5
 ```
 
-### Agent inventory (current vs. proposed)
+### Agent inventory
 
-| Agent | Pipeline | Toolsets today | Proposed |
+| Agent | Pipeline | Toolsets | Remaining |
 |---|---|---|---|
-| `alert_classifier.py` | SRE | none | shared MCP toolsets + category-triggered skills |
-| `root_cause_analyser.py` | SRE | `analyser_toolsets` | + shared MCP + runbook skills keyed off classifier category |
-| `k8s_investigator.py` (via `k8s_runner.py`) | SRE (K8s) | `k8s_toolset` + MCP from `MCP_SERVERS` + `K8S_MCP_SERVER_URL` | unchanged (reference implementation) |
+| `alert_classifier.py` | SRE | shared MCP toolsets | + category-triggered skills |
+| `root_cause_analyser.py` | SRE | `analyser_toolsets` + shared MCP | + runbook skills keyed off classifier category |
+| `k8s_investigator.py` (via `k8s_runner.py`) | SRE (K8s) | `k8s_toolset` + MCP from `MCP_SERVERS` + `K8S_MCP_SERVER_URL` | complete |
 | `intent_router.py` | Slack bot | none | n/a |
-| `ticket_reviewer.py` | Support | `reviewer_toolsets` | + shared MCP + category-triggered skills |
-| `response_drafter.py` | Support | `drafter_toolsets` | + shared MCP + response pattern skills |
+| `ticket_reviewer.py` | Support | `reviewer_toolsets` + shared MCP | + category-triggered skills |
+| `response_drafter.py` | Support | `drafter_toolsets` + shared MCP | + response pattern skills |
 | `chart_request_parser.py` | Chart-coding | none | n/a |
-| `chart_generator.py` | Chart-coding | none | + chart best-practice skills |
+| `chart_generator.py` | Chart-coding | shared MCP | + chart best-practice skills |
 
 ### Skills layout
 
-- On-disk layout: `src/sentinel/plugins/skills/<name>/SKILL.md` plus any
+- On-disk layout: `src/sentinel/domain/skills/<name>/SKILL.md` plus any
   supporting files. Frontmatter fields: `name`, `description`, `applies_to`,
   `version`.
-- Loader: `plugins/skills/__init__.py:load_skills_for(category=..., max=N)`
+- Loader: `domain/skills/__init__.py:load_skills_for(category=..., max=N)`
   returns matching skills sorted deterministically (for reproducibility).
 - Config-driven assignment: `SKILLS_BY_AGENT` dict in `config.py` maps agent
   names to skill names. `Configuration.load_agents()` calls each agent's
   `build_agent(model=..., skills=(...))` factory with the configured skills.
 - Injection: `compose_system_prompt(base_prompt=..., skill_names=(...))` in
-  `plugins/skills/__init__.py` resolves skill names against the installed
+  `domain/skills/__init__.py` resolves skill names against the installed
   catalogue, raising `SkillNotFoundError` on typos.
 - Legacy dynamic injection via `append_skills_to_prompt` / `render_skills_section`
   in `agents/utils.py` is deprecated in favour of the config-driven approach.
@@ -524,8 +480,8 @@ just k8s-up                     # Deploy to local K8s
 | MCP client builder | `src/sentinel/plugins/toolsets/mcp.py` |
 | Evaluation metrics | `src/sentinel/domain/evaluation/metrics.py` |
 | Helm chart | `helm/sentinel/values.yaml` |
-| Skills loader | `src/sentinel/plugins/skills/__init__.py` |
-| Universal MCP builder | `src/sentinel/config.py` `Configuration.build_mcp_toolsets()` (planned) |
-| Prompt versioning | `src/sentinel/plugins/prompts/__init__.py` `PromptHandle` (planned) |
+| Skills loader | `src/sentinel/domain/skills/__init__.py` |
+| Universal MCP builder | `src/sentinel/config.py` `Configuration.build_mcp_toolsets()` |
+| Prompt templates | `src/sentinel/domain/prompts/` |
 | Pipeline run snapshot persistence | `src/sentinel/domain/pipeline/operations.py` (existing — needs callers) |
-| Telemetry exporter setup | `src/sentinel/bootstrap.py` (planned) |
+| OTel bootstrap | `src/sentinel/bootstrap_otel.py` (Prometheus metrics; OTLP tracing planned) |

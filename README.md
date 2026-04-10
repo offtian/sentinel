@@ -134,42 +134,39 @@ Key settings:
 
 ```
 src/sentinel/
-├── config.py                        # Centralised configuration
-├── interfaces/
-│   ├── api/                          # FastAPI app and routers
-│   ├── graphs/                       # Pydantic Graph pipelines
-│   │   ├── sre_investigation.py      # SRE pipeline (5 nodes, error handling)
-│   │   ├── support_review.py         # Support pipeline (4 nodes, error handling)
-│   │   └── agents/                   # PydanticAI agent definitions
-│   └── webhooks/                     # Webhook payload parsers
-├── application/
-│   ├── sre/                          # SRE use cases, persistence
-│   ├── support/                      # Support use cases, persistence
-│   └── supervisor/                   # Supervisor orchestrator
-│       └── orchestrator.py           # supervise_sre_investigation(), supervise_support_review()
-├── domain/
-│   ├── sre/                          # Alert, Investigation, HolmesAdapter
-│   ├── support/                      # Ticket, ResponseSuggestion
-│   ├── confidence/                   # Confidence scoring
-│   ├── search/                       # Search abstractions and implementations
-│   ├── pipeline/                     # NodeError, PipelineNodeFailed
-│   ├── approval/                     # ApprovalRequest, ApprovalDecision
-│   └── supervisor/                   # QualityVerdict, SupervisorDecision, quality gates
-├── evals/                            # Evaluation framework (pydantic_evals)
-│   ├── cases/                        # Test case definitions
-│   ├── evaluators/                   # Keyword coverage, structural evaluators
-│   ├── runner.py                     # Eval runner
-│   ├── reporting.py                  # Report generation
-│   └── rendering.py                  # Output rendering
-├── data/                             # SQLModel tables, Alembic migrations
-└── vendors/                          # Slack SDK wrapper
+├── config.py              # Centralised configuration (Configuration class)
+├── settings.py            # Environment variables (pydantic-settings)
+├── interfaces/            # FastAPI API, Pydantic Graph pipelines, PydanticAI agents, MCP server
+├── application/           # Use cases, supervisor orchestrator, automations
+├── domain/                # Business entities, skills, prompts, tools, vendor adapters
+├── plugins/               # PydanticAI toolset wrappers, MCP client builder
+├── evals/                 # Evaluation framework (pydantic_evals)
+├── data/                  # SQLModel tables, Alembic migrations
+├── vendors/               # External SDK wrappers (Slack, PagerDuty, Jira)
+└── utils/                 # Logging, metrics
 ```
+
+See [Architecture](docs/architecture.md) for the full layer diagram with file-level detail.
 
 ## Documentation
 
-- [PRD](docs/prd.md) — requirements, acceptance criteria, and remaining gaps
-- [Architecture](docs/architecture.md) — design principles, layer diagram, and pipeline flows
-- [Claude Plan](docs/claude-plan.md) — operational context, repo structure, and implementation notes
+Documents are organised by audience and purpose. Review in this order for onboarding:
+
+| Priority | Document | Audience | Purpose |
+|----------|----------|----------|---------|
+| 1 | **This README** | Everyone | Project overview, quick start, API surface |
+| 2 | [Architecture](docs/architecture.md) | Engineers | Layer diagram, pipeline flows, vendor adapters, deployment, database schema |
+| 3 | [PRD](docs/prd.md) | Product + Engineering | Requirements, acceptance criteria checkboxes (canonical status tracker) |
+| 4 | [Claude Plan](docs/claude-plan.md) | AI agents | Architecture decisions, capability plane roadmap, operational context |
+| 5 | [AGENT.md](AGENT.md) | AI agents | Coding conventions, testing rules, naming patterns |
+| 6 | [CLAUDE.md](CLAUDE.md) | AI agents | Essential commands, gotchas, documentation workflow |
+| 7 | [Plans](docs/plans/) | Engineering | Per-feature implementation plans with step-by-step checklists |
+
+**Ownership rules:**
+- **Status tracking** lives only in `docs/prd.md` (acceptance criteria checkboxes)
+- **Architecture details** live in `docs/architecture.md` — other docs link here, not duplicate
+- **Decisions and roadmap** live in `docs/claude-plan.md` — why we chose X, what's next
+- **`SENTINEL_ARCHITECTURE_REVIEW.md`** is a frozen historical snapshot — never update
 
 ## License
 

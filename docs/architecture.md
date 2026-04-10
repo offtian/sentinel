@@ -38,7 +38,7 @@ domain/        → Business entities, search abstractions, vendor adapters, conf
     ↓
 evals/         → Evaluation framework (pydantic_evals): cases/, evaluators/, runner, reporting, rendering
     ↓
-plugins/       → Plugin adapters: toolsets (PydanticAI tool wrappers), prompts (Jinja2 templates)
+plugins/       → Plugin adapters: toolsets (PydanticAI tool wrappers), MCP client builder
     ↓
 data/          → SQLModel database models, Alembic migrations
     ↓
@@ -309,7 +309,7 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 
 ## Test Count
 
-475+ tests covering:
+555+ tests covering:
 
 - Domain entities and operations (SRE, Support, Confidence, Search, Pipeline errors, Approval, Supervisor)
 - Webhook parsers (PagerDuty, Datadog) with dedup handling
