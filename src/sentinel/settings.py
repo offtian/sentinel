@@ -137,6 +137,8 @@ class Settings(LLMSettings, SRESettings, K8sChartSettings, SupportSettings):
     dd_service: str = "sentinel"
     dd_env: str = "production"
     otel_metrics_enabled: bool = True
+    otel_traces_enabled: bool = True
+    otel_traces_endpoint: str = ""
     otel_service_name: str = "sentinel"
     worker_metrics_port: int = 8001
 

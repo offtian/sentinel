@@ -40,6 +40,8 @@ services:
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
       SRE_SLACK_CHANNEL: ${SRE_SLACK_CHANNEL:-}
       SUPPORT_SLACK_CHANNEL: ${SUPPORT_SLACK_CHANNEL:-}
+      OTEL_TRACES_ENABLED: "true"
+      OTEL_TRACES_ENDPOINT: http://tempo:4318
     depends_on:
       db:
         condition: service_healthy
