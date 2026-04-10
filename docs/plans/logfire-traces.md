@@ -1,6 +1,6 @@
 # Plan: Logfire LLM Traces to Tempo
 
-**Status:** in-progress
+**Status:** complete
 **Created:** 2026-04-10
 **Last updated:** 2026-04-10
 
@@ -33,18 +33,20 @@ Export PydanticAI agent OpenTelemetry spans to the existing Tempo instance via t
 
 ## Steps
 
-- [ ] Step 1: Add `logfire[pydantic]` to pyproject.toml
-- [ ] Step 2: Add `otel_traces_enabled` and `otel_traces_endpoint` settings fields
-- [ ] Step 3: Add env vars to docker-compose.yml, helm values-local.yaml, .env.default
-- [ ] Step 4: Implement `init_traces()` in bootstrap_otel.py
-- [ ] Step 5: Wire `init_traces()` into bootstrap.initialise()
-- [ ] Step 6: Add unit tests for init_traces()
-- [ ] Step 7: Run tests and lint
+- [x] Step 1: Add `logfire[pydantic]` to pyproject.toml
+- [x] Step 2: Add `otel_traces_enabled` and `otel_traces_endpoint` settings fields
+- [x] Step 3: Add env vars to docker-compose.yml, helm values-local.yaml, .env.default
+- [x] Step 4: Implement `init_traces()` in bootstrap_otel.py
+- [x] Step 5: Wire `init_traces()` into bootstrap.initialise()
+- [x] Step 6: Add unit tests for init_traces()
+- [x] Step 7: Run tests and lint
 
 ## Changes
 
 | Date | What changed | Why |
 |------|-------------|-----|
+| 2026-04-10 | Split `bootstrap_otel` into own layer below `bootstrap` | import-linter layers contract forbids sibling imports; needed `bootstrap` → `bootstrap_otel` |
+| 2026-04-10 | Kept `import logfire` deferred inside `init_traces()` | logfire auto-installs TracerProvider on import; only want side effect when traces enabled |
 
 ## Outcome
 
