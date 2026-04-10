@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 
 from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
-from sentinel.domain.sre import entities, holmes_adapter
+from sentinel.domain.sre import entities, holmes_adapter, investigation
 
 
 @pytest.fixture
@@ -186,6 +186,266 @@ class TestDirectToolsetAdapter:
         log_call = next(tc for tc in result.tool_calls if tc["tool"] == "datadog_query_logs")
         assert log_call["result_count"] == 2
         assert "api-service" in log_call["query"]
+
+
+def _make_k8s_client(
+    *,
+    is_configured: bool = True,
+    pod_status: dict[str, Any] | None = None,
+    events: list[dict[str, Any]] | None = None,
+    pod_logs: str = "",
+) -> mock.AsyncMock:
+    client = mock.AsyncMock()
+    client.is_configured = is_configured
+    client.get_pod_status.return_value = pod_status or {
+        "name": "api-service-abc123",
+        "phase": "Running",
+        "restart_count": 3,
+        "conditions": [{"type": "Ready", "status": "True"}],
+    }
+    client.get_recent_events.return_value = events or [
+        {
+            "type": "Warning",
+            "reason": "OOMKilled",
+            "message": "Container exceeded memory limit",
+            "last_timestamp": "2024-01-01T00:00:00Z",
+            "count": 2,
+        },
+    ]
+    client.get_pod_logs.return_value = (
+        pod_logs or "ERROR 2024-01-01 OOMKilled\nERROR 2024-01-01 restart"
+    )
+    return client
+
+
+class TestDirectToolsetAdapterK8s:
+    async def test_queries_k8s_when_context_provided(self, sample_alert):
+        # Given a configured observability client and K8s client with investigation context
+        obs_client = _make_datadog_client()
+        k8s_client = _make_k8s_client()
+        context = investigation.InvestigationContext(
+            cluster_name="prod-us-east",
+            namespace="default",
+        )
+        adapter = holmes_adapter.DirectToolsetAdapter(
+            observability_client=obs_client,
+            k8s_client=k8s_client,
+        )
+
+        # When an investigation is run with K8s context
+        result = await adapter.investigate(alert=sample_alert, context=context)
+
+        # Then K8s sources appear alongside observability sources
+        assert "kubernetes_pod_status" in result.sources_queried
+        assert "kubernetes_events" in result.sources_queried
+        assert "kubernetes_pod_logs" in result.sources_queried
+        assert "datadog_logs" in result.sources_queried
+
+    async def test_skips_k8s_when_no_context(self, sample_alert):
+        # Given a configured K8s client but no investigation context
+        obs_client = _make_datadog_client()
+        k8s_client = _make_k8s_client()
+        adapter = holmes_adapter.DirectToolsetAdapter(
+            observability_client=obs_client,
+            k8s_client=k8s_client,
+        )
+
+        # When an investigation is run without context
+        result = await adapter.investigate(alert=sample_alert)
+
+        # Then only observability sources are queried, no K8s
+        assert "kubernetes_pod_status" not in result.sources_queried
+        assert "kubernetes_events" not in result.sources_queried
+
+    async def test_skips_k8s_when_client_not_configured(self, sample_alert):
+        # Given a K8s client that is not configured
+        obs_client = _make_datadog_client()
+        k8s_client = _make_k8s_client(is_configured=False)
+        context = investigation.InvestigationContext(
+            cluster_name="prod-us-east",
+            namespace="default",
+        )
+        adapter = holmes_adapter.DirectToolsetAdapter(
+            observability_client=obs_client,
+            k8s_client=k8s_client,
+        )
+
+        # When an investigation is run with context but unconfigured K8s
+        result = await adapter.investigate(alert=sample_alert, context=context)
+
+        # Then K8s sources are not queried
+        assert "kubernetes_pod_status" not in result.sources_queried
+        assert "datadog_logs" in result.sources_queried
+
+    async def test_k8s_analysis_included_in_output(self, sample_alert):
+        # Given a configured K8s client returning pod status data
+        obs_client = _make_datadog_client()
+        k8s_client = _make_k8s_client(
+            pod_status={
+                "name": "api-service-abc123",
+                "phase": "CrashLoopBackOff",
+                "restart_count": 15,
+                "conditions": [
+                    {"type": "Ready", "status": "False", "reason": "ContainersNotReady"}
+                ],
+            },
+        )
+        context = investigation.InvestigationContext(
+            cluster_name="prod-us-east",
+            namespace="default",
+        )
+        adapter = holmes_adapter.DirectToolsetAdapter(
+            observability_client=obs_client,
+            k8s_client=k8s_client,
+        )
+
+        # When an investigation is run
+        result = await adapter.investigate(alert=sample_alert, context=context)
+
+        # Then the analysis includes K8s findings
+        assert "Kubernetes" in result.analysis or "Pod Status" in result.analysis
+
+    async def test_k8s_partial_failure_preserves_other_k8s_results(self, sample_alert):
+        # Given a K8s client where pod status fails but events and logs succeed
+        obs_client = _make_datadog_client()
+        k8s_client = _make_k8s_client()
+        k8s_client.get_pod_status.side_effect = Exception("K8s API timeout")
+        context = investigation.InvestigationContext(
+            cluster_name="prod-us-east",
+            namespace="default",
+        )
+        adapter = holmes_adapter.DirectToolsetAdapter(
+            observability_client=obs_client,
+            k8s_client=k8s_client,
+        )
+
+        # When an investigation is run
+        result = await adapter.investigate(alert=sample_alert, context=context)
+
+        # Then events and logs are still present despite pod status failure
+        assert "kubernetes_pod_status" not in result.sources_queried
+        assert "kubernetes_events" in result.sources_queried
+        assert "kubernetes_pod_logs" in result.sources_queried
+
+    async def test_k8s_tool_calls_recorded(self, sample_alert):
+        # Given a configured K8s client
+        obs_client = _make_datadog_client()
+        k8s_client = _make_k8s_client()
+        context = investigation.InvestigationContext(
+            cluster_name="prod-us-east",
+            namespace="default",
+        )
+        adapter = holmes_adapter.DirectToolsetAdapter(
+            observability_client=obs_client,
+            k8s_client=k8s_client,
+        )
+
+        # When an investigation is run
+        result = await adapter.investigate(alert=sample_alert, context=context)
+
+        # Then K8s tool calls are recorded alongside observability tool calls
+        k8s_tools = [tc for tc in result.tool_calls if tc["tool"].startswith("k8s_")]
+        assert len(k8s_tools) == 3
+        tool_names = {tc["tool"] for tc in k8s_tools}
+        assert tool_names == {"k8s_pod_status", "k8s_events", "k8s_pod_logs"}
+
+    async def test_k8s_uses_service_as_resource_name(self, sample_alert):
+        # Given a configured K8s client
+        obs_client = _make_datadog_client()
+        k8s_client = _make_k8s_client()
+        context = investigation.InvestigationContext(
+            cluster_name="prod-us-east",
+            namespace="default",
+        )
+        adapter = holmes_adapter.DirectToolsetAdapter(
+            observability_client=obs_client,
+            k8s_client=k8s_client,
+        )
+
+        # When an investigation is run
+        await adapter.investigate(alert=sample_alert, context=context)
+
+        # Then K8s queries use the alert service name as the resource identifier
+        k8s_client.get_pod_status.assert_called_once()
+        call_kwargs = k8s_client.get_pod_status.call_args.kwargs
+        assert call_kwargs["namespace"] == "default"
+
+        k8s_client.get_recent_events.assert_called_once()
+        events_kwargs = k8s_client.get_recent_events.call_args.kwargs
+        assert events_kwargs["resource_name"] == "api-service"
+        assert events_kwargs["namespace"] == "default"
+
+
+class TestSummariseK8sPodStatus:
+    def test_formats_running_pod(self):
+        # Given pod status data for a running pod
+        data = {
+            "name": "api-abc123",
+            "phase": "Running",
+            "restart_count": 0,
+            "conditions": [{"type": "Ready", "status": "True"}],
+        }
+
+        # When summarised
+        result = holmes_adapter._summarise_k8s_pod_status(data)
+
+        # Then the summary includes pod name, phase, and conditions
+        assert "api-abc123" in result
+        assert "Running" in result
+
+    def test_formats_crashloop_pod(self):
+        # Given pod status data for a crashing pod
+        data = {
+            "name": "api-abc123",
+            "phase": "CrashLoopBackOff",
+            "restart_count": 15,
+            "conditions": [{"type": "Ready", "status": "False", "reason": "ContainersNotReady"}],
+        }
+
+        # When summarised
+        result = holmes_adapter._summarise_k8s_pod_status(data)
+
+        # Then the summary highlights the crash state and restart count
+        assert "CrashLoopBackOff" in result
+        assert "15" in result
+
+    def test_returns_fallback_for_empty_data(self):
+        # Given empty pod status data
+        # When summarised
+        result = holmes_adapter._summarise_k8s_pod_status({})
+
+        # Then a fallback message is returned
+        assert result  # Non-empty string
+
+
+class TestSummariseK8sEvents:
+    def test_formats_events(self):
+        # Given K8s event data
+        events = [
+            {
+                "type": "Warning",
+                "reason": "OOMKilled",
+                "message": "Container exceeded memory limit",
+                "last_timestamp": "2024-01-01T00:00:00Z",
+                "count": 3,
+            },
+        ]
+
+        # When summarised
+        result = holmes_adapter._summarise_k8s_events(events)
+
+        # Then the summary includes event details
+        assert "OOMKilled" in result
+        assert "memory limit" in result
+
+    def test_returns_no_events_message(self):
+        # Given no events
+        # When summarised
+        result = holmes_adapter._summarise_k8s_events([])
+
+        # Then a "no events" message is returned
+        assert "No" in result
+        assert "event" in result.lower()
 
 
 class TestSummariseLogs:
