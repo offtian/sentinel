@@ -39,6 +39,8 @@ class Dependencies:
     analyser_toolsets: Sequence[AbstractToolset[object]] = ()
     # Optional challenger adapter for comparison mode.
     challenger_adapter: investigation.BaseInvestigationAdapter | None = None
+    # Optional K8s investigation adapter for cluster state queries.
+    k8s_adapter: investigation.K8sInvestigationAdapter | None = None
 
 
 @dataclasses.dataclass
@@ -150,6 +152,47 @@ class InvestigateWithHolmes(BaseNode[State, Dependencies, common.InvestigationRe
                     holmes_tool_calls=[],
                     holmes_sources=[],
                 )
+
+            # Run K8s adapter if configured — merges cluster state into findings.
+            if ctx.deps.k8s_adapter is not None and ctx.deps.k8s_adapter.is_configured:
+                try:
+                    k8s_context = investigation.InvestigationContext(
+                        cluster_name=ctx.state.alert.raw_payload.get("cluster", "default"),
+                        namespace=ctx.state.alert.raw_payload.get("namespace"),
+                    )
+                    k8s_result = await ctx.deps.k8s_adapter.investigate(
+                        alert=ctx.state.alert,
+                        context=k8s_context,
+                    )
+                    # Merge K8s findings into Holmes results.
+                    holmes_result = holmes_adapter.HolmesInvestigationResult(
+                        analysis=(
+                            holmes_result.analysis
+                            + "\n\n--- Kubernetes cluster state ---\n"
+                            + "\n".join(f.summary for f in k8s_result.findings)
+                        ),
+                        tool_calls=holmes_result.tool_calls,
+                        sources_queried=(
+                            holmes_result.sources_queried + list(k8s_result.sources_queried)
+                        ),
+                    )
+                    logs.log_event(
+                        "k8s_investigation_merged",
+                        params={
+                            "alert_id": ctx.state.alert.id,
+                            "k8s_sources": list(k8s_result.sources_queried),
+                            "k8s_findings_count": len(k8s_result.findings),
+                        },
+                    )
+                except Exception as exc:
+                    logs.log_exception(
+                        exc,
+                        params={
+                            "alert_id": ctx.state.alert.id,
+                            "node": "InvestigateWithHolmes",
+                            "k8s_adapter": "failed",
+                        },
+                    )
 
             # Run challenger adapter concurrently if configured (comparison mode)
             if ctx.deps.challenger_adapter is not None:
@@ -523,6 +566,7 @@ async def investigate_alert(
     classifier_toolsets: Sequence[AbstractToolset[object]] = (),
     analyser_toolsets: Sequence[AbstractToolset[object]] = (),
     challenger_adapter: investigation.BaseInvestigationAdapter | None = None,
+    k8s_adapter: investigation.K8sInvestigationAdapter | None = None,
 ) -> common.InvestigationReply:
     """
     Run the full SRE investigation pipeline for an alert.
@@ -543,6 +587,7 @@ async def investigate_alert(
         classifier_toolsets=classifier_toolsets,
         analyser_toolsets=analyser_toolsets,
         challenger_adapter=challenger_adapter,
+        k8s_adapter=k8s_adapter,
     )
 
     investigation_graph = Graph(

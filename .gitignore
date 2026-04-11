@@ -1,3 +1,4 @@
+.team/
 __pycache__/
 *.py[cod]
 *$py.class
@@ -25,3 +26,6 @@ htmlcov/
 
 # Git worktrees
 .worktrees/
+
+# Development lifecycle artifacts (research, plans, validations)
+thoughts/

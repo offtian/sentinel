@@ -26,6 +26,7 @@ from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
 from sentinel.domain.search import factory as search_factory
 from sentinel.domain.search import searcher
 from sentinel.domain.sre import holmes_adapter, investigation, k8s_native_agent
+from sentinel.domain.sre import kagent_adapter as kagent_adapter_mod
 from sentinel.domain.vendor_adapters.confluence import ConfluenceClient
 from sentinel.domain.vendor_adapters.jira import JiraClient
 from sentinel.domain.vendor_adapters.observability import (
@@ -40,9 +41,22 @@ from sentinel.plugins.toolsets import observability as obs_toolsets
 from sentinel.utils import logs
 
 
+try:
+    from holmes.core import tools as holmes_tools_mod
+    from holmes.plugins import toolsets as holmes_toolsets_mod
+
+    _HOLMES_SDK_AVAILABLE = True
+except ImportError:
+    _HOLMES_SDK_AVAILABLE = False
+
+
 logger = logs.get_logger()
 
 _mcp_build_lock = threading.Lock()
+
+
+def _strip_wiki_suffix(url: str) -> str:
+    return url.rstrip("/").removesuffix("/wiki")
 
 
 class CommonConfiguration(BaseConfiguration):
@@ -140,16 +154,87 @@ class CommonConfiguration(BaseConfiguration):
         """
         Build the appropriate Holmes adapter based on configuration.
 
-        When ``holmesgpt_enabled`` is True and a Datadog client is available,
-        return a ``DirectToolsetAdapter`` that queries observability data.
-        Otherwise return a disabled ``HolmesAdapter`` stub.
+        When ``holmes_backend`` is ``"sdk"`` and the HolmesGPT SDK is
+        installed, return a ``HolmesAdapter`` that uses ``ToolCallingLLM``.
+        Otherwise (default ``"direct"``), return a ``DirectToolsetAdapter``
+        that queries vendor adapters directly.
         """
-        if self.settings.holmesgpt_enabled and self.observability_client is not None:
+        if not self.settings.holmesgpt_enabled:
+            return holmes_adapter.HolmesAdapter(enabled=False)
+
+        if self.settings.holmes_backend == "sdk":
+            toolsets = self._build_holmes_sdk_toolsets()
+            return holmes_adapter.HolmesAdapter(
+                enabled=True,
+                model=self._normalise_model_name(self.settings.holmes_sdk_model),
+                api_key=None,
+                api_base=self.settings.ai_gateway_url or None,
+                toolsets=toolsets,
+            )
+
+        if self.observability_client is not None:
             return holmes_adapter.DirectToolsetAdapter(
                 observability_client=self.observability_client,
                 circuit_breaker=self.observability_circuit_breaker,
             )
         return holmes_adapter.HolmesAdapter(enabled=False)
+
+    def _build_holmes_sdk_toolsets(self) -> tuple[Any, ...]:
+        """Wire HolmesGPT built-in toolsets from Sentinel settings (no-op when unconfigured)."""
+        if not _HOLMES_SDK_AVAILABLE:
+            logger.warning("holmes_sdk_not_installed")
+            return ()
+
+        settings = self.settings
+        raw_config: dict[str, dict[str, Any]] = {}
+        by_name: dict[str, Any] = {}
+
+        if settings.confluence_base_url and settings.jira_user_email and settings.jira_api_token:
+            confluence_toolset = holmes_toolsets_mod.ConfluenceToolset()
+            by_name[confluence_toolset.name] = confluence_toolset
+            raw_config[confluence_toolset.name] = {
+                "enabled": True,
+                "config": {
+                    "api_url": _strip_wiki_suffix(settings.confluence_base_url),
+                    "user": settings.jira_user_email,
+                    "api_key": settings.jira_api_token,
+                },
+            }
+
+        if settings.notion_token:
+            notion_toolset = holmes_toolsets_mod.NotionToolset()
+            by_name[notion_toolset.name] = notion_toolset
+            raw_config[notion_toolset.name] = {
+                "enabled": True,
+                "config": {
+                    "additional_headers": {
+                        "Authorization": f"Bearer {settings.notion_token}",
+                    },
+                },
+            }
+
+        enabled: list[Any] = []
+        if raw_config:
+            overrides = holmes_toolsets_mod.load_toolsets_from_config(
+                raw_config,
+                strict_check=False,
+            )
+            for override in overrides:
+                target = by_name.get(override.name)
+                if target is not None:
+                    target.override_with(override)
+
+            for toolset in by_name.values():
+                toolset.check_prerequisites(silent=True)
+                if toolset.status == holmes_tools_mod.ToolsetStatusEnum.ENABLED:
+                    enabled.append(toolset)
+
+        logger.info(
+            "holmes_sdk_toolsets_loaded",
+            configured=list(raw_config.keys()),
+            enabled=[ts.name for ts in enabled],
+        )
+        return tuple(enabled)
 
     def build_k8s_investigation_adapter(
         self,
@@ -188,6 +273,39 @@ class CommonConfiguration(BaseConfiguration):
             )
 
         return None  # kagent adapter wired separately
+
+    def build_challenger_adapter(
+        self,
+    ) -> investigation.BaseInvestigationAdapter | None:
+        """
+        Build the challenger adapter for A/B comparison mode.
+
+        Returns None when ``CHALLENGER_ADAPTER`` is unset or empty.
+        Supported values: ``"native_k8s"``, ``"kagent"``.
+
+        :returns: A BaseInvestigationAdapter or None when disabled.
+        """
+        backend = self.settings.challenger_adapter
+        if not backend:
+            return None
+
+        if backend == "kagent":
+            return kagent_adapter_mod.KagentAdapter(
+                kagent_namespace=self.settings.kagent_namespace,
+                timeout_seconds=self.settings.kagent_investigation_timeout_seconds,
+            )
+
+        if backend == "native_k8s":
+            return k8s_native_agent.NativeK8sAgent(
+                k8s_client=None,
+                model_name=self._normalise_model_name(self.settings.k8s_investigator_llm),
+            )
+
+        logger.warning(
+            "Unknown challenger adapter",
+            challenger_adapter=backend,
+        )
+        return None
 
     # -- Agent registry ------------------------------------------------------
 

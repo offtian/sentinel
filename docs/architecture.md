@@ -34,7 +34,12 @@ Scheduled automations live in Sentinel, triggered by Kubernetes CronJobs. The wo
 
 ### HolmesGPT Resolution
 
-HolmesGPT SDK has a dependency conflict with pydantic-ai>=1.0.7. Rather than waiting for an upstream fix, `DirectToolsetAdapter` calls the existing DatadogClient and PagerDutyClient vendor adapters directly. This gives real observability data without the SDK. HolmesGPT can be reconsidered later.
+Two investigation adapters share the `BaseHolmesAdapter` contract:
+
+- **`DirectToolsetAdapter` (default)** — calls DatadogClient, GrafanaClient, and K8sClient directly, providing concurrent observability and Kubernetes queries with circuit breaker protection. No external SDK dependency.
+- **`HolmesAdapter` (opt-in)** — wraps the HolmesGPT SDK (`ToolCallingLLM`), using its built-in toolsets (Datadog, Kubernetes, Grafana, etc.) for data gathering. Installed via fork (`offtian/holmesgpt@httpx-compat`) which relaxes the httpx/postgrest pins that conflict with pydantic-ai>=1.0.7. Runs synchronous SDK calls via `asyncio.to_thread()`. Track upstream `robusta-dev/holmesgpt` for when they merge compatible pins — at that point switch the dependency back to PyPI.
+
+Both adapters return `HolmesInvestigationResult` (analysis text, tool calls, sources queried) consumed by the `AnalyseRootCause` pipeline node. `build_holmes_adapter()` in `plugins/config.py` selects the adapter based on configuration.
 
 ### OSS Framework Positioning
 

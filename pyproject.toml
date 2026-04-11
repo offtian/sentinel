@@ -92,11 +92,11 @@ dev = [
     "ipdb",
 ]
 
-# NOTE: HolmesGPT (holmesgpt) has a dependency conflict with pydantic-ai>=1.0.7.
-# It cannot be installed alongside pydantic-ai. Our adapter in
-# domain/sre/holmes_adapter.py is designed to work with or without
-# the SDK installed. When the conflict is resolved upstream, add:
-#   holmes = ["holmesgpt"]
+# HolmesGPT SDK — installed from fork with httpx/postgrest compatibility fixes.
+# Upstream (robusta-dev/holmesgpt) pins httpx<0.28 and postgrest==0.16.8 which
+# conflict with pydantic-ai>=1.0.7. Our fork (offtian/holmesgpt@httpx-compat)
+# relaxes these pins. Track upstream for when they merge similar changes.
+holmes = ["holmesgpt @ git+https://github.com/offtian/holmesgpt.git@httpx-compat"]
 
 [tool.setuptools.dynamic]
 version = {attr = "sentinel.version.__version__"}
@@ -304,5 +304,6 @@ filterwarnings = [
     "error::ResourceWarning",
     "error::RuntimeWarning",
     "error::DeprecationWarning",
+    "ignore:.*asyncio.iscoroutinefunction.*:DeprecationWarning",
     "error::pytest.PytestCollectionWarning",
 ]

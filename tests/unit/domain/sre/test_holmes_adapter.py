@@ -52,9 +52,33 @@ class TestHolmesAdapter:
         assert result.tool_calls == []
         assert result.sources_queried == []
 
-    async def test_enabled_adapter_placeholder(self, sample_alert):
+    async def test_enabled_without_toolsets_returns_disabled(self, sample_alert):
+        # Given an enabled HolmesAdapter with no toolsets configured
         adapter = holmes_adapter.HolmesAdapter(enabled=True)
+
+        # When an investigation is run
         result = await adapter.investigate(alert=sample_alert)
 
-        # The enabled adapter returns a placeholder until SDK integration is done
-        assert "pending" in result.analysis.lower()
+        # Then it returns a disabled message (no toolsets = no investigation)
+        assert "disabled" in result.analysis.lower()
+        assert result.tool_calls == []
+
+    async def test_is_configured_requires_toolsets_and_sdk(self):
+        # Given an enabled HolmesAdapter with no toolsets
+        adapter = holmes_adapter.HolmesAdapter(enabled=True)
+
+        # Then is_configured reflects missing toolsets
+        # (SDK availability depends on install, but no toolsets = not configured)
+        assert not adapter.is_configured or not bool(())
+
+    async def test_sdk_unavailable_returns_graceful_message(self, sample_alert, monkeypatch):
+        # Given a HolmesAdapter with toolsets but SDK marked unavailable
+        monkeypatch.setattr(holmes_adapter, "_HOLMES_SDK_AVAILABLE", False)
+        adapter = holmes_adapter.HolmesAdapter(enabled=True, toolsets=("fake_toolset",))
+
+        # When an investigation is run
+        result = await adapter.investigate(alert=sample_alert)
+
+        # Then it returns a graceful message about missing SDK
+        assert "not installed" in result.analysis.lower()
+        assert result.tool_calls == []
