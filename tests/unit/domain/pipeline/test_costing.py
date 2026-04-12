@@ -4,7 +4,7 @@ from unittest import mock
 
 import pytest
 
-from sentinel.domain.evaluation import costing
+from sentinel.domain.pipeline import costing
 
 
 class TestEstimateCostUsd:
