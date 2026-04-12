@@ -97,6 +97,7 @@ async def complete_pipeline_run(
     error_message: str | None = None,
     duration_ms: int | None = None,
     final_reply: dict[str, Any] | None = None,
+    total_token_usage_json: dict[str, Any] | None = None,
 ) -> None:
     """
     Update a pipeline_runs row to its final status.
@@ -108,6 +109,7 @@ async def complete_pipeline_run(
     :param error_message: Optional error description if the run failed.
     :param duration_ms: Wall-clock duration of the run in milliseconds.
     :param final_reply: Optional structured final reply payload for replay.
+    :param total_token_usage_json: Optional aggregate token usage and cost across all agent calls.
     """
     completed_at = datetime.now(tz=UTC)
     query = (
@@ -120,6 +122,7 @@ async def complete_pipeline_run(
             completed_at=completed_at,
             duration_ms=duration_ms,
             final_reply=final_reply,
+            total_token_usage_json=total_token_usage_json,
         )
     )
     await db.execute(query)

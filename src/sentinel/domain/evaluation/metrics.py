@@ -25,3 +25,4 @@ class EvaluationMetrics:
     robustness_variance: float
     degradation_score: float
     token_cost: int
+    token_cost_usd: float = 0.0

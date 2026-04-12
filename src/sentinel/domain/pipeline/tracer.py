@@ -14,8 +14,10 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic_ai.messages import ModelMessage
 
+from sentinel.domain.evaluation import costing
 from sentinel.domain.pipeline import operations as pipeline_ops
 from sentinel.domain.pipeline import types
+from sentinel.utils import logs
 
 
 if TYPE_CHECKING:
@@ -41,6 +43,7 @@ class ExecutionTracer(types.TraceCollector):
         self._pipeline_started_at: datetime | None = None
         self._node_order: int = 0
         self._node_started_at: dict[uuid.UUID, datetime] = {}
+        self._agent_cost_breakdowns: list[dict[str, Any]] = []
 
     @property
     def trace_id(self) -> uuid.UUID | None:
@@ -132,6 +135,24 @@ class ExecutionTracer(types.TraceCollector):
             delta = datetime.now(tz=UTC) - self._pipeline_started_at
             duration_ms = int(delta.total_seconds() * 1000)
 
+        total_token_usage = None
+        if self._agent_cost_breakdowns:
+            total_token_usage = {
+                "total_input_tokens": sum(
+                    b.get("input_tokens") or 0 for b in self._agent_cost_breakdowns
+                ),
+                "total_output_tokens": sum(
+                    b.get("output_tokens") or 0 for b in self._agent_cost_breakdowns
+                ),
+                "total_tokens": sum(
+                    b.get("total_tokens") or 0 for b in self._agent_cost_breakdowns
+                ),
+                "total_cost_usd": sum(
+                    b.get("cost_usd") or 0.0 for b in self._agent_cost_breakdowns
+                ),
+                "agent_breakdowns": self._agent_cost_breakdowns,
+            }
+
         await pipeline_ops.complete_pipeline_run(
             db=self._db,
             run_id=self._pipeline_run_id,
@@ -140,6 +161,7 @@ class ExecutionTracer(types.TraceCollector):
             error_message=error_message,
             duration_ms=duration_ms,
             final_reply=final_reply,
+            total_token_usage_json=total_token_usage,
         )
 
     async def start_node(
@@ -253,3 +275,80 @@ class ExecutionTracer(types.TraceCollector):
             started_at=now,
             completed_at=now,
         )
+
+    async def record_agent_result(
+        self,
+        *,
+        node_id: uuid.UUID,
+        agent_name: str,
+        model_id: str,
+        result: Any,
+        duration_ms: int | None = None,
+    ) -> None:
+        """
+        Extract token usage from a PydanticAI agent result and record the agent call.
+
+        :param node_id: Parent node execution UUID.
+        :param agent_name: Agent name.
+        :param model_id: LLM model identifier.
+        :param result: PydanticAI AgentRunResult — typed as Any to avoid hard coupling.
+        :param duration_ms: Call duration in milliseconds.
+        """
+        token_usage: dict[str, Any] | None = None
+        messages: list[ModelMessage] | None = None
+
+        try:
+            usage = result.usage()
+            if usage is not None:
+                input_tokens = getattr(usage, "request_tokens", None)
+                output_tokens = getattr(usage, "response_tokens", None)
+                total_tokens = getattr(usage, "total_tokens", None)
+
+                cost_usd = None
+                if input_tokens is not None and output_tokens is not None:
+                    cost_usd = costing.estimate_cost_usd(
+                        model_id=model_id,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                    )
+
+                token_usage = {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_tokens": total_tokens,
+                    "cost_usd": cost_usd,
+                }
+        except Exception as exc:
+            logs.log_exception(
+                exc,
+                params={"agent_name": agent_name, "model_id": model_id},
+            )
+
+        try:
+            messages = result.all_messages()
+        except Exception as exc:
+            logs.log_exception(
+                exc,
+                params={"agent_name": agent_name, "model_id": model_id},
+            )
+
+        await self.record_agent_call(
+            node_id=node_id,
+            agent_name=agent_name,
+            model_id=model_id,
+            messages=messages,
+            token_usage=token_usage,
+            duration_ms=duration_ms,
+        )
+
+        if token_usage is not None:
+            self._agent_cost_breakdowns.append(
+                {
+                    "agent_name": agent_name,
+                    "model_id": model_id,
+                    "input_tokens": token_usage.get("input_tokens"),
+                    "output_tokens": token_usage.get("output_tokens"),
+                    "total_tokens": token_usage.get("total_tokens"),
+                    "cost_usd": token_usage.get("cost_usd"),
+                }
+            )

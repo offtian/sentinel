@@ -18,8 +18,25 @@ from tests import factories
 
 
 @dataclass(frozen=True)
+class _FakeUsage:
+    """Stub usage data for FakeAgentResult."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+
+
+@dataclass(frozen=True)
 class FakeAgentResult[T]:
     output: T
+
+    def usage(self) -> _FakeUsage:
+        """Return a zero-token usage object for testing."""
+        return _FakeUsage()
+
+    def all_messages(self) -> list:
+        """Return an empty message list for testing."""
+        return []
 
 
 def _make_fake_agent(fake_run: Any) -> mock.MagicMock:

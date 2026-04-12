@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import uuid
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -78,7 +79,16 @@ class ClassifyTicket(BaseNode[State, Dependencies, common.SupportReply]):
                     )
                 )
 
-            if ctx.deps.trace_collector:
+            if ctx.deps.trace_collector and hasattr(
+                ctx.deps.trace_collector, "record_agent_result"
+            ):
+                await ctx.deps.trace_collector.record_agent_result(
+                    node_id=uuid.uuid4(),
+                    agent_name="Ticket Reviewer",
+                    model_id=agent_utils.get_model_name(reviewer_agent),
+                    result=result,
+                )
+            elif ctx.deps.trace_collector:
                 ctx.deps.trace_collector.record(
                     agent_name="Ticket Reviewer",
                     messages=result.all_messages(),
@@ -232,7 +242,16 @@ class DraftResponse(BaseNode[State, Dependencies, common.SupportReply]):
                     notes="Automated drafting failed — manual review required.",
                 )
 
-            if ctx.deps.trace_collector:
+            if ctx.deps.trace_collector and hasattr(
+                ctx.deps.trace_collector, "record_agent_result"
+            ):
+                await ctx.deps.trace_collector.record_agent_result(
+                    node_id=uuid.uuid4(),
+                    agent_name="Response Drafter",
+                    model_id=agent_utils.get_model_name(drafter_agent),
+                    result=result,
+                )
+            elif ctx.deps.trace_collector:
                 ctx.deps.trace_collector.record(
                     agent_name="Response Drafter",
                     messages=result.all_messages(),

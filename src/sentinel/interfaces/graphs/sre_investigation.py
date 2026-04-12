@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from typing import Any
@@ -91,7 +92,16 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
                     )
                 )
 
-            if ctx.deps.trace_collector:
+            if ctx.deps.trace_collector and hasattr(
+                ctx.deps.trace_collector, "record_agent_result"
+            ):
+                await ctx.deps.trace_collector.record_agent_result(
+                    node_id=uuid.uuid4(),
+                    agent_name="Alert Classifier",
+                    model_id=agent_utils.get_model_name(classifier_agent),
+                    result=result,
+                )
+            elif ctx.deps.trace_collector:
                 ctx.deps.trace_collector.record(
                     agent_name="Alert Classifier",
                     messages=result.all_messages(),
@@ -299,7 +309,16 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
                     )
                 return DetermineConfidence(raw_confidence=0.0)
 
-            if ctx.deps.trace_collector:
+            if ctx.deps.trace_collector and hasattr(
+                ctx.deps.trace_collector, "record_agent_result"
+            ):
+                await ctx.deps.trace_collector.record_agent_result(
+                    node_id=uuid.uuid4(),
+                    agent_name="Root Cause Analyser",
+                    model_id=agent_utils.get_model_name(analyser_agent),
+                    result=result,
+                )
+            elif ctx.deps.trace_collector:
                 ctx.deps.trace_collector.record(
                     agent_name="Root Cause Analyser",
                     messages=result.all_messages(),
