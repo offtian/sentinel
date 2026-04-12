@@ -29,6 +29,20 @@ from sentinel.utils import logs
 logger = logs.get_logger()
 
 
+def _get_agent_model_name(agent: Any) -> str:
+    """
+    Extract the model name from a PydanticAI agent for audit metadata.
+
+    :param agent: A PydanticAI agent instance.
+    :returns: The model name string, or empty string if not accessible.
+    """
+    try:
+        name = agent.model.model_name
+        return name if isinstance(name, str) else ""
+    except AttributeError:
+        return ""
+
+
 async def _parse_request(
     *,
     request: entities.ChartRequest,
@@ -283,8 +297,6 @@ async def generate_chart(
     *,
     request: entities.ChartRequest,
     agent_for: Callable[[str], Any],
-    chart_parser_model: str = "",
-    chart_generator_model: str = "",
     max_retries: int = 2,
     chart_generator_toolsets: Sequence[AbstractToolset[object]] = (),
 ) -> pipeline_types.ChartGenerationReply:
@@ -293,8 +305,6 @@ async def generate_chart(
 
     :param request: The raw chart request from the user.
     :param agent_for: Callable that returns a pre-built agent by name.
-    :param chart_parser_model: Model name for the parser (used in reply metadata).
-    :param chart_generator_model: Model name for the generator (used in reply metadata).
     :param max_retries: Maximum generation retry attempts on validation failure.
     :returns: A ChartGenerationReply with results.
     """
@@ -311,6 +321,9 @@ async def generate_chart(
         return result
 
     spec, policy = result
+
+    parser_model = _get_agent_model_name(agent_for("chart_request_parser"))
+    generator_model = _get_agent_model_name(agent_for("chart_generator"))
 
     # Step 3: Merge spec with policy
     step_start = time.monotonic()
@@ -340,8 +353,8 @@ async def generate_chart(
             service_name=spec.service_name,
             pipeline_start=pipeline_start,
             timings=timings,
-            parser_model=chart_parser_model,
-            generator_model=chart_generator_model,
+            parser_model=parser_model,
+            generator_model=generator_model,
             validation_passed=False,
             policy_violations=len(violations),
             generation_attempts=generation_attempts,
@@ -386,8 +399,8 @@ async def generate_chart(
         service_name=spec.service_name,
         pipeline_start=pipeline_start,
         timings=timings,
-        parser_model=chart_parser_model,
-        generator_model=chart_generator_model,
+        parser_model=parser_model,
+        generator_model=generator_model,
         files_generated=len(chart_output.files),
         validation_passed=True,
         policy_violations=len(violations),
