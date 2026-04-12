@@ -67,16 +67,17 @@ SKILLS_BY_AGENT: dict[str, tuple[str, ...]] = {
 
 def _normalise_model_name(model_name: str) -> str:
     """
-    Normalise LLM model names for pydantic-ai.
+    Normalise LLM model names for pydantic-ai with LiteLLM routing.
 
-    Config uses ``openai/gpt-4.1-mini``; pydantic-ai expects ``openai:gpt-4.1-mini``.
-    PydanticAI routes directly to each provider (no proxy).
+    Config uses ``openai/gpt-4.1-mini``; pydantic-ai with the ``litellm:``
+    prefix delegates to LiteLLM's SDK (in-process) for provider routing.
+    No external proxy is required — LiteLLM handles routing, ``drop_params``,
+    and provider-specific quirks in-process.
     """
     model_name = model_name.removeprefix("litellm_proxy/")
-    if "/" in model_name:
-        provider, name = model_name.split("/", 1)
-        model_name = f"{provider}:{name}"
-    return model_name
+    # LiteLLM model names use provider/model format (e.g. "openai/gpt-4.1-mini").
+    # PydanticAI's litellm: prefix expects this format unchanged.
+    return f"litellm:{model_name}"
 
 
 # ---------------------------------------------------------------------------
