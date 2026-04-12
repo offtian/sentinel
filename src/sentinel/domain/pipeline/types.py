@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import abc
 import dataclasses
+import uuid
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 from typing import Any
 
+import attrs
 from pydantic import BaseModel
 from pydantic_ai.messages import ModelMessage
 
@@ -113,3 +116,27 @@ class ChartGenerationReply(BaseModel):
 class NoOpStatusUpdateClient(StatusUpdateClient):
     async def update_status(self, message: str) -> None:
         pass
+
+
+@attrs.frozen
+class ReplayBundle:
+    """
+    Immutable snapshot of everything needed to reproduce a pipeline run.
+
+    Assembled from a single ``PipelineRunRecord`` row by
+    :func:`~sentinel.domain.pipeline.queries.fetch_replay_bundle`.
+    """
+
+    run_id: uuid.UUID
+    pipeline_type: str
+    started_at: datetime
+    completed_at: datetime | None
+    prompt_version: str | None
+    prompt_sha256: str | None
+    prompt_text: str | None
+    input_hash: str | None
+    model_ids: tuple[str, ...]
+    mcp_endpoints: tuple[str, ...]
+    skill_activations: tuple[dict[str, str], ...]
+    final_reply: dict[str, Any] | None
+    input_payload: dict[str, Any] | None
