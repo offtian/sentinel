@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from sentinel.domain.prompts._handle import PromptTemplate
+from sentinel.domain.prompts.template import PromptTemplate
 from sentinel.settings import PROMPTS_DIR
 
 

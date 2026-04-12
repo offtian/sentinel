@@ -24,7 +24,6 @@ class Dependencies:
 
 
 _PROMPT_TEMPLATE = prompts.load_template("chart_request_parser")
-BASE_SYSTEM_PROMPT = _PROMPT_TEMPLATE.system_text
 
 
 def _build_context(ctx: RunContext[Dependencies]) -> str:
@@ -42,7 +41,9 @@ def build_agent(
     """
     Build the chart request parser agent with configured skills baked in.
     """
-    system_prompt = utils.compose_system_prompt(base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills)
+    system_prompt = utils.compose_system_prompt(
+        base_prompt=_PROMPT_TEMPLATE.system_text, skill_names=skills
+    )
     agent_instance: Agent[Dependencies, entities.ChartSpec] = Agent(
         model or "test",
         deps_type=Dependencies,

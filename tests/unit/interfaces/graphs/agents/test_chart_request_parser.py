@@ -42,5 +42,5 @@ class TestChartRequestParserAgent:
         # Given the base system prompt constant
 
         # Then it is a non-empty string
-        assert isinstance(chart_request_parser.BASE_SYSTEM_PROMPT, str)
-        assert len(chart_request_parser.BASE_SYSTEM_PROMPT) > 50
+        assert isinstance(chart_request_parser._PROMPT_TEMPLATE.system_text, str)
+        assert len(chart_request_parser._PROMPT_TEMPLATE.system_text) > 50

@@ -5,9 +5,9 @@ class TestIntentRouterAgent:
     def test_base_system_prompt_loaded(self):
         # Given the base system prompt constant
         # Then it contains expected content
-        assert intent_router.BASE_SYSTEM_PROMPT
-        assert "SRE Investigation" in intent_router.BASE_SYSTEM_PROMPT
-        assert "Support Review" in intent_router.BASE_SYSTEM_PROMPT
+        assert intent_router._PROMPT_TEMPLATE.system_text
+        assert "SRE Investigation" in intent_router._PROMPT_TEMPLATE.system_text
+        assert "Support Review" in intent_router._PROMPT_TEMPLATE.system_text
 
     def test_build_agent_output_type_is_intent_classification(self):
         # Given an agent built from the factory

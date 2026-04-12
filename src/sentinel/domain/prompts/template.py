@@ -45,6 +45,10 @@ class PromptTemplate:
         repr=False,
     )
 
+    @staticmethod
+    def _compute_digest(text: str) -> str:
+        return hashlib.sha256(text.encode()).hexdigest()
+
     @classmethod
     def from_jinja(
         cls,
@@ -65,11 +69,10 @@ class PromptTemplate:
             msg = f"Template {template_name}.j2 has no 'system' block"
             raise ValueError(msg)
         system_text = "".join(block_fn(jinja_template.new_context())).strip()
-        digest = hashlib.sha256(system_text.encode()).hexdigest()
         return cls(
             template_name=template_name,
             system_text=system_text,
-            sha256=digest,
+            sha256=cls._compute_digest(system_text),
             jinja_template=jinja_template,
         )
 
@@ -86,11 +89,10 @@ class PromptTemplate:
         :param template_name: Logical name of the template.
         :param system_text: Fully rendered system-prompt string.
         """
-        digest = hashlib.sha256(system_text.encode()).hexdigest()
         return cls(
             template_name=template_name,
             system_text=system_text,
-            sha256=digest,
+            sha256=cls._compute_digest(system_text),
         )
 
     def render_user(self, **kwargs: object) -> str:

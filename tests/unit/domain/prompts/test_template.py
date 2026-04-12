@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import attrs
 import pytest
-from jinja2 import Environment
+from jinja2 import Environment, Template
 
-from sentinel.domain.prompts._handle import PromptTemplate
+from sentinel.domain.prompts import template as prompt_template_mod
 
 
 def _make_jinja_template(
     *,
     system: str = "You are a bot.",
     user: str = "Hello {{ name }}",
-) -> object:
+) -> Template:
     """Build a minimal Jinja2 template with system and user blocks."""
     env = Environment(autoescape=False)  # noqa: S701
     source = (
@@ -31,7 +31,10 @@ class TestFromText:
         When PromptTemplate.from_text is called,
         Then all fields are populated correctly.
         """
-        tpl = PromptTemplate.from_text(template_name="foo", system_text="hello world")
+        tpl = prompt_template_mod.PromptTemplate.from_text(
+            template_name="foo",
+            system_text="hello world",
+        )
 
         assert tpl.template_name == "foo"
         assert tpl.system_text == "hello world"
@@ -45,8 +48,8 @@ class TestFromText:
         When two templates are created,
         Then they produce identical SHA-256 digests.
         """
-        a = PromptTemplate.from_text(template_name="x", system_text="same")
-        b = PromptTemplate.from_text(template_name="x", system_text="same")
+        a = prompt_template_mod.PromptTemplate.from_text(template_name="x", system_text="same")
+        b = prompt_template_mod.PromptTemplate.from_text(template_name="x", system_text="same")
 
         assert a.sha256 == b.sha256
 
@@ -56,8 +59,8 @@ class TestFromText:
         When two templates are created,
         Then their SHA-256 digests differ.
         """
-        a = PromptTemplate.from_text(template_name="x", system_text="alpha")
-        b = PromptTemplate.from_text(template_name="x", system_text="beta")
+        a = prompt_template_mod.PromptTemplate.from_text(template_name="x", system_text="alpha")
+        b = prompt_template_mod.PromptTemplate.from_text(template_name="x", system_text="beta")
 
         assert a.sha256 != b.sha256
 
@@ -73,7 +76,7 @@ class TestFromJinja:
         """
         jinja_tpl = _make_jinja_template(system="You are helpful.")
 
-        tpl = PromptTemplate.from_jinja(
+        tpl = prompt_template_mod.PromptTemplate.from_jinja(
             template_name="test",
             jinja_template=jinja_tpl,
         )
@@ -91,7 +94,7 @@ class TestFromJinja:
         jinja_tpl = env.from_string("{% block user %}hi{% endblock %}")
 
         with pytest.raises(ValueError, match="has no 'system' block"):
-            PromptTemplate.from_jinja(
+            prompt_template_mod.PromptTemplate.from_jinja(
                 template_name="bad",
                 jinja_template=jinja_tpl,
             )
@@ -107,7 +110,7 @@ class TestRenderUser:
         Then the user block is rendered with those variables.
         """
         jinja_tpl = _make_jinja_template(user="Hello {{ name }}")
-        tpl = PromptTemplate.from_jinja(
+        tpl = prompt_template_mod.PromptTemplate.from_jinja(
             template_name="test",
             jinja_template=jinja_tpl,
         )
@@ -122,7 +125,10 @@ class TestRenderUser:
         When render_user is called,
         Then RuntimeError is raised.
         """
-        tpl = PromptTemplate.from_text(template_name="t", system_text="sys")
+        tpl = prompt_template_mod.PromptTemplate.from_text(
+            template_name="t",
+            system_text="sys",
+        )
 
         with pytest.raises(RuntimeError, match="cannot render user block"):
             tpl.render_user(name="x")
@@ -135,7 +141,7 @@ class TestRenderUser:
         """
         env = Environment(autoescape=False)  # noqa: S701
         jinja_tpl = env.from_string("{% block system %}sys{% endblock %}")
-        tpl = PromptTemplate.from_jinja(
+        tpl = prompt_template_mod.PromptTemplate.from_jinja(
             template_name="no_user",
             jinja_template=jinja_tpl,
         )
@@ -153,7 +159,10 @@ class TestImmutability:
         When attempting to set an attribute,
         Then attrs.exceptions.FrozenInstanceError is raised.
         """
-        tpl = PromptTemplate.from_text(template_name="t", system_text="immutable")
+        tpl = prompt_template_mod.PromptTemplate.from_text(
+            template_name="t",
+            system_text="immutable",
+        )
 
         with pytest.raises(attrs.exceptions.FrozenInstanceError):
             tpl.system_text = "mutated"  # type: ignore[misc]
