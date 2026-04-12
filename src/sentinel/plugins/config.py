@@ -16,6 +16,7 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+from kubernetes_asyncio import client as k8s_async_client
 from pydantic import ConfigDict, PrivateAttr
 from pydantic_ai.mcp import MCPServerSSE
 from pydantic_ai.toolsets import FunctionToolset
@@ -250,6 +251,19 @@ class CommonConfiguration(BaseConfiguration):
             self._k8s_client_cache = k8s_client_mod.KubernetesClient()
         return self._k8s_client_cache
 
+    def _build_k8s_custom_objects_api(self) -> k8s_async_client.CustomObjectsApi | None:
+        """
+        Build a CustomObjectsApi for CRD operations.
+
+        Return None when no K8s cluster is reachable, so the kagent adapter
+        gracefully degrades via its ``is_configured`` check.
+        """
+        k8s_client = self._build_k8s_client()
+        if not k8s_client.is_configured:
+            return None
+
+        return k8s_async_client.CustomObjectsApi()
+
     def build_k8s_investigation_adapter(
         self,
         *,
@@ -305,6 +319,7 @@ class CommonConfiguration(BaseConfiguration):
 
         if backend == "kagent":
             return kagent_adapter_mod.KagentAdapter(
+                k8s_api_client=self._build_k8s_custom_objects_api(),
                 kagent_namespace=self.settings.kagent_namespace,
                 timeout_seconds=self.settings.kagent_investigation_timeout_seconds,
             )
