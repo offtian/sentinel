@@ -33,6 +33,7 @@ class Dependencies:
 
 
 _PROMPT_TEMPLATE = prompts.load_template("response_drafter")
+PROMPT_SHA256 = _PROMPT_TEMPLATE.sha256
 
 
 def _build_context(ctx: RunContext[Dependencies]) -> str:

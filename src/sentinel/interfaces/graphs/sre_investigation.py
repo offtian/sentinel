@@ -17,6 +17,7 @@ from sentinel.domain.vendor_adapters.pagerduty import PagerDutyClient
 from sentinel.interfaces.graphs import common
 from sentinel.interfaces.graphs._node_helpers import instrumented_node_run
 from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser
+from sentinel.interfaces.graphs.agents import utils as agent_utils
 from sentinel.utils import logs, metrics
 from sentinel.vendors import slack
 
@@ -73,6 +74,10 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
                         alert_source=ctx.state.alert.source,
                     ),
                     toolsets=list(ctx.deps.classifier_toolsets) or None,
+                    model_settings=agent_utils.build_cache_settings(
+                        model_name=agent_utils.get_model_name(classifier_agent),
+                        prompt_sha256=alert_classifier.PROMPT_SHA256,
+                    ),
                 )
             except Exception as exc:
                 logs.log_exception(
@@ -275,6 +280,10 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
                         category=ctx.state.classification_category,
                     ),
                     toolsets=list(ctx.deps.analyser_toolsets) or None,
+                    model_settings=agent_utils.build_cache_settings(
+                        model_name=agent_utils.get_model_name(analyser_agent),
+                        prompt_sha256=root_cause_analyser.PROMPT_SHA256,
+                    ),
                 )
             except Exception as exc:
                 logs.log_exception(

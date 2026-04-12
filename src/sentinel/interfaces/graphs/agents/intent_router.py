@@ -26,6 +26,7 @@ class Dependencies:
 
 
 _PROMPT_TEMPLATE = prompts.load_template("intent_router")
+PROMPT_SHA256 = _PROMPT_TEMPLATE.sha256
 
 
 def build_agent(

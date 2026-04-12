@@ -49,6 +49,10 @@ async def _parse_request(
             requester=request.requester,
             team=request.team,
         ),
+        model_settings=utils.build_cache_settings(
+            model_name=utils.get_model_name(parser_agent),
+            prompt_sha256=chart_request_parser.PROMPT_SHA256,
+        ),
     )
     return result.output  # type: ignore[no-any-return]
 
@@ -101,6 +105,10 @@ async def _generate_chart_files(
             policy_json=policy.model_dump_json(),
         ),
         toolsets=list(chart_generator_toolsets) or None,
+        model_settings=utils.build_cache_settings(
+            model_name=utils.get_model_name(generator_agent),
+            prompt_sha256=chart_generator.PROMPT_SHA256,
+        ),
     )
     return result.output.files  # type: ignore[no-any-return]
 

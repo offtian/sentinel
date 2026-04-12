@@ -26,6 +26,7 @@ class Dependencies:
 
 
 _PROMPT_TEMPLATE = prompts.load_template("ticket_reviewer")
+PROMPT_SHA256 = _PROMPT_TEMPLATE.sha256
 
 
 def build_agent(

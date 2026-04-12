@@ -24,6 +24,7 @@ class Dependencies:
 
 
 _PROMPT_TEMPLATE = prompts.load_template("chart_request_parser")
+PROMPT_SHA256 = _PROMPT_TEMPLATE.sha256
 
 
 def _build_context(ctx: RunContext[Dependencies]) -> str:

@@ -39,6 +39,7 @@ class Dependencies:
 
 
 _PROMPT_TEMPLATE = prompts.load_template("k8s_investigator")
+PROMPT_SHA256 = _PROMPT_TEMPLATE.sha256
 
 
 def _build_k8s_context(ctx: RunContext[Dependencies]) -> str:
