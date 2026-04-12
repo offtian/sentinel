@@ -265,6 +265,110 @@ class TestRecordAgentCall:
         assert mock_ops.persist_agent_call.call_args.kwargs["agent_name"] == "alert_classifier"
 
 
+class TestRecordAgentResult:
+    @pytest.mark.asyncio
+    async def test_extracts_usage_from_result(self) -> None:
+        # Given an ExecutionTracer and a mock agent result with usage data
+        et = tracer.ExecutionTracer(db=None)
+        et._trace_id = uuid.uuid4()
+        node_id = uuid.uuid4()
+
+        mock_usage = mock.MagicMock()
+        mock_usage.request_tokens = 100
+        mock_usage.response_tokens = 50
+        mock_usage.total_tokens = 150
+
+        mock_result = mock.MagicMock()
+        mock_result.usage.return_value = mock_usage
+        mock_result.all_messages.return_value = []
+
+        # When record_agent_result is called
+        with (
+            mock.patch.object(et, "record_agent_call", new_callable=mock.AsyncMock) as mock_record,
+            mock.patch.object(tracer, "costing") as mock_costing,
+        ):
+            mock_costing.estimate_cost_usd.return_value = 0.002
+            await et.record_agent_result(
+                node_id=node_id,
+                agent_name="alert_classifier",
+                model_id="openai/gpt-4.1-mini",
+                result=mock_result,
+                duration_ms=300,
+            )
+
+        # Then record_agent_call receives the extracted token_usage dict
+        mock_record.assert_awaited_once()
+        call_kwargs = mock_record.call_args.kwargs
+        assert call_kwargs["token_usage"]["input_tokens"] == 100
+        assert call_kwargs["token_usage"]["output_tokens"] == 50
+        assert call_kwargs["token_usage"]["total_tokens"] == 150
+
+    @pytest.mark.asyncio
+    async def test_includes_cost_usd_in_token_usage(self) -> None:
+        # Given an ExecutionTracer and a mock agent result with usage data
+        et = tracer.ExecutionTracer(db=None)
+        et._trace_id = uuid.uuid4()
+        node_id = uuid.uuid4()
+
+        mock_usage = mock.MagicMock()
+        mock_usage.request_tokens = 200
+        mock_usage.response_tokens = 80
+        mock_usage.total_tokens = 280
+
+        mock_result = mock.MagicMock()
+        mock_result.usage.return_value = mock_usage
+        mock_result.all_messages.return_value = []
+
+        # When record_agent_result is called with a costing helper that returns a value
+        with (
+            mock.patch.object(et, "record_agent_call", new_callable=mock.AsyncMock) as mock_record,
+            mock.patch.object(tracer, "costing") as mock_costing,
+        ):
+            mock_costing.estimate_cost_usd.return_value = 0.0042
+            await et.record_agent_result(
+                node_id=node_id,
+                agent_name="root_cause_analyser",
+                model_id="openai/gpt-4.1",
+                result=mock_result,
+            )
+
+        # Then cost_usd is included in the token_usage passed to record_agent_call
+        call_kwargs = mock_record.call_args.kwargs
+        assert call_kwargs["token_usage"]["cost_usd"] == 0.0042
+        mock_costing.estimate_cost_usd.assert_called_once_with(
+            model_id="openai/gpt-4.1",
+            input_tokens=200,
+            output_tokens=80,
+        )
+
+    @pytest.mark.asyncio
+    async def test_graceful_when_usage_returns_none(self) -> None:
+        # Given an ExecutionTracer and a mock agent result whose usage() returns None
+        et = tracer.ExecutionTracer(db=None)
+        et._trace_id = uuid.uuid4()
+        node_id = uuid.uuid4()
+
+        mock_result = mock.MagicMock()
+        mock_result.usage.return_value = None
+        mock_result.all_messages.return_value = []
+
+        # When record_agent_result is called
+        with mock.patch.object(
+            et, "record_agent_call", new_callable=mock.AsyncMock
+        ) as mock_record:
+            await et.record_agent_result(
+                node_id=node_id,
+                agent_name="alert_classifier",
+                model_id="openai/gpt-4.1-mini",
+                result=mock_result,
+            )
+
+        # Then record_agent_call is still called with token_usage=None (no crash)
+        mock_record.assert_awaited_once()
+        call_kwargs = mock_record.call_args.kwargs
+        assert call_kwargs["token_usage"] is None
+
+
 class TestTraceCollectorBackwardCompat:
     def test_has_record_method(self) -> None:
         # Given an ExecutionTracer
