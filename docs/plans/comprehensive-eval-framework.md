@@ -1,6 +1,6 @@
 # Plan: Comprehensive Agent Evaluation Framework
 
-**Status:** in-progress
+**Status:** complete
 **Created:** 2026-04-12
 **Last updated:** 2026-04-12
 
@@ -35,16 +35,16 @@ Expand the eval framework from 2 deterministic evaluators covering 4 agents to a
 ## Steps
 
 - [x] Step 1: Create `evaluators/base.py` + refactor existing evaluators
-- [ ] Step 2: Create `evaluators/semantic.py` — LLM-as-judge evaluators
-- [ ] Step 3: Create `evaluators/safety.py` — hallucination and safety evaluators
-- [ ] Step 4: Create `metrics.py` — scoring model and metric taxonomy
-- [ ] Step 5: Add golden datasets for uncovered agents
-- [ ] Step 6: Extend `cases/base.py` with new agent builders
-- [ ] Step 7: Update `runner.py` with composite scoring
-- [ ] Step 8: Extend `reporting.py` and `rendering.py`
-- [ ] Step 9: Update `evaluators/__init__.py`
-- [ ] Step 10: Add unit tests for all new code
-- [ ] Step 11: Add `pydantic-evals` to dev dependencies
+- [x] Step 2: Create `evaluators/semantic.py` — LLM-as-judge evaluators
+- [x] Step 3: Create `evaluators/safety.py` — hallucination and safety evaluators
+- [x] Step 4: Create `metrics.py` — scoring model and metric taxonomy
+- [x] Step 5: Add golden datasets for uncovered agents
+- [x] Step 6: Extend `cases/base.py` with new agent builders
+- [x] Step 7: Update `runner.py` with composite scoring
+- [x] Step 8: Extend `reporting.py` and `rendering.py`
+- [x] Step 9: Update `evaluators/__init__.py`
+- [x] Step 10: Add unit tests for all new code
+- [x] Step 11: Add `pydantic-evals` to dev dependencies
 
 ## Changes
 
