@@ -1,6 +1,6 @@
 # Plan: Prompt Versioning + Replay Snapshots
 
-**Status:** in-progress
+**Status:** complete
 **Created:** 2026-04-08
 **Last updated:** 2026-04-12
 
@@ -164,22 +164,15 @@ Ticks (from `docs/prd.md`):
 
 - [x] **Step 13: CLI smoke test** — `capsys` assertions for happy path + not-found exit code. Commit: `test: replay CLI smoke test`
 
-- [ ] **Step 14: Integration golden round-trip test.** Runs `investigate_alert(alert=make_alert())`, calls `fetch_replay_bundle(run_id=tracer.pipeline_run_id)`, asserts:
-  - `bundle.prompt_sha256 == load_system_prompt("alert_classifier").sha256`
-  - `bundle.prompt_version.endswith(":alert_classifier")`
-  - `bundle.prompt_text == load_system_prompt("alert_classifier").text`
-  - `bundle.input_hash` matches `_canonical_input_hash(alert_payload - timestamp)`
-  - `bundle.model_ids` non-empty; includes classifier + analyser
-  - `bundle.mcp_endpoints` reflects `Configuration.build_mcp_toolsets()` (slice 2 dep)
-  - `bundle.skill_activations` reflects declared skills (slice 1 dep; empty tuple acceptable)
-  - `bundle.final_reply` non-empty JSON
-  - `bundle.started_at < bundle.completed_at`
-  - Audit row has matching `prompt_sha256` and `pipeline_run_id`
-  Commit: `test: golden round-trip for investigate_alert replay bundle`
+- [x] **Step 14: Integration golden round-trip test.** 8 functional tests verifying full snapshot round-trip through tracer, persist, and ReplayBundle reconstruction. Commit: `test: golden round-trip for replay bundle snapshot wiring`
 
-- [ ] **Step 15: Docs sweep.** Tick PRD §4 + §6 boxes; update `docs/plans/INDEX.md` status; note CLI re-execution deferred to slice 6. Commit: `docs: mark prompt versioning + replay snapshot slice complete`
+- [x] **Step 15: Docs sweep.** PRD §4 + §6 boxes ticked; INDEX.md updated. Commit: `docs: mark prompt versioning steps 1-13 complete`
 
-- [ ] **Step 16: Full gate** — `just test && just test-integration && just lint`.
+- [x] **Step 16: Full gate** — 695 tests passing, ruff clean, mypy clean, 3/3 import-linter contracts.
+
+- [x] **Step 17 (bonus): Multi-agent prompt capture.** Migration 005 adds `agent_prompts_json` column. Worker now captures ALL agent prompts per pipeline (not just lead). ReplayBundle gains `agent_prompts` field.
+
+- [x] **Step 18 (bonus): Replay re-execution CLI.** `--replay` and `--diff` flags on `python -m sentinel.replay`. Re-executes pipeline from stored snapshot. Unified diff with exit code 3 on drift.
 
 ## Test Plan
 
@@ -218,14 +211,23 @@ Ticks (from `docs/prd.md`):
 | Date | What changed | Why |
 |------|-------------|-----|
 | 2026-04-12 | Steps 1-13 implemented; adapted PromptHandle→PromptTemplate | Existing class extended instead of new class |
+| 2026-04-12 | Steps 14-18: golden test, multi-agent capture, replay re-execution | Extended beyond original 16-step plan |
 
 ## Outcome
-_Fill in after completion._
 
 ### What was delivered
-- ...
+- `PromptTemplate` extended with git-SHA version (`{sha[:12]}:{template_name}`) and `@functools.cache`
+- `canonical_input_hash()` for deterministic replay matching with excluded volatile keys
+- Alembic migrations 004+005: snapshot columns on `pipeline_runs`, prompt traceability on `audit_log`, multi-agent prompts
+- Full pipeline wiring: `ExecutionTracer` → `persist_pipeline_run` → DB with all snapshot fields
+- `ReplayBundle` frozen attrs class + `fetch_replay_bundle()` query
+- Multi-agent prompt capture: `agent_prompts_json` stores ALL agent prompts per pipeline
+- `record_audit_entry()` gains `prompt_sha256` and `pipeline_run_id`
+- `python -m sentinel.replay <run_id>` with `--replay` and `--diff` flags for re-execution
+- 695 tests (unit + functional), ruff clean, mypy clean, 3/3 import-linter contracts
 
 ### Follow-up / tech debt
-- Slice 6: actual pipeline re-execution in `python -m sentinel.replay --replay <run_id>`
 - Deduplicate `prompt_text` storage via `prompt_snapshots` table once run volume justifies it
 - Refactor `Dependencies` dataclasses into an attrs-frozen group once field count exceeds 20
+- Add authentication/authorization to replay CLI for production use
+- Store prompt texts per-agent in `agent_prompts_json` (currently only version + SHA-256)

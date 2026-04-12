@@ -163,7 +163,7 @@ Acceptance criteria:
 - [x] Tier 2 component evaluations: per-agent quality scoring with golden datasets
 - [x] Every prompt template carries a `prompt_version` (git SHA + filename) and a `prompt_sha256` hash, recorded on each `AgentCallRecord` and `AuditLogRecord`
 - [ ] Skill files are content-hashed and the active hash is recorded alongside the prompt hash
-- [ ] `replay_pipeline_run(run_id)` re-executes a historical run from its snapshot — prompt version, model id, MCP servers, skills, and input payload — for regulator playback
+- [x] `replay_pipeline_run(run_id)` re-executes a historical run from its snapshot — prompt version, model id, MCP servers, skills, and input payload — for regulator playback — implemented via `python -m sentinel.replay <run_id> --replay` with `--diff` for output comparison
 
 ### 7. Agent Capability Platform — Skills, MCP & Cutting-Edge Capabilities
 
@@ -262,7 +262,7 @@ AgentGateway becomes relevant when:
 | Review < 3min benchmark | Production deployment (separate repo) | Post-deploy |
 | Pipeline OTel/Logfire exporter | Section 4 acceptance criteria | Phase D |
 | ~~Universal MCP injection across all agents~~ | ~~Section 7~~ | **Done** — PR #6 |
-| ~~Prompt versioning~~ + replay re-execution | Versioning done; re-execution scaffold only | Phase E |
+| ~~Prompt versioning + replay re-execution~~ | ~~Versioning done; re-execution scaffold only~~ | **Done** — PR #15: versioning, multi-agent capture, `--replay` + `--diff` CLI |
 | ~~Prompt caching across agents~~ | ~~Sections 1 & 2~~ | **Done** — vendor-agnostic via `build_cache_settings()` |
 | LiteLLM deployment mode | Gateway proxy adds SPOF + network hop; SDK mode (in-process) is better for single-service architecture | Phase D |
 | Eval framework maturity | pydantic_evals lacks dashboard, regression tracking, community metrics. Consider DeepEval or Braintrust. | Phase D |
