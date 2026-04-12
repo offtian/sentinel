@@ -85,6 +85,40 @@ After implementing ANY change that resolves a requirement or changes architectur
 - `docs/reviews/*` — frozen historical snapshots
 - Status lives only in `docs/prd.md` (acceptance criteria) and `docs/plans/INDEX.md` (plan progress)
 
+## Agent Teams
+
+This project uses Claude Code Agent Teams for multi-agent coordination. Subagent definitions live in `.claude/agents/`.
+
+### Available roles
+
+| Role | File | Focus |
+|------|------|-------|
+| `platform-engineer` | `.claude/agents/platform-engineer.md` | Infrastructure, adapters, config, observability |
+| `ai-engineer` | `.claude/agents/ai-engineer.md` | LLM pipelines, agents, prompts, evaluation |
+| `product-engineer` | `.claude/agents/product-engineer.md` | API endpoints, data flow, user-facing features |
+| `security-engineer` | `.claude/agents/security-engineer.md` | Auth, validation, OWASP, secrets management |
+| `data-engineer` | `.claude/agents/data-engineer.md` | Schema, migrations, queries, data pipelines |
+
+### Quality gates (automated via hooks)
+
+- **TaskCompleted** hook runs `scripts/validate-task.sh` (ruff + unit tests). Exit code 2 blocks completion.
+- **TeammateIdle** hook runs `scripts/run-qa.sh` (full lint + test suite). Exit code 2 keeps teammate working.
+
+These hooks replace dedicated PM and QA agent sessions — same quality gates, no inference cost.
+
+### Spawning a team
+
+```text
+Create an agent team for <task>. Spawn:
+- A platform-engineer teammate for <infrastructure work>
+- An ai-engineer teammate for <pipeline work>
+
+Platform engineer starts with <task A>. AI engineer starts with <task B>,
+then picks up <task C> which depends on platform engineer's output.
+```
+
+All teammates automatically load CLAUDE.md, AGENTS.md, and .claude/rules/ — do not repeat conventions in spawn prompts.
+
 ## graphify
 
 This project has a graphify knowledge graph at graphify-out/.

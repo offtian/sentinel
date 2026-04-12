@@ -56,6 +56,30 @@
           }
         ]
       }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/validate-task.sh",
+            "timeout": 180000,
+            "statusMessage": "Validating task completion (lint + tests)..."
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/run-qa.sh",
+            "timeout": 180000,
+            "statusMessage": "Running QA checks (lint + tests)..."
+          }
+        ]
+      }
     ]
   }
 }
