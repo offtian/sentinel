@@ -14,6 +14,7 @@ from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.graphs import common
 from sentinel.interfaces.graphs._node_helpers import instrumented_node_run
 from sentinel.interfaces.graphs.agents import response_drafter, ticket_reviewer
+from sentinel.interfaces.graphs.agents import utils as agent_utils
 from sentinel.utils import logs, metrics
 
 
@@ -56,6 +57,10 @@ class ClassifyTicket(BaseNode[State, Dependencies, common.SupportReply]):
                         ticket_labels=ctx.state.ticket.labels,
                     ),
                     toolsets=list(ctx.deps.reviewer_toolsets) or None,
+                    model_settings=agent_utils.build_cache_settings(
+                        model_name=agent_utils.get_model_name(reviewer_agent),
+                        prompt_sha256=ticket_reviewer.PROMPT_SHA256,
+                    ),
                 )
             except Exception as exc:
                 logs.log_exception(
@@ -205,6 +210,10 @@ class DraftResponse(BaseNode[State, Dependencies, common.SupportReply]):
                         ticket_search_results=self.ticket_results,
                     ),
                     toolsets=list(ctx.deps.drafter_toolsets) or None,
+                    model_settings=agent_utils.build_cache_settings(
+                        model_name=agent_utils.get_model_name(drafter_agent),
+                        prompt_sha256=response_drafter.PROMPT_SHA256,
+                    ),
                 )
             except Exception as exc:
                 logs.log_exception(

@@ -24,7 +24,8 @@ class Dependencies:
     alert_source: str
 
 
-BASE_SYSTEM_PROMPT = prompts.load_system_prompt("alert_classifier")
+_PROMPT_TEMPLATE = prompts.load_template("alert_classifier")
+PROMPT_SHA256 = _PROMPT_TEMPLATE.sha256
 
 
 def build_agent(
@@ -39,7 +40,10 @@ def build_agent(
     :param skills: Tuple of skill names to append to the system prompt,
         in declaration order. Unknown names raise ``SkillNotFoundError``.
     """
-    system_prompt = utils.compose_system_prompt(base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills)
+    system_prompt = utils.compose_system_prompt(
+        base_prompt=_PROMPT_TEMPLATE.system_text,
+        skill_names=skills,
+    )
     return Agent(
         model or "test",
         deps_type=Dependencies,

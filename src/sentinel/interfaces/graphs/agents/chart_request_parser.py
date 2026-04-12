@@ -23,13 +23,13 @@ class Dependencies:
     team: str
 
 
-BASE_SYSTEM_PROMPT = prompts.load_system_prompt("chart_request_parser")
+_PROMPT_TEMPLATE = prompts.load_template("chart_request_parser")
+PROMPT_SHA256 = _PROMPT_TEMPLATE.sha256
 
 
 def _build_context(ctx: RunContext[Dependencies]) -> str:
     """Render the user prompt with request context."""
-    return prompts.render_user_prompt(
-        "chart_request_parser",
+    return _PROMPT_TEMPLATE.render_user(
         raw_message=ctx.deps.raw_message,
         requester=ctx.deps.requester,
         team=ctx.deps.team,
@@ -42,7 +42,9 @@ def build_agent(
     """
     Build the chart request parser agent with configured skills baked in.
     """
-    system_prompt = utils.compose_system_prompt(base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills)
+    system_prompt = utils.compose_system_prompt(
+        base_prompt=_PROMPT_TEMPLATE.system_text, skill_names=skills
+    )
     agent_instance: Agent[Dependencies, entities.ChartSpec] = Agent(
         model or "test",
         deps_type=Dependencies,

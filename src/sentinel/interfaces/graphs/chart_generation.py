@@ -22,25 +22,11 @@ from sentinel.application.charts import commit as chart_commit
 from sentinel.domain.charts import confidence as chart_confidence
 from sentinel.domain.charts import entities, policies, validation
 from sentinel.domain.pipeline import types as pipeline_types
-from sentinel.interfaces.graphs.agents import chart_generator, chart_request_parser
+from sentinel.interfaces.graphs.agents import chart_generator, chart_request_parser, utils
 from sentinel.utils import logs
 
 
 logger = logs.get_logger()
-
-
-def _get_agent_model_name(agent: Any) -> str:
-    """
-    Extract the model name from a PydanticAI agent for audit metadata.
-
-    :param agent: A PydanticAI agent instance.
-    :returns: The model name string, or empty string if not accessible.
-    """
-    try:
-        name = agent.model.model_name
-        return name if isinstance(name, str) else ""
-    except AttributeError:
-        return ""
 
 
 async def _parse_request(
@@ -62,6 +48,10 @@ async def _parse_request(
             raw_message=request.raw_message,
             requester=request.requester,
             team=request.team,
+        ),
+        model_settings=utils.build_cache_settings(
+            model_name=utils.get_model_name(parser_agent),
+            prompt_sha256=chart_request_parser.PROMPT_SHA256,
         ),
     )
     return result.output  # type: ignore[no-any-return]
@@ -115,6 +105,10 @@ async def _generate_chart_files(
             policy_json=policy.model_dump_json(),
         ),
         toolsets=list(chart_generator_toolsets) or None,
+        model_settings=utils.build_cache_settings(
+            model_name=utils.get_model_name(generator_agent),
+            prompt_sha256=chart_generator.PROMPT_SHA256,
+        ),
     )
     return result.output.files  # type: ignore[no-any-return]
 
@@ -322,8 +316,8 @@ async def generate_chart(
 
     spec, policy = result
 
-    parser_model = _get_agent_model_name(agent_for("chart_request_parser"))
-    generator_model = _get_agent_model_name(agent_for("chart_generator"))
+    parser_model = utils.get_model_name(agent_for("chart_request_parser"))
+    generator_model = utils.get_model_name(agent_for("chart_generator"))
 
     # Step 3: Merge spec with policy
     step_start = time.monotonic()

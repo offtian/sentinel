@@ -1,6 +1,39 @@
 from __future__ import annotations
 
+from typing import Any
+
 from sentinel.domain import skills as skills_mod
+from sentinel.interfaces.graphs.agents import _cache_settings
+
+
+def get_model_name(agent: Any) -> str:
+    """
+    Extract the model name string from a pre-built PydanticAI agent.
+
+    Returns an empty string for test/mock models or when the attribute
+    is not accessible.
+    """
+    try:
+        name = agent.model.model_name
+        return name if isinstance(name, str) else ""
+    except AttributeError:
+        return ""
+
+
+def build_cache_settings(
+    *,
+    model_name: str,
+    prompt_sha256: str,
+) -> dict[str, Any] | None:
+    """
+    Return PydanticAI ``model_settings`` enabling system-prompt caching.
+
+    Delegates to :func:`_cache_settings.build_cache_settings`.
+    """
+    return _cache_settings.build_cache_settings(
+        model_name=model_name,
+        prompt_sha256=prompt_sha256,
+    )
 
 
 def get_model_with_gateway(model_name: str) -> str:

@@ -61,5 +61,5 @@ class TestChartGeneratorAgent:
         # Given the base system prompt constant
 
         # Then it is a non-empty string
-        assert isinstance(chart_generator.BASE_SYSTEM_PROMPT, str)
-        assert len(chart_generator.BASE_SYSTEM_PROMPT) > 50
+        assert isinstance(chart_generator._PROMPT_TEMPLATE.system_text, str)
+        assert len(chart_generator._PROMPT_TEMPLATE.system_text) > 50

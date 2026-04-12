@@ -31,13 +31,13 @@ class Dependencies:
     policy_json: str
 
 
-BASE_SYSTEM_PROMPT = prompts.load_system_prompt("chart_generator")
+_PROMPT_TEMPLATE = prompts.load_template("chart_generator")
+PROMPT_SHA256 = _PROMPT_TEMPLATE.sha256
 
 
 def _build_context(ctx: RunContext[Dependencies]) -> str:
     """Render the user prompt with spec and policy context."""
-    return prompts.render_user_prompt(
-        "chart_generator",
+    return _PROMPT_TEMPLATE.render_user(
         service_name=ctx.deps.service_name,
         image=ctx.deps.image,
         spec_json=ctx.deps.spec_json,
@@ -51,7 +51,9 @@ def build_agent(
     """
     Build the chart generator agent with configured skills baked in.
     """
-    system_prompt = utils.compose_system_prompt(base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills)
+    system_prompt = utils.compose_system_prompt(
+        base_prompt=_PROMPT_TEMPLATE.system_text, skill_names=skills
+    )
     agent_instance: Agent[Dependencies, ChartGeneratorOutput] = Agent(
         model or "test",
         deps_type=Dependencies,

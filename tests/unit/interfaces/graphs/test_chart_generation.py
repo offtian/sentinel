@@ -6,18 +6,19 @@ from unittest import mock
 
 from sentinel.domain.charts import validation
 from sentinel.interfaces.graphs import chart_generation
+from sentinel.interfaces.graphs.agents import utils
 from tests import factories
 from tests.functional.conftest import _build_fake_config
 
 
-class TestGetAgentModelName:
+class TestGetModelName:
     def test_extracts_model_name_from_agent(self):
         # Given a fake agent with a model.model_name attribute
         fake_model = types.SimpleNamespace(model_name="openai/gpt-4.1")
         fake_agent = types.SimpleNamespace(model=fake_model)
 
         # When extracting the model name
-        result = chart_generation._get_agent_model_name(fake_agent)
+        result = utils.get_model_name(fake_agent)
 
         # Then the model name string is returned
         assert result == "openai/gpt-4.1"
@@ -27,7 +28,7 @@ class TestGetAgentModelName:
         not_an_agent = object()
 
         # When extracting the model name
-        result = chart_generation._get_agent_model_name(not_an_agent)
+        result = utils.get_model_name(not_an_agent)
 
         # Then an empty string is returned
         assert result == ""
@@ -37,7 +38,7 @@ class TestGetAgentModelName:
         fake_agent = types.SimpleNamespace(model=object())
 
         # When extracting the model name
-        result = chart_generation._get_agent_model_name(fake_agent)
+        result = utils.get_model_name(fake_agent)
 
         # Then an empty string is returned
         assert result == ""
@@ -49,7 +50,7 @@ class TestGetAgentModelName:
         )
 
         # When extracting the model name
-        result = chart_generation._get_agent_model_name(fake_agent)
+        result = utils.get_model_name(fake_agent)
 
         # Then an empty string is returned rather than raising a validation error
         assert result == ""

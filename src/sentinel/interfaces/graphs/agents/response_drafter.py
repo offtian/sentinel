@@ -32,7 +32,8 @@ class Dependencies:
     ticket_search_results: list[searcher.TicketSearchResult]
 
 
-BASE_SYSTEM_PROMPT = prompts.load_system_prompt("response_drafter")
+_PROMPT_TEMPLATE = prompts.load_template("response_drafter")
+PROMPT_SHA256 = _PROMPT_TEMPLATE.sha256
 
 
 def _build_context(ctx: RunContext[Dependencies]) -> str:
@@ -49,8 +50,7 @@ def _build_context(ctx: RunContext[Dependencies]) -> str:
         }
         for r in ctx.deps.ticket_search_results
     ]
-    return prompts.render_user_prompt(
-        "response_drafter",
+    return _PROMPT_TEMPLATE.render_user(
         ticket_summary=ctx.deps.ticket_summary,
         ticket_category=ctx.deps.ticket_category,
         ticket_description=ctx.deps.ticket_description,
@@ -77,7 +77,9 @@ def build_agent(
     """
     Build the response drafter agent with configured skills baked in.
     """
-    system_prompt = utils.compose_system_prompt(base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills)
+    system_prompt = utils.compose_system_prompt(
+        base_prompt=_PROMPT_TEMPLATE.system_text, skill_names=skills
+    )
     agent_instance: Agent[Dependencies, DraftedResponse] = Agent(
         model or "test",
         deps_type=Dependencies,

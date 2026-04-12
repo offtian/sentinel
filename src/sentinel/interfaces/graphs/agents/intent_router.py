@@ -25,7 +25,8 @@ class Dependencies:
     message: str
 
 
-BASE_SYSTEM_PROMPT = prompts.load_system_prompt("intent_router")
+_PROMPT_TEMPLATE = prompts.load_template("intent_router")
+PROMPT_SHA256 = _PROMPT_TEMPLATE.sha256
 
 
 def build_agent(
@@ -34,7 +35,9 @@ def build_agent(
     """
     Build the intent router agent with configured skills baked in.
     """
-    system_prompt = utils.compose_system_prompt(base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills)
+    system_prompt = utils.compose_system_prompt(
+        base_prompt=_PROMPT_TEMPLATE.system_text, skill_names=skills
+    )
     return Agent(
         model or "test",
         deps_type=Dependencies,

@@ -32,12 +32,12 @@ class Dependencies:
     category: str = ""
 
 
-BASE_SYSTEM_PROMPT = prompts.load_system_prompt("root_cause_analyser")
+_PROMPT_TEMPLATE = prompts.load_template("root_cause_analyser")
+PROMPT_SHA256 = _PROMPT_TEMPLATE.sha256
 
 
 def _build_investigation_context(ctx: RunContext[Dependencies]) -> str:
-    return prompts.render_user_prompt(
-        "root_cause_analyser",
+    return _PROMPT_TEMPLATE.render_user(
         alert_title=ctx.deps.alert_title,
         alert_description=ctx.deps.alert_description,
         alert_severity=ctx.deps.alert_severity,
@@ -74,7 +74,9 @@ def build_agent(
     operator can declare a base runbook set in ``config.load_agents()``
     and let the classifier output add category-specific skills at runtime.
     """
-    system_prompt = utils.compose_system_prompt(base_prompt=BASE_SYSTEM_PROMPT, skill_names=skills)
+    system_prompt = utils.compose_system_prompt(
+        base_prompt=_PROMPT_TEMPLATE.system_text, skill_names=skills
+    )
     agent_instance: Agent[Dependencies, RootCauseAnalysis] = Agent(
         model or "test",
         deps_type=Dependencies,

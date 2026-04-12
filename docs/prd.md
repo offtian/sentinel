@@ -78,7 +78,7 @@ Acceptance criteria:
 - [ ] Investigation completes within 2 minutes of alert receipt — not yet benchmarked in production
 - [x] SRE agents auto-load MCP toolsets discovered from `MCP_SERVERS` — shared via `Configuration.build_mcp_toolsets()`, injected as `classifier_toolsets` and `analyser_toolsets`
 - [x] Alert classifier output drives runbook **skill** selection (e.g. `k8s-crashloop-runbook`) appended to root-cause-analyser context — `ClassifyAlert` stores `classification_category`, passed to `root_cause_analyser.Dependencies(category=...)`, which calls `_inject_runbook_skills()` → `render_skills_section(category=...)`
-- [ ] Anthropic prompt-cache markers applied to all SRE agent system prompts via LiteLLM `extra_body`
+- [x] Prompt caching enabled on all SRE agent system prompts via PydanticAI `model_settings` (Anthropic `cache_instructions` / OpenAI `prompt_cache_key`)
 
 ### 2. AI Support Agent — Ticket Review Pipeline
 
@@ -96,7 +96,7 @@ Acceptance criteria:
 - [ ] Review completes within 3 minutes of ticket creation — not yet benchmarked in production
 - [x] Support agents auto-load MCP toolsets discovered from `MCP_SERVERS` — shared via `Configuration.build_mcp_toolsets()`, injected as `reviewer_toolsets` and `drafter_toolsets`
 - [ ] Ticket classifier output drives response **skill** selection (e.g. `auth-error-response`, `rate-limit-response`)
-- [ ] Anthropic prompt-cache markers applied to ticket reviewer + response drafter system prompts
+- [x] Prompt caching enabled on ticket reviewer + response drafter system prompts
 
 ### 3. Infrastructure & Scalability
 
@@ -263,7 +263,7 @@ AgentGateway becomes relevant when:
 | Pipeline OTel/Logfire exporter | Section 4 acceptance criteria | Phase D |
 | ~~Universal MCP injection across all agents~~ | ~~Section 7~~ | **Done** — PR #6 |
 | Prompt versioning + replay snapshots | Sections 4 & 6 | Phase D |
-| Anthropic prompt caching across agents | Sections 1 & 2 | Phase D |
+| ~~Prompt caching across agents~~ | ~~Sections 1 & 2~~ | **Done** — vendor-agnostic via `build_cache_settings()` |
 | LiteLLM deployment mode | Gateway proxy adds SPOF + network hop; SDK mode (in-process) is better for single-service architecture | Phase D |
 | Eval framework maturity | pydantic_evals lacks dashboard, regression tracking, community metrics. Consider DeepEval or Braintrust. | Phase D |
 | Real incident data validation | All development has been against synthetic data. Architecture is sound but unvalidated against real PagerDuty alerts, Jira tickets, and incident data. | Post-deploy |

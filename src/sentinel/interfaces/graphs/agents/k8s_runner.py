@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from sentinel.domain.sre import entities, investigation, k8s_native_agent
 from sentinel.domain.tools import kubernetes as k8s_tools
 from sentinel.domain.tools import kubernetes_toolset as k8s_toolset_mod
-from sentinel.interfaces.graphs.agents import k8s_investigator
+from sentinel.interfaces.graphs.agents import k8s_investigator, utils
 
 
 if TYPE_CHECKING:
@@ -61,6 +61,10 @@ async def run_k8s_agent(
     result = await agent.run(
         deps=deps,
         toolsets=toolsets,
+        model_settings=utils.build_cache_settings(
+            model_name=utils.get_model_name(agent),
+            prompt_sha256=k8s_investigator.PROMPT_SHA256,
+        ),
     )
 
     output = result.output
