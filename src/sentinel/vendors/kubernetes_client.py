@@ -98,7 +98,8 @@ class KubernetesClient:
 
         :raises ApiException: if the Kubernetes API returns an error
         """
-        assert self._core is not None
+        if self._core is None:
+            raise RuntimeError("KubernetesClient not configured — check is_configured first")
         pod = await self._core.read_namespaced_pod(
             name=pod_name,
             namespace=namespace,
@@ -134,7 +135,8 @@ class KubernetesClient:
 
         :raises ApiException: if the Kubernetes API returns an error
         """
-        assert self._apps is not None
+        if self._apps is None:
+            raise RuntimeError("KubernetesClient not configured — check is_configured first")
         deploy = await self._apps.read_namespaced_deployment(
             name=deployment_name,
             namespace=namespace,
@@ -172,7 +174,8 @@ class KubernetesClient:
 
         :raises ApiException: if the Kubernetes API returns an error
         """
-        assert self._core is not None
+        if self._core is None:
+            raise RuntimeError("KubernetesClient not configured — check is_configured first")
         field_selector = f"involvedObject.name={resource_name}"
         event_list = await self._core.list_namespaced_event(
             namespace=namespace,
@@ -205,7 +208,8 @@ class KubernetesClient:
 
         :raises ApiException: if the Kubernetes API returns an error
         """
-        assert self._core is not None
+        if self._core is None:
+            raise RuntimeError("KubernetesClient not configured — check is_configured first")
         kwargs: dict[str, Any] = {
             "name": pod_name,
             "namespace": namespace,
@@ -255,8 +259,10 @@ class KubernetesClient:
 
         apps_kinds = {"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet"}
         if kind in apps_kinds:
-            assert self._apps is not None
+            if self._apps is None:
+                raise RuntimeError("KubernetesClient not configured — check is_configured first")
             return self._apps, method_name
 
-        assert self._core is not None
+        if self._core is None:
+            raise RuntimeError("KubernetesClient not configured — check is_configured first")
         return self._core, method_name

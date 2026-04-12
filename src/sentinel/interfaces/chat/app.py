@@ -29,7 +29,7 @@ from sentinel import config as config_mod
 from sentinel.domain.charts import entities as chart_entities
 from sentinel.domain.search import factory as search_factory
 from sentinel.domain.sre import entities as sre_entities
-from sentinel.domain.sre import holmes_adapter, k8s_native_agent
+from sentinel.domain.sre import holmes_adapter
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.chat.status_update import StreamlitStatusUpdateClient
 from sentinel.interfaces.graphs import agents as agent_module
@@ -100,11 +100,6 @@ def _fetch_ollama_models() -> tuple[str, ...]:
         return ()
 
 
-def _selected_model(role: str) -> str:
-    """Return the ``ollama/<model>`` string for a given role from session state."""
-    return f"ollama/{st.session_state[f'model_{role}']}"
-
-
 # ---------------------------------------------------------------------------
 # Intent classification
 # ---------------------------------------------------------------------------
@@ -135,15 +130,6 @@ async def _classify_intent(
 # ---------------------------------------------------------------------------
 
 
-def _build_k8s_adapter() -> Any:
-    """Build a K8s investigation adapter when a K8s backend is selected."""
-    return k8s_native_agent.NativeK8sAgent(
-        k8s_client=None,  # No real cluster — agent will return unconfigured result
-        model_name=_selected_model("analyser"),
-        agent_runner=k8s_runner.run_k8s_agent,
-    )
-
-
 async def _run_sre(
     text: str,
     *,
@@ -165,34 +151,18 @@ async def _run_sre(
         raw_payload={"chat_text": text},
     )
 
-    backend = st.session_state.get("k8s_backend", "Disabled")
-
-    # Run K8s investigation adapter alongside Holmes when selected
-    k8s_result = None
-    if backend in ("Native K8s", "Kagent", "Both (comparison)"):
-        k8s_adapter = _build_k8s_adapter()
-        k8s_result = await k8s_adapter.investigate(alert=alert)
-
     cfg = config_mod.get_config()
     shared_mcp = cfg.build_mcp_toolsets()
 
-    reply = await sre_investigation.investigate_alert(
-        alert=alert,
-        agent_for=cfg.agent_for,
-        holmes=holmes_adapter.HolmesAdapter(enabled=get_settings().holmesgpt_enabled),
-        status_update_client=status_client,
-        post_to_slack=False,
-        trace_collector=trace_collector,
-        classifier_toolsets=shared_mcp,
-        analyser_toolsets=shared_mcp,
-        k8s_adapter=cfg.build_k8s_investigation_adapter(
-            agent_runner=k8s_runner.run_k8s_agent,
-        ),
-        challenger_adapter=cfg.build_challenger_adapter(),
+    backend = st.session_state.get("k8s_backend", "Disabled")
+    k8s_adapter = cfg.build_k8s_investigation_adapter(
+        agent_runner=k8s_runner.run_k8s_agent,
     )
 
-    # Stash K8s result for the UI to render alongside Holmes result
-    if k8s_result is not None:
+    # Run K8s adapter separately for the comparison UI when selected.
+    # The adapter is also passed to the pipeline for node-level use.
+    if k8s_adapter is not None and backend in ("Native K8s", "Kagent", "Both (comparison)"):
+        k8s_result = await k8s_adapter.investigate(alert=alert)
         st.session_state["last_k8s_result"] = {
             "adapter_name": k8s_result.adapter_name,
             "findings": [f.summary for f in k8s_result.findings],
@@ -213,7 +183,18 @@ async def _run_sre(
             ],
         }
 
-    return reply
+    return await sre_investigation.investigate_alert(
+        alert=alert,
+        agent_for=cfg.agent_for,
+        holmes=holmes_adapter.HolmesAdapter(enabled=get_settings().holmesgpt_enabled),
+        status_update_client=status_client,
+        post_to_slack=False,
+        trace_collector=trace_collector,
+        classifier_toolsets=shared_mcp,
+        analyser_toolsets=shared_mcp,
+        k8s_adapter=k8s_adapter,
+        challenger_adapter=cfg.build_challenger_adapter(),
+    )
 
 
 async def _run_support(

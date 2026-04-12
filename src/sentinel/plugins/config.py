@@ -81,6 +81,7 @@ class CommonConfiguration(BaseConfiguration):
 
     # Memoised shared MCP toolsets — populated lazily by build_mcp_toolsets().
     _mcp_toolsets: tuple[Any, ...] | None = PrivateAttr(default=None)
+    _k8s_client_cache: k8s_client_mod.KubernetesClient | None = PrivateAttr(default=None)
 
     def load_vendors(self) -> None:
         """
@@ -245,10 +246,8 @@ class CommonConfiguration(BaseConfiguration):
         The client's ``is_configured`` property indicates whether a valid
         cluster connection was established.
         """
-        if not hasattr(self, "_k8s_client_cache"):
-            self._k8s_client_cache: k8s_client_mod.KubernetesClient = (
-                k8s_client_mod.KubernetesClient()
-            )
+        if self._k8s_client_cache is None:
+            self._k8s_client_cache = k8s_client_mod.KubernetesClient()
         return self._k8s_client_cache
 
     def build_k8s_investigation_adapter(
