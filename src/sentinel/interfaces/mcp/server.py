@@ -80,14 +80,28 @@ mcp = FastMCP(
 )
 
 
+_MAX_STRING_LENGTH = 500
+_MAX_MINUTES_BACK = 1440  # 24 hours
+
+
+def _clamp_minutes(minutes_back: int) -> int:
+    """Clamp minutes_back to a safe range."""
+    return max(1, min(minutes_back, _MAX_MINUTES_BACK))
+
+
+def _truncate(value: str) -> str:
+    """Truncate string inputs to a safe length."""
+    return value[:_MAX_STRING_LENGTH]
+
+
 @mcp.tool()
 async def query_logs(service: str, query: str = "error OR warn", minutes_back: int = 30) -> str:
     """Search recent logs for a service. Returns formatted log entries."""
     return await obs_tools.query_logs(
         obs_client=_obs_client,
-        service=service,
-        query=query,
-        minutes_back=minutes_back,
+        service=_truncate(service),
+        query=_truncate(query),
+        minutes_back=_clamp_minutes(minutes_back),
     )
 
 
@@ -96,9 +110,9 @@ async def query_metrics(service: str, metric_name: str = "cpu", minutes_back: in
     """Fetch metric time series for a service."""
     return await obs_tools.query_metrics(
         obs_client=_obs_client,
-        service=service,
-        metric_name=metric_name,
-        minutes_back=minutes_back,
+        service=_truncate(service),
+        metric_name=_truncate(metric_name),
+        minutes_back=_clamp_minutes(minutes_back),
     )
 
 
@@ -107,8 +121,8 @@ async def query_error_traces(service: str, minutes_back: int = 30) -> str:
     """Search distributed traces for error spans in a service."""
     return await obs_tools.query_error_traces(
         obs_client=_obs_client,
-        service=service,
-        minutes_back=minutes_back,
+        service=_truncate(service),
+        minutes_back=_clamp_minutes(minutes_back),
     )
 
 
@@ -118,8 +132,8 @@ async def search_documentation(query: str, max_results: int = 5) -> str:
     doc_searcher = _doc_searcher_builder() if _doc_searcher_builder else None
     return await doc_tools.search_documentation(
         document_searcher=doc_searcher,
-        query=query,
-        max_results=max_results,
+        query=_truncate(query),
+        max_results=min(max(1, max_results), 50),
     )
 
 

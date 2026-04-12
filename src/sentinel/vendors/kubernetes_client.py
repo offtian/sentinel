@@ -8,6 +8,7 @@ kubeconfig), following the project's no-op vendor adapter pattern.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from kubernetes_asyncio import client, config
@@ -27,11 +28,16 @@ _SUPPORTED_DESCRIBE_KINDS: dict[str, str] = {
     "Deployment": "read_namespaced_deployment",
     "Service": "read_namespaced_service",
     "ConfigMap": "read_namespaced_config_map",
-    "Secret": "read_namespaced_secret",
     "StatefulSet": "read_namespaced_stateful_set",
     "DaemonSet": "read_namespaced_daemon_set",
     "ReplicaSet": "read_namespaced_replica_set",
 }
+
+# Strict K8s resource name pattern — used to validate user-supplied names
+# before interpolation into field selectors.
+_K8S_NAME_PATTERN_STR = r"^[a-z0-9]([a-z0-9.\-]{0,251}[a-z0-9])?$"
+
+_APPS_KINDS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet"})
 
 
 class KubernetesClient:
@@ -176,6 +182,9 @@ class KubernetesClient:
         """
         if self._core is None:
             raise RuntimeError("KubernetesClient not configured — check is_configured first")
+        if not re.match(_K8S_NAME_PATTERN_STR, resource_name):
+            msg = f"Invalid Kubernetes resource name: {resource_name!r}"
+            raise ValueError(msg)
         field_selector = f"involvedObject.name={resource_name}"
         event_list = await self._core.list_namespaced_event(
             namespace=namespace,
@@ -224,7 +233,7 @@ class KubernetesClient:
         """
         Return a dict representation of a Kubernetes resource.
 
-        Supports Pod, Deployment, Service, ConfigMap, Secret, StatefulSet,
+        Supports Pod, Deployment, Service, ConfigMap, StatefulSet,
         DaemonSet, and ReplicaSet.
 
         :raises ValueError: if the resource kind is not supported
@@ -257,7 +266,7 @@ class KubernetesClient:
                 f"Supported: {sorted(_SUPPORTED_DESCRIBE_KINDS)}"
             )
 
-        apps_kinds = {"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet"}
+        apps_kinds = _APPS_KINDS
         if kind in apps_kinds:
             if self._apps is None:
                 raise RuntimeError("KubernetesClient not configured — check is_configured first")

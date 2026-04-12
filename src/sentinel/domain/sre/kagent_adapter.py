@@ -21,6 +21,9 @@ from sentinel.utils import logs
 
 logger = logs.get_logger()
 
+_ADAPTER_NAME = "kagent"
+_TOOL_NAME = "kagent-operator"
+
 _CRD_GROUP = "kagent.dev"
 _CRD_VERSION = "v1alpha1"
 _CRD_PLURAL = "investigations"
@@ -30,6 +33,11 @@ _POLL_INTERVAL_MAX = 10.0
 _POLL_BACKOFF_FACTOR = 2.0
 
 _TERMINAL_PHASES = frozenset({"Completed", "Failed"})
+
+
+def _elapsed_ms(start: float) -> int:
+    """Return milliseconds elapsed since ``start`` (monotonic clock)."""
+    return int((time.monotonic() - start) * 1000)
 
 
 def _build_crd_body(
@@ -78,7 +86,6 @@ def _parse_findings(
 
 def _make_audit_entry(
     *,
-    started_at: datetime,
     action: str,
     status: str,
     duration_ms: int,
@@ -87,10 +94,10 @@ def _make_audit_entry(
 ) -> investigation.AuditEntry:
     """Create an AuditEntry for the kagent adapter."""
     return investigation.AuditEntry(
-        timestamp=started_at,
-        adapter_name="kagent",
+        timestamp=datetime.now(tz=UTC),
+        adapter_name=_ADAPTER_NAME,
         action=action,
-        tool_name="kagent-operator",
+        tool_name=_TOOL_NAME,
         status=status,
         duration_ms=duration_ms,
         error_code=error_code,
@@ -145,53 +152,29 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
 
         audit_entries: list[investigation.AuditEntry] = []
 
-        # -- Step 1: Create CRD -----------------------------------------------
         crd_name = await self._create_crd(
             alert=alert,
-            started_at=started_at,
-            start_time=start_time,
             audit_entries=audit_entries,
         )
         if crd_name is None:
-            # CRD creation failed — return degraded result
-            duration_ms = int((time.monotonic() - start_time) * 1000)
-            return investigation.InvestigationResult(
-                findings=(),
-                sources_queried=(),
-                duration_ms=duration_ms,
-                adapter_name="kagent",
-                audit_trail=tuple(audit_entries),
-            )
+            return self._degraded_result(start_time=start_time, audit_entries=audit_entries)
 
-        # -- Step 2: Poll CRD status -------------------------------------------
         crd_response = await self._poll_crd_status(
             crd_name=crd_name,
-            started_at=started_at,
             start_time=start_time,
             audit_entries=audit_entries,
         )
 
-        # -- Step 3: Parse results or return degraded --------------------------
         if crd_response is None:
-            # Timeout or poll error — audit entry already recorded
-            duration_ms = int((time.monotonic() - start_time) * 1000)
-            return investigation.InvestigationResult(
-                findings=(),
-                sources_queried=(),
-                duration_ms=duration_ms,
-                adapter_name="kagent",
-                audit_trail=tuple(audit_entries),
-            )
+            return self._degraded_result(start_time=start_time, audit_entries=audit_entries)
 
         phase = crd_response.get("status", {}).get("phase", "Unknown")
         if phase == "Failed":
-            duration_ms = int((time.monotonic() - start_time) * 1000)
             audit_entries.append(
                 _make_audit_entry(
-                    started_at=datetime.now(tz=UTC),
                     action="crd_failed",
                     status="error",
-                    duration_ms=duration_ms,
+                    duration_ms=_elapsed_ms(start_time),
                     payload={
                         "crd_name": crd_name,
                         "phase": phase,
@@ -203,15 +186,8 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
                 "kagent_investigation_failed",
                 params={"crd_name": crd_name, "phase": phase},
             )
-            return investigation.InvestigationResult(
-                findings=(),
-                sources_queried=(),
-                duration_ms=duration_ms,
-                adapter_name="kagent",
-                audit_trail=tuple(audit_entries),
-            )
+            return self._degraded_result(start_time=start_time, audit_entries=audit_entries)
 
-        # Completed — parse findings
         return self._parse_crd_result(
             crd_response=crd_response,
             crd_name=crd_name,
@@ -223,8 +199,6 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
         self,
         *,
         alert: entities.Alert,
-        started_at: datetime,
-        start_time: float,
         audit_entries: list[investigation.AuditEntry],
     ) -> str | None:
         """
@@ -248,10 +222,9 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
                 body=body,
             )
             crd_name: str = result["metadata"]["name"]
-            duration_ms = int((time.monotonic() - create_start) * 1000)
+            duration_ms = _elapsed_ms(create_start)
             audit_entries.append(
                 _make_audit_entry(
-                    started_at=datetime.now(tz=UTC),
                     action="crd_create",
                     status="success",
                     duration_ms=duration_ms,
@@ -268,10 +241,9 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
             )
             return crd_name
         except Exception as exc:
-            duration_ms = int((time.monotonic() - create_start) * 1000)
+            duration_ms = _elapsed_ms(create_start)
             audit_entries.append(
                 _make_audit_entry(
-                    started_at=datetime.now(tz=UTC),
                     action="crd_create",
                     status="error",
                     duration_ms=duration_ms,
@@ -291,7 +263,6 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
         self,
         *,
         crd_name: str,
-        started_at: datetime,
         start_time: float,
         audit_entries: list[investigation.AuditEntry],
     ) -> dict[str, Any] | None:
@@ -313,7 +284,6 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
             if elapsed >= self._timeout_seconds:
                 audit_entries.append(
                     _make_audit_entry(
-                        started_at=datetime.now(tz=UTC),
                         action="crd_timeout",
                         status="error",
                         duration_ms=int(elapsed * 1000),
@@ -335,20 +305,48 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
                 return None
 
             poll_start = time.monotonic()
-            crd_response: dict[str, Any] = await api_client.get_namespaced_custom_object_status(
-                group=_CRD_GROUP,
-                version=_CRD_VERSION,
-                namespace=self._kagent_namespace,
-                plural=_CRD_PLURAL,
-                name=crd_name,
-            )
+            try:
+                crd_response: dict[
+                    str, Any
+                ] = await api_client.get_namespaced_custom_object_status(
+                    group=_CRD_GROUP,
+                    version=_CRD_VERSION,
+                    namespace=self._kagent_namespace,
+                    plural=_CRD_PLURAL,
+                    name=crd_name,
+                )
+            except Exception as exc:
+                poll_count += 1
+                poll_duration = _elapsed_ms(poll_start)
+                audit_entries.append(
+                    _make_audit_entry(
+                        action="crd_poll",
+                        status="error",
+                        duration_ms=poll_duration,
+                        error_code=type(exc).__name__,
+                        payload={
+                            "crd_name": crd_name,
+                            "error": str(exc),
+                            "poll_count": poll_count,
+                        },
+                    )
+                )
+                logs.log_exception(
+                    exc,
+                    params={"crd_name": crd_name, "action": "crd_poll"},
+                )
+                # Continue retrying — transient K8s API errors are expected
+                remaining = self._timeout_seconds - (time.monotonic() - start_time)
+                await asyncio.sleep(min(interval, max(remaining, 0)))
+                interval = min(interval * _POLL_BACKOFF_FACTOR, _POLL_INTERVAL_MAX)
+                continue
+
             poll_count += 1
-            poll_duration = int((time.monotonic() - poll_start) * 1000)
+            poll_duration = _elapsed_ms(poll_start)
 
             phase = crd_response.get("status", {}).get("phase", "Unknown")
             audit_entries.append(
                 _make_audit_entry(
-                    started_at=datetime.now(tz=UTC),
                     action="crd_poll",
                     status="success",
                     duration_ms=poll_duration,
@@ -363,7 +361,9 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
             if phase in _TERMINAL_PHASES:
                 return crd_response
 
-            await asyncio.sleep(interval)
+            # Cap sleep to remaining timeout to avoid overshooting deadline
+            remaining = self._timeout_seconds - (time.monotonic() - start_time)
+            await asyncio.sleep(min(interval, max(remaining, 0)))
             interval = min(interval * _POLL_BACKOFF_FACTOR, _POLL_INTERVAL_MAX)
 
     def _parse_crd_result(
@@ -387,11 +387,10 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
         findings = _parse_findings(raw_findings)
         sources_queried = tuple(raw_sources)
 
-        duration_ms = int((time.monotonic() - start_time) * 1000)
+        duration_ms = _elapsed_ms(start_time)
 
         audit_entries.append(
             _make_audit_entry(
-                started_at=datetime.now(tz=UTC),
                 action="crd_parse",
                 status="success",
                 duration_ms=duration_ms,
@@ -418,7 +417,22 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
             findings=findings,
             sources_queried=sources_queried,
             duration_ms=duration_ms,
-            adapter_name="kagent",
+            adapter_name=_ADAPTER_NAME,
+            audit_trail=tuple(audit_entries),
+        )
+
+    @staticmethod
+    def _degraded_result(
+        *,
+        start_time: float,
+        audit_entries: list[investigation.AuditEntry],
+    ) -> investigation.InvestigationResult:
+        """Return a degraded result with the audit trail collected so far."""
+        return investigation.InvestigationResult(
+            findings=(),
+            sources_queried=(),
+            duration_ms=_elapsed_ms(start_time),
+            adapter_name=_ADAPTER_NAME,
             audit_trail=tuple(audit_entries),
         )
 
@@ -432,11 +446,11 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
             findings=(),
             sources_queried=(),
             duration_ms=0,
-            adapter_name="kagent",
+            adapter_name=_ADAPTER_NAME,
             audit_trail=(
                 investigation.AuditEntry(
                     timestamp=started_at,
-                    adapter_name="kagent",
+                    adapter_name=_ADAPTER_NAME,
                     action="configuration_check",
                     tool_name=None,
                     status="error",

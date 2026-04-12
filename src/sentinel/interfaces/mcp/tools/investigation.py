@@ -74,7 +74,7 @@ async def trigger_investigation(
         )
     except Exception as exc:
         logs.log_exception(exc, params={"tool": "trigger_investigation", "alert_id": alert_id})
-        return f"Failed to enqueue investigation: {type(exc).__name__}"
+        return "Failed to enqueue investigation. Check server logs for details."
 
     return f"Investigation triggered. job_id={job_id} alert={alert_source}/{alert_id}"
 
@@ -105,7 +105,7 @@ async def get_investigation_status(
         logs.log_exception(
             exc, params={"tool": "get_investigation_status", "id": investigation_id}
         )
-        return f"Status lookup failed: {type(exc).__name__}"
+        return "Status lookup failed. Check server logs for details."
 
     if row is None:
         return f"Investigation {investigation_id} not found."
