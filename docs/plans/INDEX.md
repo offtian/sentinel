@@ -38,6 +38,6 @@
 
 | Plan | Goal | PRD Section |
 |------|------|-------------|
-| [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, token usage extraction, SRE approval persistence, LLM cost estimation | 4, 6 |
+| [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, SRE approval persistence | 4, 6 | Token usage + LLM cost estimation delivered in PR #18 |
 | [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | 4, 7 |
 | [llm-settings-to-config](llm-settings-to-config.md) | Move LLM model config into CommonConfiguration | Internal |
