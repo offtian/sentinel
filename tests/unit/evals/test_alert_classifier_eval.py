@@ -212,12 +212,12 @@ class TestAlertClassifierCaseLoading:
         # Then cases are loaded from the JSON file
         assert len(dataset.cases) == 5
 
-    def test_each_case_has_three_evaluators(self) -> None:
+    def test_each_case_has_four_evaluators(self) -> None:
         # Given the loaded alert_classifier dataset
         from sentinel.evals import cases
 
         dataset = cases.load_cases(agent_name="alert_classifier")
 
-        # Then each case has three evaluators (severity, category, summary)
+        # Then each case has four evaluators (severity, category, summary, generic_phrase)
         for case in dataset.cases:
-            assert len(case.evaluators) == 3
+            assert len(case.evaluators) == 4

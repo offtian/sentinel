@@ -275,15 +275,16 @@ class TestRootCauseCaseLoading:
         # Then cases are loaded from the JSON file
         assert len(dataset.cases) == 5
 
-    def test_each_case_has_four_evaluators(self) -> None:
+    def test_each_case_has_six_evaluators(self) -> None:
         # Given the loaded root_cause_analyser dataset
         from sentinel.evals import cases
 
         dataset = cases.load_cases(agent_name="root_cause_analyser")
 
-        # Then each case has four evaluators (keyword, remediation, evidence, confidence)
+        # Then each case has six evaluators (faithfulness, keyword, evidence,
+        # completeness, confidence, hallucination)
         for case in dataset.cases:
-            assert len(case.evaluators) == 4
+            assert len(case.evaluators) == 6
 
     def test_raises_for_unknown_agent(self) -> None:
         # Given an unknown agent name
