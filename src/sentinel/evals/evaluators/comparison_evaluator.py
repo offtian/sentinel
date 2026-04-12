@@ -16,18 +16,7 @@ from pydantic_evals import evaluators
 from pydantic_evals.evaluators import evaluator
 
 from sentinel.evals import types
-
-
-def _resolve_field(*, payload: dict[str, Any], field_path: str) -> Any:
-    """
-    Traverse a nested dict using a dot-separated field path.
-
-    :raises KeyError: if any segment is missing.
-    """
-    current: Any = payload
-    for segment in field_path.split("."):
-        current = current[segment]
-    return current
+from sentinel.evals.evaluators import base
 
 
 @dataclasses.dataclass
@@ -45,7 +34,7 @@ class FindingsKeywordCoverage(evaluators.Evaluator):
         ctx: evaluators.EvaluatorContext[types.InputData, str, Any],
     ) -> evaluators.EvaluatorOutput:
         payload = ctx.inputs.case_payload
-        text = str(_resolve_field(payload=payload, field_path=self.field_path))
+        text = str(base.resolve_field(payload=payload, field_path=self.field_path))
         text_lower = text.lower()
 
         if not self.keywords:
@@ -81,8 +70,8 @@ class MinimumSourceCount(evaluators.Evaluator):
         ctx: evaluators.EvaluatorContext[types.InputData, str, Any],
     ) -> evaluators.EvaluatorOutput:
         payload = ctx.inputs.case_payload
-        minimum = int(_resolve_field(payload=payload, field_path=self.field_path))
-        actual = int(_resolve_field(payload=payload, field_path=self.actual_count_field))
+        minimum = int(base.resolve_field(payload=payload, field_path=self.field_path))
+        actual = int(base.resolve_field(payload=payload, field_path=self.actual_count_field))
         passed = actual >= minimum
         reason = f"Source count: {actual} (minimum: {minimum})"
 
@@ -106,8 +95,8 @@ class LatencyThreshold(evaluators.Evaluator):
         ctx: evaluators.EvaluatorContext[types.InputData, str, Any],
     ) -> evaluators.EvaluatorOutput:
         payload = ctx.inputs.case_payload
-        threshold = int(_resolve_field(payload=payload, field_path=self.threshold_field))
-        actual = int(_resolve_field(payload=payload, field_path=self.actual_field))
+        threshold = int(base.resolve_field(payload=payload, field_path=self.threshold_field))
+        actual = int(base.resolve_field(payload=payload, field_path=self.actual_field))
         passed = actual <= threshold
         reason = f"Latency: {actual}ms (threshold: {threshold}ms)"
 
