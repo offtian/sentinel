@@ -124,7 +124,7 @@ Acceptance criteria:
 - [x] Structured logging via structlog with context-aware event names (e.g. `alert_classified`, `investigation_completed`)
 - [x] PydanticAI spans (`Agent(..., instrument=True)`) exported via OTLP — Logfire SDK configured in `bootstrap_otel.init_traces()`, exports to Tempo/Datadog via `otel_traces_endpoint`
 - [x] Per-pipeline-run snapshot persisted to `pipeline_runs` / `node_executions` / `agent_calls` (graph nodes write to the existing tracing tables)
-- [ ] Token usage and cost recorded per agent call from LiteLLM response metadata — DB schema exists (`agent_calls.token_usage_json`) but agents don't extract `result.usage()` from PydanticAI runs
+- [x] Token usage and cost recorded per agent call — `record_agent_result()` extracts `result.usage()` from PydanticAI runs, estimates cost via `litellm.completion_cost()`, persists to `agent_calls.token_usage_json`; aggregate `total_token_usage_json` (with per-agent breakdowns) flushed to `pipeline_runs` on completion
 - [ ] Skill activations logged as structlog events and persisted to the audit log
 - [x] Sentry integration for exception tracking
 - [x] Audit trail of all investigations and reviews persisted to the database
@@ -268,8 +268,6 @@ AgentGateway becomes relevant when:
 | SRE investigation stats endpoint | Section 4 — no `/api/sre/stats` parity with support; cannot track approval rates or investigation outcomes | Phase E |
 | Quality verdict persistence | Section 4 — `QualityVerdict` computed but not stored on investigation/review records | Phase E |
 | **Offline Metrics** | | |
-| Token usage extraction from agent results | Section 4 — DB column exists (`agent_calls.token_usage_json`) but `result.usage()` never called after `agent.run()` | Phase E |
-| LLM cost estimation | Section 4 — no pricing table or cost calculation; `EvaluationMetrics.token_cost` hardcoded to 0 | Phase E |
 | LLM call OTel metrics wiring | Section 4 — `sentinel_llm_calls_total` and `sentinel_llm_call_duration_seconds` declared but `record_llm_call()` never invoked | Phase E |
 | Approval decision OTel metrics | Section 4 — `sentinel_approval_decisions_total` declared but `record_approval_decision()` never invoked | Phase E |
 | **Pipeline Improvements** | | |
@@ -277,7 +275,6 @@ AgentGateway becomes relevant when:
 | Ticket classifier skill selection | Section 2 — `auth-error-response`, `rate-limit-response` skills exist but not triggered from ticket classifier output | Phase E |
 | Skill content hash in audit log | Section 6 — `SkillHandle.sha256` computed but not persisted alongside prompt hash in `AuditLogRecord` | Phase E |
 | **Infrastructure** | | |
-| LiteLLM deployment mode | Gateway proxy adds SPOF + network hop; SDK mode (in-process) is better for single-service architecture | Phase E |
 | Eval framework maturity | pydantic_evals lacks dashboard, regression tracking, community metrics. Consider DeepEval or Braintrust | Phase E |
 | **Post-Deploy Validation** | | |
 | Investigation < 2min benchmark | Production deployment (separate repo) | Post-deploy |
@@ -289,7 +286,7 @@ AgentGateway becomes relevant when:
 ## High complexity features
 
 - **Pluggable observability backends** — `BaseObservabilityClient` ABC with `DatadogClient` and `GrafanaClient` implementations. Auto-selects Grafana for local dev, Datadog for production. Each backend provides its own query templates (Datadog query syntax vs PromQL/LogQL/TraceQL)
-- **LiteLLM gateway routing** — All LLM calls route through a LiteLLM proxy, mapping model names to backend providers (Ollama for local dev, cloud providers for production). Configuration management across environments is non-trivial
+- **LiteLLM in-process routing** — All LLM calls route through LiteLLM SDK in-process via PydanticAI's `litellm:` model prefix, mapping model names to backend providers (Ollama for local dev, cloud providers for production)
 - **Multi-source documentation search** — Parallel search across Confluence, Jira, and potentially S3/Notion requires careful timeout handling and result ranking
 - **Job queue consistency** — Ensuring exactly-once processing with idempotency keys across multiple worker replicas under failure conditions
 - **Multi-factor confidence scoring** — `ConfidenceScore.from_factors()` independently weighs source count, relevance, and recency with configurable weights
@@ -332,6 +329,6 @@ AgentGateway becomes relevant when:
 - `GET /api/automations/available` — List registered automations
 - `GET /api/jobs/{id}` — Check job status
 
-**Serving suggestion:** Kubernetes via Helm chart with separate API deployment (user-facing, 2 replicas) and Worker deployment (background processing, 2 replicas). PostgreSQL for state. LiteLLM sidecar or shared gateway for LLM routing.
+**Serving suggestion:** Kubernetes via Helm chart with separate API deployment (user-facing, 2 replicas) and Worker deployment (background processing, 2 replicas). PostgreSQL for state. LiteLLM SDK routes LLM calls in-process (no sidecar or gateway needed).
 
-**Test suite:** 695+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.
+**Test suite:** 830+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.
