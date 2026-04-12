@@ -54,6 +54,7 @@ dependencies = [
     "atlassian-python-api",
     "boto3",
     "slack_bolt",
+    "kubernetes-asyncio>=31.0",
     # Observability
     "ddtrace",
     "sentry-sdk>=2.35",

@@ -39,6 +39,7 @@ from sentinel.plugins.toolsets import documentation as doc_toolsets
 from sentinel.plugins.toolsets import mcp as mcp_toolset_mod
 from sentinel.plugins.toolsets import observability as obs_toolsets
 from sentinel.utils import logs
+from sentinel.vendors import kubernetes_client as k8s_client_mod
 
 
 try:
@@ -236,6 +237,20 @@ class CommonConfiguration(BaseConfiguration):
         )
         return tuple(enabled)
 
+    def _build_k8s_client(self) -> k8s_client_mod.KubernetesClient:
+        """
+        Build a Kubernetes client, caching the instance for reuse.
+
+        Uses the synchronous constructor which attempts in-cluster config.
+        The client's ``is_configured`` property indicates whether a valid
+        cluster connection was established.
+        """
+        if not hasattr(self, "_k8s_client_cache"):
+            self._k8s_client_cache: k8s_client_mod.KubernetesClient = (
+                k8s_client_mod.KubernetesClient()
+            )
+        return self._k8s_client_cache
+
     def build_k8s_investigation_adapter(
         self,
         *,
@@ -266,7 +281,7 @@ class CommonConfiguration(BaseConfiguration):
                 mcp_toolsets.append(MCPServerSSE(url=self.settings.k8s_mcp_server_url))
 
             return k8s_native_agent.NativeK8sAgent(
-                k8s_client=None,  # Wire real K8s client when kubernetes lib is integrated
+                k8s_client=self._build_k8s_client(),
                 model_name=self._normalise_model_name(self.settings.k8s_investigator_llm),
                 mcp_toolsets=tuple(mcp_toolsets),
                 agent_runner=agent_runner,
@@ -297,7 +312,7 @@ class CommonConfiguration(BaseConfiguration):
 
         if backend == "native_k8s":
             return k8s_native_agent.NativeK8sAgent(
-                k8s_client=None,
+                k8s_client=self._build_k8s_client(),
                 model_name=self._normalise_model_name(self.settings.k8s_investigator_llm),
             )
 
