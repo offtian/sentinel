@@ -40,7 +40,8 @@ class TestFromText:
         assert tpl.system_text == "hello world"
         assert isinstance(tpl.sha256, str)
         assert len(tpl.sha256) == 64
-        assert tpl.version == "1"
+        assert ":" in tpl.version
+        assert tpl.version.endswith(":foo")
 
     def test_sha256_deterministic(self) -> None:
         """

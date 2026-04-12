@@ -16,6 +16,8 @@ Usage::
 
 from __future__ import annotations
 
+import functools
+
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from sentinel.domain.prompts.template import PromptTemplate
@@ -33,6 +35,7 @@ _env = Environment(
 )
 
 
+@functools.cache
 def load_template(template_name: str) -> PromptTemplate:
     """
     Load *template_name*.j2 and return a :class:`PromptTemplate`.

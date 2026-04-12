@@ -11,7 +11,11 @@ it can render the ``user`` block on demand with runtime variables.
 
 from __future__ import annotations
 
+import functools
 import hashlib
+import os
+import re
+import subprocess
 from typing import TYPE_CHECKING
 
 import attrs
@@ -21,7 +25,38 @@ if TYPE_CHECKING:
     from jinja2 import Template
 
 
-_VERSION = "1"
+_GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+@functools.lru_cache(maxsize=1)
+def _git_sha() -> str:
+    """
+    Return the current git SHA for version tagging.
+
+    Precedence:
+    1. ``SENTINEL_GIT_SHA`` environment variable (set by CI/CD), if valid hex.
+    2. ``git rev-parse HEAD`` via subprocess.
+    3. ``"unknown"`` if git is unavailable or times out.
+    """
+    env_sha = os.environ.get("SENTINEL_GIT_SHA")
+    if env_sha and _GIT_SHA_PATTERN.match(env_sha):
+        return env_sha
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=True,
+        )
+        return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
+        return "unknown"
+
+
+def _make_version(template_name: str) -> str:
+    """Return a version string combining the git SHA prefix and template name."""
+    return f"{_git_sha()[:12]}:{template_name}"
 
 
 @attrs.frozen
@@ -37,7 +72,7 @@ class PromptTemplate:
     template_name: str
     system_text: str
     sha256: str
-    version: str = _VERSION
+    version: str
     _jinja_template: Template | None = attrs.field(
         default=None,
         eq=False,
@@ -73,6 +108,7 @@ class PromptTemplate:
             template_name=template_name,
             system_text=system_text,
             sha256=cls._compute_digest(system_text),
+            version=_make_version(template_name),
             jinja_template=jinja_template,
         )
 
@@ -93,6 +129,7 @@ class PromptTemplate:
             template_name=template_name,
             system_text=system_text,
             sha256=cls._compute_digest(system_text),
+            version=_make_version(template_name),
         )
 
     def render_user(self, **kwargs: object) -> str:
