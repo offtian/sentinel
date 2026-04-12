@@ -32,11 +32,11 @@
 | [k8s-agent-and-mcp-integration](k8s-agent-and-mcp-integration.md) | Dual K8s backends (native + kagent) with MCP | 35/41 | Spec-level plan |
 | [k8s-agent-mcp-implementation](k8s-agent-mcp-implementation.md) | Detailed implementation of K8s + MCP integration | 67/76 | Execution-level plan |
 | [grafana-metrics](grafana-metrics.md) | OTel metrics instrumentation for Grafana dashboards | 2/5 | Prometheus reader + basic metrics wired |
+| [prompt-versioning-and-replay](prompt-versioning-and-replay.md) | Prompt version/hash + pipeline run replay | 13/16 | Steps 1-13 done |
 
 ### Draft (Not Started)
 
 | Plan | Goal | PRD Section |
 |------|------|-------------|
 | [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | 4, 7 |
-| [prompt-versioning-and-replay](prompt-versioning-and-replay.md) | Prompt version/hash + pipeline run replay | 6 |
 | [llm-settings-to-config](llm-settings-to-config.md) | Move LLM model config into CommonConfiguration | Internal |

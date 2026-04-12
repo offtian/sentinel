@@ -1,8 +1,8 @@
 # Plan: Prompt Versioning + Replay Snapshots
 
-**Status:** draft
+**Status:** in-progress
 **Created:** 2026-04-08
-**Last updated:** 2026-04-08
+**Last updated:** 2026-04-12
 
 > **For agentic workers:** REQUIRED SUB-SKILL — use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task.
 
@@ -128,23 +128,23 @@ Ticks (from `docs/prd.md`):
 
 > Ordered to unblock slice 3 ASAP: **Steps 1–3 land `PromptHandle` and can ship as a standalone PR**.
 
-- [ ] **Step 1: Failing tests for `PromptHandle` and `_git_sha()`** — env precedence, subprocess fallback, FileNotFoundError fallback, timeout fallback, version format, cache identity, missing-system-block error. Commit: `test: specify PromptHandle + git-sha extraction contract`
+- [x] **Step 1: Failing tests for `PromptHandle` and `_git_sha()`** — env precedence, subprocess fallback, FileNotFoundError fallback, timeout fallback, version format, cache identity, missing-system-block error. Commit: `test: specify PromptHandle + git-sha extraction contract`
 
-- [ ] **Step 2: Implement `PromptHandle` and refactor `load_system_prompt`.** Commit: `feat: PromptHandle carries prompt version and sha256 for replay`
+- [x] **Step 2: Implement `PromptHandle` and refactor `load_system_prompt`.** Commit: `feat: PromptHandle carries prompt version and sha256 for replay`
 
-- [ ] **Step 3: Migrate all `load_system_prompt` call sites to use `.text`.** Every agent file. Commit: `refactor: agents read PromptHandle.text for system prompts`
+- [x] **Step 3: Migrate all `load_system_prompt` call sites to use `.text`.** Every agent file. Commit: `refactor: agents read PromptHandle.text for system prompts`
 
 > **Merge boundary — slice 3 unblocks here.**
 
-- [ ] **Step 4: Failing tests for `_canonical_input_hash`.** Commit: `test: specify canonical input-hash for replay`
+- [x] **Step 4: Failing tests for `_canonical_input_hash`.** Commit: `test: specify canonical input-hash for replay`
 
-- [ ] **Step 5: Implement `_canonical_input_hash` helper.** Private in `queries.py`, public re-export in `types.py`. Excluded-keys frozenset: `{"timestamp","received_at","now","run_id","trace_id","pipeline_run_id"}`. Commit: `feat: canonical input-hash for replay bundles`
+- [x] **Step 5: Implement `_canonical_input_hash` helper.** Private in `queries.py`, public re-export in `types.py`. Excluded-keys frozenset: `{"timestamp","received_at","now","run_id","trace_id","pipeline_run_id"}`. Commit: `feat: canonical input-hash for replay bundles`
 
-- [ ] **Step 6: Alembic migration.** `004_pipeline_run_snapshot.py` with 8 nullable columns on `pipeline_runs`, plus `audit_log.prompt_sha256` + `audit_log.pipeline_run_id` (skip if slice 4 added first — use `IF NOT EXISTS`). Commit: `feat(data): add replay snapshot columns to pipeline_runs`
+- [x] **Step 6: Alembic migration.** `004_pipeline_run_snapshot.py` with 8 nullable columns on `pipeline_runs`, plus `audit_log.prompt_sha256` + `audit_log.pipeline_run_id` (skip if slice 4 added first — use `IF NOT EXISTS`). Commit: `feat(data): add replay snapshot columns to pipeline_runs`
 
-- [ ] **Step 7: `PipelineRunRecord` + `persist_pipeline_run` take snapshot fields.** Accepts `PromptHandle` for compile-time safety; all defaults `None`. Commit: `feat(pipeline): persist replay snapshot fields on pipeline_runs`
+- [x] **Step 7: `PipelineRunRecord` + `persist_pipeline_run` take snapshot fields.** Accepts `PromptHandle` for compile-time safety; all defaults `None`. Commit: `feat(pipeline): persist replay snapshot fields on pipeline_runs`
 
-- [ ] **Step 8: `ExecutionTracer.start_pipeline` surface + graph wiring.** Entrypoint sequence:
+- [x] **Step 8: `ExecutionTracer.start_pipeline` surface + graph wiring.** Entrypoint sequence:
   1. Build `PromptHandle = prompts.load_system_prompt("alert_classifier")`
   2. Build `model_ids`, `mcp_endpoints`, `skill_activations` from `Configuration`
   3. Build `input_hash` via `_canonical_input_hash(alert.model_dump())`
@@ -154,15 +154,15 @@ Ticks (from `docs/prd.md`):
   7. `await tracer.complete_pipeline(final_reply=...)`
   Commit: `feat(pipeline): thread PromptHandle and run_id through graph dependencies`
 
-- [ ] **Step 9: Extend `record_audit_entry`** with `prompt_sha256` + `pipeline_run_id`. `AuditLogRecord` gains columns (coordinate with slice 4). Commit: `feat(audit): capture prompt_sha256 and pipeline_run_id on audit rows`
+- [x] **Step 9: Extend `record_audit_entry`** with `prompt_sha256` + `pipeline_run_id`. `AuditLogRecord` gains columns (coordinate with slice 4). Commit: `feat(audit): capture prompt_sha256 and pipeline_run_id on audit rows`
 
-- [ ] **Step 10: `ReplayBundle` + `fetch_replay_bundle(run_id)`.** Single SELECT against `pipeline_runs`; JSON columns deserialised. Raises `ReplayBundleNotFoundError` on miss. Commit: `feat(pipeline): fetch_replay_bundle returns reproducibility snapshot`
+- [x] **Step 10: `ReplayBundle` + `fetch_replay_bundle(run_id)`.** Single SELECT against `pipeline_runs`; JSON columns deserialised. Raises `ReplayBundleNotFoundError` on miss. Commit: `feat(pipeline): fetch_replay_bundle returns reproducibility snapshot`
 
-- [ ] **Step 11: Delete slice 3's `_handle.py` shim.** Re-point imports. Verify `import-linter` green. Commit: `refactor: remove PromptHandle shim superseded by plugins.prompts`
+- [x] **Step 11: Delete slice 3's `_handle.py` shim.** Re-point imports. Verify `import-linter` green. Commit: `refactor: remove PromptHandle shim superseded by plugins.prompts`
 
-- [ ] **Step 12: `src/sentinel/replay.py` CLI scaffold.** `argparse` with positional `run_id`, opens read-only DB, `fetch_replay_bundle`, `json.dumps(attrs.asdict(bundle), indent=2, default=str)`. Non-zero exit on `ReplayBundleNotFoundError`. Header comment flags "**Scaffold only — re-execution is slice 6.**" Commit: `feat: scaffold python -m sentinel.replay CLI`
+- [x] **Step 12: `src/sentinel/replay.py` CLI scaffold.** `argparse` with positional `run_id`, opens read-only DB, `fetch_replay_bundle`, `json.dumps(attrs.asdict(bundle), indent=2, default=str)`. Non-zero exit on `ReplayBundleNotFoundError`. Header comment flags "**Scaffold only — re-execution is slice 6.**" Commit: `feat: scaffold python -m sentinel.replay CLI`
 
-- [ ] **Step 13: CLI smoke test** — `capsys` assertions for happy path + not-found exit code. Commit: `test: replay CLI smoke test`
+- [x] **Step 13: CLI smoke test** — `capsys` assertions for happy path + not-found exit code. Commit: `test: replay CLI smoke test`
 
 - [ ] **Step 14: Integration golden round-trip test.** Runs `investigate_alert(alert=make_alert())`, calls `fetch_replay_bundle(run_id=tracer.pipeline_run_id)`, asserts:
   - `bundle.prompt_sha256 == load_system_prompt("alert_classifier").sha256`
@@ -217,6 +217,7 @@ Ticks (from `docs/prd.md`):
 ## Changes
 | Date | What changed | Why |
 |------|-------------|-----|
+| 2026-04-12 | Steps 1-13 implemented; adapted PromptHandle→PromptTemplate | Existing class extended instead of new class |
 
 ## Outcome
 _Fill in after completion._
