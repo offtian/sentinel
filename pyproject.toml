@@ -209,6 +209,7 @@ containers = ["sentinel"]
 layers = [
     "main",
     "worker",
+    "replay",
     "plugins",
     "interfaces",
     "application",
