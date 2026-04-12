@@ -31,6 +31,7 @@ async def persist_pipeline_run(
     prompt_version: str | None = None,
     prompt_sha256: str | None = None,
     prompt_text: str | None = None,
+    agent_prompts_json: list[dict[str, str]] | None = None,
 ) -> uuid.UUID:
     """
     Insert a pipeline_runs row with status "running".
@@ -48,6 +49,7 @@ async def persist_pipeline_run(
     :param prompt_version: Git-SHA-prefixed version tag of the system prompt.
     :param prompt_sha256: Content hash of the system prompt text.
     :param prompt_text: Full rendered system prompt text for replay.
+    :param agent_prompts_json: Per-agent prompt metadata for multi-agent pipelines.
     :returns: The UUID of the inserted row.
     """
     row_id = uuid.uuid4()
@@ -72,6 +74,7 @@ async def persist_pipeline_run(
         prompt_version=prompt_version,
         prompt_sha256=prompt_sha256,
         prompt_text=prompt_text,
+        agent_prompts_json=agent_prompts_json,
     )
     await db.execute(query)
     logs.log_event(

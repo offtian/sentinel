@@ -94,6 +94,28 @@ class TestStartPipeline:
         assert call_kwargs["prompt_sha256"] == "deadbeef" * 8
         assert call_kwargs["prompt_text"] == "You are an SRE assistant."
 
+    @pytest.mark.asyncio
+    async def test_passes_agent_prompts_json_to_persist(self) -> None:
+        # Given an ExecutionTracer with a mock database and multi-agent prompt metadata
+        mock_db = mock.AsyncMock()
+        et = tracer.ExecutionTracer(db=mock_db)
+        agent_prompts = [
+            {"agent_name": "alert_classifier", "prompt_version": "v1", "prompt_sha256": "aaa"},
+            {"agent_name": "root_cause_analyser", "prompt_version": "v2", "prompt_sha256": "bbb"},
+        ]
+
+        # When start_pipeline is called with agent_prompts_json
+        with mock.patch.object(tracer, "pipeline_ops") as mock_ops:
+            mock_ops.persist_pipeline_run = mock.AsyncMock(return_value=uuid.uuid4())
+            await et.start_pipeline(
+                pipeline_type="sre_investigation",
+                agent_prompts_json=agent_prompts,
+            )
+
+        # Then persist_pipeline_run receives agent_prompts_json
+        call_kwargs = mock_ops.persist_pipeline_run.call_args.kwargs
+        assert call_kwargs["agent_prompts_json"] == agent_prompts
+
 
 class TestCompletePipeline:
     @pytest.mark.asyncio

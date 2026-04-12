@@ -41,6 +41,59 @@ class TestReplayBundleIsFrozen:
         with pytest.raises(attrs.exceptions.FrozenInstanceError):
             bundle.pipeline_type = "support_review"  # type: ignore[misc]
 
+    def test_agent_prompts_defaults_to_empty_tuple(self) -> None:
+        # Given a ReplayBundle created without agent_prompts
+
+        # When constructing with default
+        bundle = pipeline_types.ReplayBundle(
+            run_id=uuid.uuid4(),
+            pipeline_type="sre_investigation",
+            started_at=datetime(2026, 1, 1, tzinfo=UTC),
+            completed_at=None,
+            prompt_version=None,
+            prompt_sha256=None,
+            prompt_text=None,
+            input_hash=None,
+            model_ids=(),
+            mcp_endpoints=(),
+            skill_activations=(),
+            final_reply=None,
+            input_payload=None,
+        )
+
+        # Then agent_prompts defaults to an empty tuple
+        assert bundle.agent_prompts == ()
+
+    def test_agent_prompts_is_populated(self) -> None:
+        # Given agent prompt metadata for two agents
+        prompts = (
+            {"agent_name": "alert_classifier", "prompt_version": "v1", "prompt_sha256": "aaa"},
+            {"agent_name": "root_cause_analyser", "prompt_version": "v2", "prompt_sha256": "bbb"},
+        )
+
+        # When constructing with agent_prompts
+        bundle = pipeline_types.ReplayBundle(
+            run_id=uuid.uuid4(),
+            pipeline_type="sre_investigation",
+            started_at=datetime(2026, 1, 1, tzinfo=UTC),
+            completed_at=None,
+            prompt_version="v1",
+            prompt_sha256="aaa",
+            prompt_text="You are an SRE investigator.",
+            input_hash=None,
+            model_ids=(),
+            mcp_endpoints=(),
+            skill_activations=(),
+            final_reply=None,
+            input_payload=None,
+            agent_prompts=prompts,
+        )
+
+        # Then agent_prompts contains both entries
+        assert len(bundle.agent_prompts) == 2
+        assert bundle.agent_prompts[0]["agent_name"] == "alert_classifier"
+        assert bundle.agent_prompts[1]["agent_name"] == "root_cause_analyser"
+
 
 class TestFetchReplayBundle:
     @pytest.mark.asyncio
@@ -50,6 +103,18 @@ class TestFetchReplayBundle:
         run_id = uuid.uuid4()
         started = datetime(2026, 3, 15, 10, 0, tzinfo=UTC)
         completed = datetime(2026, 3, 15, 10, 5, tzinfo=UTC)
+        agent_prompts_data = [
+            {
+                "agent_name": "alert_classifier",
+                "prompt_version": "v2.1.0",
+                "prompt_sha256": "sha256hex",
+            },
+            {
+                "agent_name": "root_cause_analyser",
+                "prompt_version": "v1.0.0",
+                "prompt_sha256": "otherhex",
+            },
+        ]
         mock_row = mock.MagicMock()
         mock_row._mapping = {
             "id": run_id,
@@ -65,6 +130,7 @@ class TestFetchReplayBundle:
             "skill_activations_json": [{"skill": "k8s_diagnostics", "version": "1.0"}],
             "final_reply": {"root_cause": "CPU spike"},
             "input_json": {"alert_id": "PD-123"},
+            "agent_prompts_json": agent_prompts_data,
         }
         mock_db.fetch_one.return_value = mock_row
 
@@ -85,6 +151,7 @@ class TestFetchReplayBundle:
         assert bundle.skill_activations == ({"skill": "k8s_diagnostics", "version": "1.0"},)
         assert bundle.final_reply == {"root_cause": "CPU spike"}
         assert bundle.input_payload == {"alert_id": "PD-123"}
+        assert bundle.agent_prompts == tuple(agent_prompts_data)
 
     @pytest.mark.asyncio
     async def test_raises_on_missing_run(self) -> None:
@@ -122,6 +189,7 @@ class TestFetchReplayBundle:
             "skill_activations_json": None,
             "final_reply": None,
             "input_json": None,
+            "agent_prompts_json": None,
         }
         mock_db.fetch_one.return_value = mock_row
 
@@ -132,6 +200,7 @@ class TestFetchReplayBundle:
         assert bundle.model_ids == ()
         assert bundle.mcp_endpoints == ()
         assert bundle.skill_activations == ()
+        assert bundle.agent_prompts == ()
         assert bundle.completed_at is None
         assert bundle.prompt_version is None
         assert bundle.prompt_sha256 is None

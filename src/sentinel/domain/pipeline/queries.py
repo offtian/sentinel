@@ -141,4 +141,5 @@ async def fetch_replay_bundle(
         skill_activations=tuple(mapping.get("skill_activations_json") or []),
         final_reply=mapping.get("final_reply"),
         input_payload=mapping.get("input_json"),
+        agent_prompts=tuple(mapping.get("agent_prompts_json") or []),
     )

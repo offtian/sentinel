@@ -143,6 +143,32 @@ class TestPersistPipelineRun:
         assert compiled.params.get("input_hash") == "abc123"
         assert compiled.params.get("prompt_version") == "538d165abc12:alert_classifier"
 
+    @pytest.mark.asyncio
+    async def test_agent_prompts_json_is_passed_through(self) -> None:
+        # Given a mock database and multi-agent prompt metadata
+        mock_db = mock.AsyncMock()
+        mock_db.execute.return_value = None
+        agent_prompts = [
+            {"agent_name": "alert_classifier", "prompt_version": "v1", "prompt_sha256": "aaa"},
+            {"agent_name": "root_cause_analyser", "prompt_version": "v2", "prompt_sha256": "bbb"},
+        ]
+
+        # When a pipeline run is persisted with agent_prompts_json
+        result_id = await operations.persist_pipeline_run(
+            db=mock_db,
+            trace_id=uuid.uuid4(),
+            pipeline_type="sre_investigation",
+            started_at=datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC),
+            agent_prompts_json=agent_prompts,
+        )
+
+        # Then a UUID is returned and the insert includes agent_prompts_json
+        assert isinstance(result_id, uuid.UUID)
+        call_args = mock_db.execute.call_args
+        query = call_args[0][0] if call_args[0] else call_args[1].get("query")
+        compiled = query.compile(compile_kwargs={"literal_binds": False})
+        assert compiled.params.get("agent_prompts_json") == agent_prompts
+
 
 class TestCompletePipelineRun:
     @pytest.mark.asyncio

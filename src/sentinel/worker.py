@@ -133,8 +133,21 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     db = _get_optional_db()
     et = pipeline_tracer.ExecutionTracer(db=db)
 
-    # Build replay snapshot metadata
-    prompt_tpl = prompts.load_template("alert_classifier")
+    # Build replay snapshot metadata — ALL agent prompts
+    classifier_tpl = prompts.load_template("alert_classifier")
+    analyser_tpl = prompts.load_template("root_cause_analyser")
+    agent_prompts = [
+        {
+            "agent_name": "alert_classifier",
+            "prompt_version": classifier_tpl.version,
+            "prompt_sha256": classifier_tpl.sha256,
+        },
+        {
+            "agent_name": "root_cause_analyser",
+            "prompt_version": analyser_tpl.version,
+            "prompt_sha256": analyser_tpl.sha256,
+        },
+    ]
     input_hash = pipeline_queries.canonical_input_hash(payload=alert.model_dump())
     model_ids = _collect_model_ids(settings, "alert_classifier_llm", "root_cause_llm")
 
@@ -145,9 +158,11 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
         model_ids_json=model_ids,
         mcp_endpoints_json=[],
         skill_activations_json=[],
-        prompt_version=prompt_tpl.version,
-        prompt_sha256=prompt_tpl.sha256,
-        prompt_text=prompt_tpl.system_text,
+        # Keep lead-agent scalar fields for backward compatibility
+        prompt_version=classifier_tpl.version,
+        prompt_sha256=classifier_tpl.sha256,
+        prompt_text=classifier_tpl.system_text,
+        agent_prompts_json=agent_prompts,
     )
 
     async def _persist(reply: common.InvestigationReply) -> None:
@@ -206,8 +221,21 @@ async def _run_support_review(payload: dict[str, object]) -> str:
     db = _get_optional_db()
     et = pipeline_tracer.ExecutionTracer(db=db)
 
-    # Build replay snapshot metadata
-    prompt_tpl = prompts.load_template("ticket_reviewer")
+    # Build replay snapshot metadata — ALL agent prompts
+    reviewer_tpl = prompts.load_template("ticket_reviewer")
+    drafter_tpl = prompts.load_template("response_drafter")
+    agent_prompts = [
+        {
+            "agent_name": "ticket_reviewer",
+            "prompt_version": reviewer_tpl.version,
+            "prompt_sha256": reviewer_tpl.sha256,
+        },
+        {
+            "agent_name": "response_drafter",
+            "prompt_version": drafter_tpl.version,
+            "prompt_sha256": drafter_tpl.sha256,
+        },
+    ]
     input_hash = pipeline_queries.canonical_input_hash(payload=ticket.model_dump())
     model_ids = _collect_model_ids(settings, "ticket_reviewer_llm", "response_drafter_llm")
 
@@ -218,9 +246,11 @@ async def _run_support_review(payload: dict[str, object]) -> str:
         model_ids_json=model_ids,
         mcp_endpoints_json=[],
         skill_activations_json=[],
-        prompt_version=prompt_tpl.version,
-        prompt_sha256=prompt_tpl.sha256,
-        prompt_text=prompt_tpl.system_text,
+        # Keep lead-agent scalar fields for backward compatibility
+        prompt_version=reviewer_tpl.version,
+        prompt_sha256=reviewer_tpl.sha256,
+        prompt_text=reviewer_tpl.system_text,
+        agent_prompts_json=agent_prompts,
     )
 
     async def _persist(reply: common.SupportReply) -> None:

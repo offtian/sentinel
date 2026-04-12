@@ -140,3 +140,4 @@ class ReplayBundle:
     skill_activations: tuple[dict[str, str], ...]
     final_reply: dict[str, Any] | None
     input_payload: dict[str, Any] | None
+    agent_prompts: tuple[dict[str, str], ...] = ()

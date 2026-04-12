@@ -51,6 +51,9 @@ class PipelineRunRecord(SQLModel, table=True):
     prompt_version: str | None = Field(default=None, max_length=128)
     prompt_sha256: str | None = Field(default=None, max_length=64, index=True)
     prompt_text: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    agent_prompts_json: list[dict[str, str]] | None = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
 
 
 class NodeExecutionRecord(SQLModel, table=True):

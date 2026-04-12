@@ -66,6 +66,7 @@ class ExecutionTracer(types.TraceCollector):
         prompt_version: str | None = None,
         prompt_sha256: str | None = None,
         prompt_text: str | None = None,
+        agent_prompts_json: list[dict[str, str]] | None = None,
     ) -> None:
         """
         Record the start of a pipeline execution.
@@ -80,6 +81,7 @@ class ExecutionTracer(types.TraceCollector):
         :param prompt_version: Git-SHA-prefixed version tag of the system prompt.
         :param prompt_sha256: Content hash of the system prompt text.
         :param prompt_text: Full rendered system prompt text for replay.
+        :param agent_prompts_json: Per-agent prompt metadata for multi-agent pipelines.
         """
         self._trace_id = uuid.uuid4()
         self._pipeline_started_at = datetime.now(tz=UTC)
@@ -103,6 +105,7 @@ class ExecutionTracer(types.TraceCollector):
             prompt_version=prompt_version,
             prompt_sha256=prompt_sha256,
             prompt_text=prompt_text,
+            agent_prompts_json=agent_prompts_json,
         )
 
     async def complete_pipeline(
