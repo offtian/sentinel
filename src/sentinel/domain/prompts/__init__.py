@@ -6,13 +6,12 @@ Each ``.j2`` template has two blocks: ``system`` (the system prompt) and
 
 Usage::
 
-    from sentinel.domain.prompts import load_system_prompt, render_user_prompt
+    from sentinel.domain import prompts
 
-    tpl = load_system_prompt("alert_classifier")
-    tpl.text   # the rendered string
-    tpl.sha256 # content-addressable digest for cache keying
-
-    user_msg = render_user_prompt("alert_classifier", alert_title="...", ...)
+    tpl = prompts.load_template("alert_classifier")
+    tpl.system_text  # pre-rendered static system prompt
+    tpl.sha256       # content-addressable digest for cache keying
+    tpl.render_user(alert_title="...", ...)  # render user block on demand
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ from sentinel.domain.prompts._handle import PromptTemplate
 from sentinel.settings import PROMPTS_DIR
 
 
-__all__ = ["PromptTemplate", "load_system_prompt", "render_user_prompt"]
+__all__ = ["PromptTemplate", "load_template"]
 
 _env = Environment(
     loader=FileSystemLoader(str(PROMPTS_DIR)),
@@ -34,23 +33,15 @@ _env = Environment(
 )
 
 
-def load_system_prompt(template_name: str) -> PromptTemplate:
-    """Return a :class:`PromptTemplate` for the ``system`` block of *template_name*.j2."""
-    template = _env.get_template(f"{template_name}.j2")
-    block_fn = template.blocks.get("system")
-    if block_fn is None:
-        msg = f"Template {template_name}.j2 has no 'system' block"
-        raise ValueError(msg)
-    text = "".join(block_fn(template.new_context())).strip()
-    return PromptTemplate.from_text(template_name=template_name, text=text)
+def load_template(template_name: str) -> PromptTemplate:
+    """
+    Load *template_name*.j2 and return a :class:`PromptTemplate`.
 
-
-def render_user_prompt(template_name: str, **kwargs: object) -> str:
-    """Render the ``user`` block from *template_name*.j2 with the given variables."""
-    template = _env.get_template(f"{template_name}.j2")
-    block_fn = template.blocks.get("user")
-    if block_fn is None:
-        msg = f"Template {template_name}.j2 has no 'user' block"
-        raise ValueError(msg)
-    ctx = template.new_context(vars=kwargs)
-    return "".join(block_fn(ctx)).strip()
+    The ``system`` block is pre-rendered immediately (it must be static).
+    The ``user`` block can be rendered later via :meth:`PromptTemplate.render_user`.
+    """
+    jinja_template = _env.get_template(f"{template_name}.j2")
+    return PromptTemplate.from_jinja(
+        template_name=template_name,
+        jinja_template=jinja_template,
+    )

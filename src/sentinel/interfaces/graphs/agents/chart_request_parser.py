@@ -23,14 +23,13 @@ class Dependencies:
     team: str
 
 
-_SYSTEM_PROMPT_HANDLE = prompts.load_system_prompt("chart_request_parser")
-BASE_SYSTEM_PROMPT = _SYSTEM_PROMPT_HANDLE.text
+_PROMPT_TEMPLATE = prompts.load_template("chart_request_parser")
+BASE_SYSTEM_PROMPT = _PROMPT_TEMPLATE.system_text
 
 
 def _build_context(ctx: RunContext[Dependencies]) -> str:
     """Render the user prompt with request context."""
-    return prompts.render_user_prompt(
-        "chart_request_parser",
+    return _PROMPT_TEMPLATE.render_user(
         raw_message=ctx.deps.raw_message,
         requester=ctx.deps.requester,
         team=ctx.deps.team,

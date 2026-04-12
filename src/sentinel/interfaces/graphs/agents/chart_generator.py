@@ -31,14 +31,13 @@ class Dependencies:
     policy_json: str
 
 
-_SYSTEM_PROMPT_HANDLE = prompts.load_system_prompt("chart_generator")
-BASE_SYSTEM_PROMPT = _SYSTEM_PROMPT_HANDLE.text
+_PROMPT_TEMPLATE = prompts.load_template("chart_generator")
+BASE_SYSTEM_PROMPT = _PROMPT_TEMPLATE.system_text
 
 
 def _build_context(ctx: RunContext[Dependencies]) -> str:
     """Render the user prompt with spec and policy context."""
-    return prompts.render_user_prompt(
-        "chart_generator",
+    return _PROMPT_TEMPLATE.render_user(
         service_name=ctx.deps.service_name,
         image=ctx.deps.image,
         spec_json=ctx.deps.spec_json,

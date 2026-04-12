@@ -32,8 +32,8 @@ class Dependencies:
     ticket_search_results: list[searcher.TicketSearchResult]
 
 
-_SYSTEM_PROMPT_HANDLE = prompts.load_system_prompt("response_drafter")
-BASE_SYSTEM_PROMPT = _SYSTEM_PROMPT_HANDLE.text
+_PROMPT_TEMPLATE = prompts.load_template("response_drafter")
+BASE_SYSTEM_PROMPT = _PROMPT_TEMPLATE.system_text
 
 
 def _build_context(ctx: RunContext[Dependencies]) -> str:
@@ -50,8 +50,7 @@ def _build_context(ctx: RunContext[Dependencies]) -> str:
         }
         for r in ctx.deps.ticket_search_results
     ]
-    return prompts.render_user_prompt(
-        "response_drafter",
+    return _PROMPT_TEMPLATE.render_user(
         ticket_summary=ctx.deps.ticket_summary,
         ticket_category=ctx.deps.ticket_category,
         ticket_description=ctx.deps.ticket_description,

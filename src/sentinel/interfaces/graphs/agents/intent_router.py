@@ -25,8 +25,8 @@ class Dependencies:
     message: str
 
 
-_SYSTEM_PROMPT_HANDLE = prompts.load_system_prompt("intent_router")
-BASE_SYSTEM_PROMPT = _SYSTEM_PROMPT_HANDLE.text
+_PROMPT_TEMPLATE = prompts.load_template("intent_router")
+BASE_SYSTEM_PROMPT = _PROMPT_TEMPLATE.system_text
 
 
 def build_agent(

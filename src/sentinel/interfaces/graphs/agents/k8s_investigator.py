@@ -38,13 +38,12 @@ class Dependencies:
     namespace: str | None = None
 
 
-_SYSTEM_PROMPT_HANDLE = prompts.load_system_prompt("k8s_investigator")
-BASE_SYSTEM_PROMPT = _SYSTEM_PROMPT_HANDLE.text
+_PROMPT_TEMPLATE = prompts.load_template("k8s_investigator")
+BASE_SYSTEM_PROMPT = _PROMPT_TEMPLATE.system_text
 
 
 def _build_k8s_context(ctx: RunContext[Dependencies]) -> str:
-    return prompts.render_user_prompt(
-        "k8s_investigator",
+    return _PROMPT_TEMPLATE.render_user(
         alert_title=ctx.deps.alert_title,
         alert_description=ctx.deps.alert_description,
         alert_severity=ctx.deps.alert_severity,
