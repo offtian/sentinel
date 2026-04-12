@@ -181,9 +181,9 @@ flowchart LR
       B4[Prompt version + SHA256<br/>recorded in audit log]
       B5[ReplayBundle snapshot per pipeline run<br/>with --replay and --diff CLI]
       B6[Vendor-agnostic prompt caching<br/>via build_cache_settings]
+      B7[Token usage extraction + LLM cost<br/>estimation per agent call + pipeline aggregate]
     end
     subgraph Remaining
-      A1[Token usage not extracted<br/>from agent results]
       A2[Skill content hash not<br/>persisted in audit log]
       A3[LLM call + approval OTel<br/>metrics declared but unwired]
       A4[SRE approval persistence<br/>in-memory only]
@@ -331,7 +331,7 @@ PostgreSQL with SQLModel (async via asyncpg). Tables:
 | `eval_runs` | Evaluation framework execution records |
 | `pipeline_runs` | Pipeline execution traces linked by trace_id |
 | `node_executions` | Per-node execution traces within a pipeline run |
-| `agent_calls` | PydanticAI agent invocation records with message history |
+| `agent_calls` | PydanticAI agent invocation records with message history and token usage/cost |
 
 Migrations managed by Alembic.
 
@@ -371,7 +371,7 @@ pipeline_runs (trace_id, pipeline_type, status, duration_ms)
 
 **Domain types:** `data/tracing_models.py` defines `PipelineRunRecord`, `NodeExecutionRecord`, `AgentCallRecord`.
 
-**ExecutionTracer** (`domain/pipeline/tracer.py`) — DB-backed tracer that records pipeline runs, node executions, and agent calls with prompt version metadata. Each `AgentCallRecord` captures `prompt_version` (git SHA + filename) and `prompt_sha256` for regulatory traceability. `ReplayBundle` (`domain/pipeline/types.py`) aggregates the full snapshot (model, prompts, MCP servers, skills, input payload) for reproducibility via `python -m sentinel.replay`.
+**ExecutionTracer** (`domain/pipeline/tracer.py`) — DB-backed tracer that records pipeline runs, node executions, and agent calls with prompt version metadata. Each `AgentCallRecord` captures `prompt_version` (git SHA + filename) and `prompt_sha256` for regulatory traceability. Token usage (`request_tokens`, `response_tokens`) and estimated cost (via `litellm.completion_cost()`) are extracted from each PydanticAI agent result and persisted to `agent_calls.token_usage_json`. Per-agent cost breakdowns are accumulated and flushed as `pipeline_runs.total_token_usage_json` when the pipeline completes. `ReplayBundle` (`domain/pipeline/types.py`) aggregates the full snapshot (model, prompts, MCP servers, skills, input payload) for reproducibility via `python -m sentinel.replay`.
 
 ## Deployment
 
@@ -407,7 +407,7 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 
 ## Test Count
 
-695+ tests covering:
+830+ tests covering:
 
 - Domain entities and operations (SRE, Support, Confidence, Search, Pipeline errors, Approval, Supervisor)
 - Webhook parsers (PagerDuty, Datadog) with dedup handling
@@ -424,6 +424,7 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 - Pipeline traceability (trace_id correlation, pipeline/node/agent recording)
 - Prompt versioning (version/hash round-trip, replay bundle serialisation)
 - Prompt caching (vendor-agnostic cache settings, agent integration)
+- Token usage extraction and LLM cost estimation (per-agent and pipeline aggregate)
 
 ## Key Reference Files
 
@@ -447,6 +448,7 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 | MCP server | `src/sentinel/interfaces/mcp/server.py` |
 | MCP client builder | `src/sentinel/plugins/toolsets/mcp.py` |
 | Evaluation metrics | `src/sentinel/domain/evaluation/metrics.py` |
+| LLM cost estimation | `src/sentinel/domain/evaluation/costing.py` |
 | Helm chart | `helm/sentinel/values.yaml` |
 | Skills loader | `src/sentinel/domain/skills/__init__.py` |
 | Universal MCP builder | `src/sentinel/config.py` `Configuration.build_mcp_toolsets()` |
