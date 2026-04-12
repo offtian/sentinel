@@ -25,9 +25,9 @@ rules:
     resources: ["horizontalpodautoscalers"]
     verbs: ["get", "list", "watch"]
   {{- if .Values.kagent.enabled }}
-  # Kagent CRD access
+  # Kagent CRD access — scoped to investigation resources only
   - apiGroups: ["kagent.dev"]
-    resources: ["*"]
+    resources: ["investigations"]
     verbs: ["create", "get", "list", "watch"]
   {{- end }}
 {{- end }}
