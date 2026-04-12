@@ -448,7 +448,7 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 | MCP server | `src/sentinel/interfaces/mcp/server.py` |
 | MCP client builder | `src/sentinel/plugins/toolsets/mcp.py` |
 | Evaluation metrics | `src/sentinel/domain/evaluation/metrics.py` |
-| LLM cost estimation | `src/sentinel/domain/evaluation/costing.py` |
+| LLM cost estimation | `src/sentinel/domain/pipeline/costing.py` |
 | Helm chart | `helm/sentinel/values.yaml` |
 | Skills loader | `src/sentinel/domain/skills/__init__.py` |
 | Universal MCP builder | `src/sentinel/config.py` `Configuration.build_mcp_toolsets()` |

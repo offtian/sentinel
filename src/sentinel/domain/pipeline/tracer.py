@@ -14,9 +14,8 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic_ai.messages import ModelMessage
 
-from sentinel.domain.evaluation import costing
+from sentinel.domain.pipeline import costing, types
 from sentinel.domain.pipeline import operations as pipeline_ops
-from sentinel.domain.pipeline import types
 from sentinel.utils import logs
 
 
