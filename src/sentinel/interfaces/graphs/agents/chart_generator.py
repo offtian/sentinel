@@ -31,7 +31,8 @@ class Dependencies:
     policy_json: str
 
 
-BASE_SYSTEM_PROMPT = prompts.load_system_prompt("chart_generator")
+_SYSTEM_PROMPT_HANDLE = prompts.load_system_prompt("chart_generator")
+BASE_SYSTEM_PROMPT = _SYSTEM_PROMPT_HANDLE.text
 
 
 def _build_context(ctx: RunContext[Dependencies]) -> str:

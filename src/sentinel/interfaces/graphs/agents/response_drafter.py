@@ -32,7 +32,8 @@ class Dependencies:
     ticket_search_results: list[searcher.TicketSearchResult]
 
 
-BASE_SYSTEM_PROMPT = prompts.load_system_prompt("response_drafter")
+_SYSTEM_PROMPT_HANDLE = prompts.load_system_prompt("response_drafter")
+BASE_SYSTEM_PROMPT = _SYSTEM_PROMPT_HANDLE.text
 
 
 def _build_context(ctx: RunContext[Dependencies]) -> str:

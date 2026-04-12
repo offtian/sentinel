@@ -25,7 +25,8 @@ class Dependencies:
     ticket_labels: list[str]
 
 
-BASE_SYSTEM_PROMPT = prompts.load_system_prompt("ticket_reviewer")
+_SYSTEM_PROMPT_HANDLE = prompts.load_system_prompt("ticket_reviewer")
+BASE_SYSTEM_PROMPT = _SYSTEM_PROMPT_HANDLE.text
 
 
 def build_agent(

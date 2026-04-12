@@ -24,7 +24,8 @@ class Dependencies:
     alert_source: str
 
 
-BASE_SYSTEM_PROMPT = prompts.load_system_prompt("alert_classifier")
+_SYSTEM_PROMPT_HANDLE = prompts.load_system_prompt("alert_classifier")
+BASE_SYSTEM_PROMPT = _SYSTEM_PROMPT_HANDLE.text
 
 
 def build_agent(

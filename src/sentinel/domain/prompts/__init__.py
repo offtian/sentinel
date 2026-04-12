@@ -8,7 +8,10 @@ Usage::
 
     from sentinel.domain.prompts import load_system_prompt, render_user_prompt
 
-    SYSTEM_PROMPT = load_system_prompt("alert_classifier")
+    tpl = load_system_prompt("alert_classifier")
+    tpl.text   # the rendered string
+    tpl.sha256 # content-addressable digest for cache keying
+
     user_msg = render_user_prompt("alert_classifier", alert_title="...", ...)
 """
 
@@ -16,8 +19,11 @@ from __future__ import annotations
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from sentinel.domain.prompts._handle import PromptTemplate
 from sentinel.settings import PROMPTS_DIR
 
+
+__all__ = ["PromptTemplate", "load_system_prompt", "render_user_prompt"]
 
 _env = Environment(
     loader=FileSystemLoader(str(PROMPTS_DIR)),
@@ -28,15 +34,15 @@ _env = Environment(
 )
 
 
-def load_system_prompt(template_name: str) -> str:
-    """Return the ``system`` block from *template_name*.j2, rendered without variables."""
+def load_system_prompt(template_name: str) -> PromptTemplate:
+    """Return a :class:`PromptTemplate` for the ``system`` block of *template_name*.j2."""
     template = _env.get_template(f"{template_name}.j2")
-    # Render the system block only — no runtime vars needed.
     block_fn = template.blocks.get("system")
     if block_fn is None:
         msg = f"Template {template_name}.j2 has no 'system' block"
         raise ValueError(msg)
-    return "".join(block_fn(template.new_context())).strip()
+    text = "".join(block_fn(template.new_context())).strip()
+    return PromptTemplate.from_text(template_name=template_name, text=text)
 
 
 def render_user_prompt(template_name: str, **kwargs: object) -> str:
