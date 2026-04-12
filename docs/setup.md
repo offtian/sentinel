@@ -5,7 +5,7 @@
 - **Python 3.13+** — install via [pyenv](https://github.com/pyenv/pyenv) or [uv](https://docs.astral.sh/uv/)
 - **UV** — `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **Docker** and **Docker Compose** — for local PostgreSQL
-- **A LiteLLM gateway** (optional for local dev — can point to OpenAI directly)
+- **An OpenAI API key** or **Ollama** for local LLM inference
 
 ## 1. Clone and Install
 
@@ -31,9 +31,9 @@ Edit `.env` and fill in the values you need. At minimum for local development:
 # Required
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/sentinel
 
-# LLM — point to your LiteLLM instance or use OpenAI directly
-AI_GATEWAY_URL=http://localhost:4000
-# If no LiteLLM, set OPENAI_API_KEY and use models like "openai/gpt-4.1-mini"
+# LLM — set your provider API key (LiteLLM SDK routes to providers in-process)
+OPENAI_API_KEY=sk-...
+# For local dev with Ollama, set OLLAMA_BASE_URL (defaults to http://localhost:11434)
 
 # Optional — leave blank to disable these integrations locally
 PAGERDUTY_API_KEY=
@@ -173,19 +173,22 @@ just lint-fix
 3. Set `SLACK_BOT_TOKEN` to the bot token (`xoxb-...`)
 4. Set `SRE_SLACK_CHANNEL` and `SUPPORT_SLACK_CHANNEL` to the channel IDs
 
-### LiteLLM Gateway
+### LLM Providers
 
-If using a shared LiteLLM instance:
+LiteLLM SDK handles provider routing in-process via PydanticAI's `litellm:` model prefix. No external proxy service is needed -- `litellm` is a Python dependency that routes model calls directly to provider APIs, supporting 100+ providers with `drop_params` for cross-provider compatibility. Settings are configured programmatically in `bootstrap.py`.
 
-```bash
-AI_GATEWAY_URL=http://litellm.litellm.svc.cluster.local/
-```
-
-For local development without LiteLLM, set your API key directly:
+**For OpenAI:**
 
 ```bash
 OPENAI_API_KEY=sk-...
-# Models will be routed through PydanticAI's native OpenAI support
+# Models use LiteLLM format: "openai/gpt-4.1-mini"
+```
+
+**For local development with Ollama:**
+
+```bash
+OLLAMA_BASE_URL=http://localhost:11434  # default, can be omitted
+# Use models like "ollama/llama3" for local inference
 ```
 
 ## Database Migrations
