@@ -30,13 +30,13 @@
 
 | Plan | Goal | Progress | Notes |
 |------|------|----------|-------|
-| [k8s-agent-and-mcp-integration](k8s-agent-and-mcp-integration.md) | Dual K8s backends (native + kagent) with MCP | 35/51 | Phases H-L: wiring, kagent CRD, MCP security, infra hardening, docs |
+| [k8s-agent-and-mcp-integration](k8s-agent-and-mcp-integration.md) | Dual K8s backends (native + kagent) with MCP | 49/51 | Phases A–K complete; Phase L (docs) remaining |
 | [grafana-metrics](grafana-metrics.md) | OTel metrics instrumentation for Grafana dashboards | 2/5 | Prometheus reader + basic metrics wired |
 
 ### Draft (Not Started)
 
 | Plan | Goal | PRD Section |
 |------|------|-------------|
-| [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, token usage extraction, SRE approval persistence, LLM cost estimation | 4, 6 |
+| [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, SRE approval persistence (token usage + LLM cost delivered in PR #18) | 4, 6 |
 | [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | 4, 7 |
 | [llm-settings-to-config](llm-settings-to-config.md) | Move LLM model config into CommonConfiguration | Internal |

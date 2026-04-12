@@ -3,6 +3,7 @@
 **Status:** in-progress
 **Created:** 2026-04-02
 **Last updated:** 2026-04-13
+**Progress:** 49/51 steps complete (Phases A–K done; Phase L pending)
 
 ## Goal
 
@@ -414,112 +415,44 @@ The local testing chat app (`interfaces/chat/app.py`) gains:
 
 </details>
 
+<details>
+<summary>Phase H: Critical Wiring — K8s backend functional at runtime (Steps 42–45)</summary>
+
+- [x] Step 42: Create `vendors/kubernetes_client.py` implementing `K8sClient` Protocol — async client with in-cluster/kubeconfig fallback, Pydantic PrivateAttr caching, runtime error checks
+- [x] Step 43: Wire K8s client into `config.build_k8s_investigation_adapter()` — replaced `k8s_client=None` with real `KubernetesClient` construction
+- [x] Step 44: Wire K8s adapter and challenger into all `investigate_alert` call sites — worker, replay, Slack event handlers, chat app
+- [x] Step 45: Unit tests for adapter selection and comparison wiring — `tests/unit/test_k8s_adapter_wiring.py`
+
+</details>
+
+<details>
+<summary>Phase I: Kagent CRD Integration (Steps 22, 24, 25)</summary>
+
+- [x] Step 22: Implement kagent CRD creation, polling, and result mapping — exponential backoff polling, findings parsing, audit trail per step, degraded result on failure/timeout
+- [x] Step 24: Kind dev environment setup — `scripts/kind-setup.sh` with kagent CRD schema, `just kagent-dev-up/down` targets
+- [x] Step 25: Integration tests for kagent CRD lifecycle — 9 tests covering success, failure, timeout, and result parsing
+
+</details>
+
+<details>
+<summary>Phase J: MCP Security & Operability (Steps 46–49)</summary>
+
+- [x] Step 46: API key authentication on MCP server — ASGI middleware validates `X-API-Key` header, disabled when `MCP_SERVER_API_KEY` is empty
+- [x] Step 47: Structured logging in MCP tool handlers — `mcp_tool_invoked`/`mcp_tool_completed` events with duration_ms on all tools
+- [x] Step 48: Liveness/readiness probes on MCP Helm deployment — TCP socket probes on MCP port
+- [x] Step 49: Scoped kagent RBAC — replaced `resources: ["*"]` with `resources: ["investigations"]` on kagent.dev apiGroup
+
+</details>
+
+<details>
+<summary>Phase K: Infrastructure Hardening (Steps 50–51)</summary>
+
+- [x] Step 50: Configurable K8s API network policy egress — `k8sAgent.apiServerCIDR` in values.yaml (defaults to 0.0.0.0/0)
+- [x] Step 51: MCP server in docker-compose — port 8811, depends on db, passes through MCP_SERVER_API_KEY
+
+</details>
+
 ## Remaining Steps
-
-### Phase H: Critical Wiring — make K8s backend functional at runtime
-
-The adapter hierarchy and pipeline nodes exist but are never connected. These steps make `K8S_INVESTIGATION_BACKEND` actually select an adapter at runtime.
-
-- [ ] Step 42: Create `vendors/kubernetes_client.py` implementing `K8sClient` Protocol
-  - Wrap the `kubernetes` async client (already a dependency)
-  - In-cluster config with kubeconfig fallback (`load_incluster_config()` then `load_kube_config()`)
-  - `is_configured` returns `True` when a valid client is loaded, `False` on `ConfigException`
-  - No-op / graceful degradation when unconfigured (existing vendor adapter pattern)
-  - **Files:** create `src/sentinel/vendors/kubernetes_client.py`, test `tests/unit/vendors/test_kubernetes_client.py`
-  - **Verify:** `just test tests/unit/vendors/test_kubernetes_client.py`
-
-- [ ] Step 43: Wire K8s client into `config.build_k8s_investigation_adapter()`
-  - Replace `k8s_client=None` at `plugins/config.py:269` with `self._build_k8s_client()`
-  - Add `_build_k8s_client()` method that constructs `KubernetesClient` (memoised)
-  - **Files:** modify `src/sentinel/plugins/config.py`
-  - **Verify:** `just test tests/unit/test_config_mcp_wiring.py`
-
-- [ ] Step 44: Wire K8s adapter and challenger adapter into worker
-  - In `worker.py:191`, call `cfg.build_k8s_investigation_adapter(agent_runner=...)` when `K8S_INVESTIGATION_BACKEND` is set
-  - Pass `k8s_adapter=` and `challenger_adapter=` to `investigate_alert()`
-  - Apply same wiring in `replay.py`, `interfaces/slack/event_handlers.py`, `interfaces/chat/app.py`
-  - **Files:** modify `src/sentinel/worker.py`, `src/sentinel/replay.py`, `src/sentinel/interfaces/slack/event_handlers.py`, `src/sentinel/interfaces/chat/app.py`
-  - **Verify:** `just test` (all callers pass adapter args correctly)
-
-- [ ] Step 45: Unit tests for adapter selection and comparison wiring
-  - Test: `K8S_INVESTIGATION_BACKEND=""` — no adapter built (existing behaviour)
-  - Test: `K8S_INVESTIGATION_BACKEND="native"` — `NativeK8sAgent` passed to pipeline
-  - Test: `K8S_INVESTIGATION_BACKEND="both"` — primary + challenger both built and passed
-  - Test: `CHALLENGER_ADAPTER="kagent"` — `KagentAdapter` built as challenger
-  - **Files:** create `tests/unit/test_k8s_adapter_wiring.py`
-  - **Verify:** `just test tests/unit/test_k8s_adapter_wiring.py && just lint`
-
-### Phase I: Kagent CRD Integration — for Toby demo
-
-Replace the placeholder in `kagent_adapter.py` with real CRD creation, polling, and result mapping.
-
-- [ ] Step 22: Implement kagent CRD creation, polling, and result mapping
-  - Replace stub at `kagent_adapter.py:84-113` with real implementation:
-    1. Create kagent investigation CRD via K8s `CustomObjectsApi` (`create_namespaced_custom_object`)
-    2. Poll CRD status with exponential backoff until `completed`/`failed`/timeout
-    3. Parse kagent findings from CRD `.status.result` and map to `InvestigationResult`
-  - Wire `k8s_api_client` in `config.build_challenger_adapter()` at `plugins/config.py:293`
-  - Timeout uses existing `KAGENT_INVESTIGATION_TIMEOUT_SECONDS` setting
-  - Failure returns degraded `InvestigationResult` with low confidence (triggers approval gate)
-  - Store kagent raw output in `AuditEntry.payload` for regulatory traceability
-  - **Files:** modify `src/sentinel/domain/sre/kagent_adapter.py`, modify `src/sentinel/plugins/config.py`, update `tests/unit/domain/sre/test_kagent_adapter.py`
-  - **Verify:** `just test tests/unit/domain/sre/test_kagent_adapter.py && just lint`
-
-- [ ] Step 24: Set up Kind dev environment with kagent operator
-  - Add `scripts/kind-setup.sh`: creates Kind cluster, installs kagent CRDs + operator
-  - Add `just kagent-dev-up` / `just kagent-dev-down` targets
-  - Document kubeconfig and `K8S_INVESTIGATION_BACKEND=kagent` setup in script comments
-  - **Files:** create `scripts/kind-setup.sh`, modify `justfile`
-  - **Verify:** `just kagent-dev-up && kubectl get crds | grep kagent`
-
-- [ ] Step 25: Integration tests against local kagent
-  - Test real CRD lifecycle: create, poll, complete, parse
-  - Mark with `@pytest.mark.integration` (skip in CI unless Kind cluster available)
-  - **Files:** create `tests/integration/test_kagent_integration.py`
-  - **Verify:** `just test-integration tests/integration/test_kagent_integration.py`
-
-### Phase J: MCP Security & Operability
-
-- [ ] Step 46: Add API key authentication to MCP server
-  - Validate `X-API-Key` header against `MCP_SERVER_API_KEY` setting (already at `settings.py:72`)
-  - When `MCP_SERVER_API_KEY` is empty, auth is disabled (local dev)
-  - When set, reject requests without valid key with 401
-  - Use FastMCP's `auth` parameter or middleware injection
-  - **Files:** modify `src/sentinel/interfaces/mcp/server.py`, create `tests/unit/interfaces/mcp/test_server_auth.py`
-  - **Verify:** `just test tests/unit/interfaces/mcp/ && just lint`
-
-- [ ] Step 47: Add structlog to MCP server tool handlers
-  - Log invocation (tool name, params) and completion (duration, success/error) for every tool
-  - Pattern: `logs.log_event("mcp_tool_invoked", ...)` at entry, `logs.log_event("mcp_tool_completed", ...)` at exit
-  - Log errors via `logs.log_exception()` in tool modules under `interfaces/mcp/tools/`
-  - **Files:** modify `src/sentinel/interfaces/mcp/server.py`, modify `src/sentinel/interfaces/mcp/tools/observability.py`, `documentation.py`, `investigation.py`
-  - **Verify:** `just test tests/unit/interfaces/mcp/test_server.py && just lint`
-
-- [ ] Step 48: Add liveness/readiness probes to MCP Helm deployment
-  - Add `livenessProbe` and `readinessProbe` to `mcp-deployment.yaml` on port 8811
-  - HTTP GET or TCP socket probe; `initialDelaySeconds: 10`, `periodSeconds: 15`, `failureThreshold: 3`
-  - **Files:** modify `helm/sentinel/templates/mcp-deployment.yaml`
-  - **Verify:** `helm template helm/sentinel --set mcpServer.enabled=true | grep -A5 Probe`
-
-- [ ] Step 49: Scope kagent RBAC in ClusterRole
-  - Replace wildcard `resources: ["*"]` with specific kagent CRD group/resource (`apiGroups: ["kagent.dev"]`, `resources: ["investigations"]`)
-  - Keep `create`, `get`, `list`, `watch` verbs for kagent CRDs only
-  - **Files:** modify `helm/sentinel/templates/clusterrole.yaml`
-  - **Verify:** `helm template helm/sentinel --set k8sAgent.enabled=true | grep -A10 kagent`
-
-### Phase K: Infrastructure Hardening
-
-- [ ] Step 50: Restrict K8s API network policy egress
-  - Replace `0.0.0.0/0:6443` with configurable `k8sAgent.apiServerCIDR` in `values.yaml`
-  - Default to `0.0.0.0/0` (safe fallback), document that operators should restrict
-  - **Files:** modify `helm/sentinel/templates/networkpolicy.yaml`, modify `helm/sentinel/values.yaml`
-  - **Verify:** `helm template helm/sentinel --set k8sAgent.enabled=true --set k8sAgent.apiServerCIDR=10.0.0.1/32`
-
-- [ ] Step 51: Add MCP server to docker-compose
-  - Add `mcp-server` service on port 8811, depends on `db`
-  - Reuses same Docker image with different entrypoint (`python -m sentinel.interfaces.mcp.server`)
-  - **Files:** modify `docker-compose.yml`
-  - **Verify:** `docker compose config --services | grep mcp`
 
 ### Phase L: Documentation & Completion
 
