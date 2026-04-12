@@ -97,6 +97,7 @@ This project uses Claude Code Agent Teams for multi-agent coordination. Subagent
 | `ai-engineer` | `.claude/agents/ai-engineer.md` | LLM pipelines, agents, prompts, evaluation |
 | `product-engineer` | `.claude/agents/product-engineer.md` | API endpoints, data flow, user-facing features |
 | `security-engineer` | `.claude/agents/security-engineer.md` | Auth, validation, OWASP, secrets management |
+| `data-engineer` | `.claude/agents/data-engineer.md` | Schema, migrations, queries, data pipelines |
 
 ### Quality gates (automated via hooks)
 
