@@ -36,6 +36,8 @@ _AGENT_DATASET_FILES: dict[str, str] = {
     "k8s_investigator": "k8s_investigator_cases.json",
 }
 
+AGENT_NAMES: tuple[str, ...] = tuple(_AGENT_DATASET_FILES.keys())
+
 
 @attrs.frozen
 class Rubric:

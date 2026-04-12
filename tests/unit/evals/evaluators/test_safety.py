@@ -32,7 +32,7 @@ class TestGenericPhraseCheck:
         result = await evaluator.evaluate(ctx)
 
         # Then the assertion passes
-        assert result["GenericPhraseCheck_pass"].value is True
+        assert result["generic_phrase_pass"].value is True
 
     async def test_fails_when_generic_phrase_detected(self) -> None:
         # Given a generic phrase evaluator and text with a fallback phrase
@@ -45,7 +45,7 @@ class TestGenericPhraseCheck:
         result = await evaluator.evaluate(ctx)
 
         # Then the assertion fails
-        assert result["GenericPhraseCheck_pass"].value is False
+        assert result["generic_phrase_pass"].value is False
 
     async def test_fails_for_support_generic_phrase(self) -> None:
         # Given text containing a support-specific generic phrase
@@ -58,7 +58,7 @@ class TestGenericPhraseCheck:
         result = await evaluator.evaluate(ctx)
 
         # Then the assertion fails
-        assert result["GenericPhraseCheck_pass"].value is False
+        assert result["generic_phrase_pass"].value is False
 
     async def test_reason_includes_matched_phrases(self) -> None:
         # Given text with a known generic phrase
@@ -71,7 +71,7 @@ class TestGenericPhraseCheck:
         result = await evaluator.evaluate(ctx)
 
         # Then the reason mentions the matched phrase
-        assert "classification failed" in result["GenericPhraseCheck_pass"].reason.lower()
+        assert "classification failed" in result["generic_phrase_pass"].reason.lower()
 
     async def test_custom_phrases(self) -> None:
         # Given an evaluator with custom phrases
@@ -87,7 +87,7 @@ class TestGenericPhraseCheck:
         result = await evaluator.evaluate(ctx)
 
         # Then the custom phrase is detected
-        assert result["GenericPhraseCheck_pass"].value is False
+        assert result["generic_phrase_pass"].value is False
 
     async def test_case_insensitive_matching(self) -> None:
         # Given text with mixed-case generic phrase
@@ -100,7 +100,7 @@ class TestGenericPhraseCheck:
         result = await evaluator.evaluate(ctx)
 
         # Then the phrase is still detected (case-insensitive)
-        assert result["GenericPhraseCheck_pass"].value is False
+        assert result["generic_phrase_pass"].value is False
 
 
 class TestHallucinationCheck:
@@ -126,7 +126,7 @@ class TestHallucinationCheck:
             result = await evaluator.evaluate(ctx)
 
         # Then the assertion passes
-        assert result["HallucinationCheck_pass"].value is True
+        assert result["hallucination_pass"].value is True
 
     async def test_fails_when_judge_detects_hallucination(self) -> None:
         # Given a hallucination evaluator
@@ -152,7 +152,7 @@ class TestHallucinationCheck:
             result = await evaluator.evaluate(ctx)
 
         # Then the assertion fails
-        assert result["HallucinationCheck_pass"].value is False
+        assert result["hallucination_pass"].value is False
 
 
 class TestToneCheck:
@@ -168,7 +168,7 @@ class TestToneCheck:
             result = await evaluator.evaluate(ctx)
 
         # Then the assertion fails and LLM was NOT called
-        assert result["ToneCheck_pass"].value is False
+        assert result["tone_pass"].value is False
         mock_judge.assert_not_called()
 
     async def test_passes_when_judge_approves_tone(self) -> None:
@@ -194,7 +194,7 @@ class TestToneCheck:
             result = await evaluator.evaluate(ctx)
 
         # Then the assertion passes
-        assert result["ToneCheck_pass"].value is True
+        assert result["tone_pass"].value is True
 
     async def test_detects_runbook_jargon(self) -> None:
         # Given text with "runbook" jargon
@@ -207,5 +207,5 @@ class TestToneCheck:
         result = await evaluator.evaluate(ctx)
 
         # Then jargon is detected
-        assert result["ToneCheck_pass"].value is False
-        assert "jargon" in result["ToneCheck_pass"].reason.lower()
+        assert result["tone_pass"].value is False
+        assert "jargon" in result["tone_pass"].reason.lower()

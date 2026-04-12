@@ -9,9 +9,11 @@ and completeness against an expected checklist.
 from __future__ import annotations
 
 import dataclasses
+import functools
 import os
-from typing import Any
+from typing import Any, ClassVar
 
+import pydantic_core
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
@@ -31,16 +33,16 @@ class _GradingOutput(BaseModel, populate_by_name=True):
     score: float
 
 
-def _get_judge_agent(
-    *, system_prompt: str, model: str | None = None
-) -> Agent[None, _GradingOutput]:
+@functools.lru_cache(maxsize=4)
+def _get_judge_agent(system_prompt: str) -> Agent[None, _GradingOutput]:
     """
-    Return a PydanticAI agent configured for structured grading output.
+    Return a cached PydanticAI agent for structured grading output.
 
-    Uses ``"test"`` as placeholder model; the actual model is passed at ``.run()`` time.
+    Cached by system_prompt so repeated calls with the same prompt reuse
+    the same Agent instance. The actual model is passed at ``.run()`` time.
     """
     return Agent(
-        model or "test",
+        "test",
         output_type=_GradingOutput,
         name="eval_judge",
         system_prompt=system_prompt,
@@ -49,13 +51,14 @@ def _get_judge_agent(
 
 def _stringify(value: Any) -> str:
     """
-    Convert a value to a string suitable for LLM judge input.
+    Serialize a value to JSON for the judge prompt, preserving structure.
+
+    Prefers pydantic_core JSON serialization over ``str()`` because the
+    judge LLM performs better when structured data keeps its JSON shape.
     """
     if isinstance(value, str):
         return value
     try:
-        import pydantic_core
-
         return pydantic_core.to_json(value).decode()
     except Exception:
         return repr(value)
@@ -80,7 +83,7 @@ async def run_judge(
     """
     Run the LLM judge and return the structured grading output.
     """
-    agent = _get_judge_agent(system_prompt=_JUDGE_SYSTEM_PROMPT)
+    agent = _get_judge_agent(_JUDGE_SYSTEM_PROMPT)
     user_prompt = (
         f"<Input>\n{_stringify(inputs)}\n</Input>\n"
         f"<Output>\n{_stringify(output)}\n</Output>\n"
@@ -102,6 +105,8 @@ class FaithfulnessCheck(evaluators.Evaluator):
     Compare a source field (e.g. input context) against an output field
     and assess whether claims in the output are supported by the source.
     """
+
+    _eval_key: ClassVar[str] = "faithfulness"
 
     source_field_path: str = ""
     output_field_path: str = ""
@@ -125,9 +130,8 @@ class FaithfulnessCheck(evaluators.Evaluator):
             model=self.model or None,
         )
 
-        evaluation_name = self.get_default_evaluation_name()
         return {
-            f"{evaluation_name}_pass": evaluator.EvaluationReason(
+            f"{self._eval_key}_pass": evaluator.EvaluationReason(
                 value=grading.pass_,
                 reason=grading.reason,
             ),
@@ -147,6 +151,8 @@ class RelevanceCheck(evaluators.Evaluator):
     """
     Judge whether the output addresses the input query.
     """
+
+    _eval_key: ClassVar[str] = "relevance"
 
     input_field_path: str = ""
     output_field_path: str = ""
@@ -168,9 +174,8 @@ class RelevanceCheck(evaluators.Evaluator):
             model=self.model or None,
         )
 
-        evaluation_name = self.get_default_evaluation_name()
         return {
-            f"{evaluation_name}_pass": evaluator.EvaluationReason(
+            f"{self._eval_key}_pass": evaluator.EvaluationReason(
                 value=grading.pass_,
                 reason=grading.reason,
             ),
@@ -190,6 +195,8 @@ class CoherenceCheck(evaluators.Evaluator):
     """
     Judge whether the output text is internally consistent and well-structured.
     """
+
+    _eval_key: ClassVar[str] = "coherence"
 
     field_path: str = ""
     model: str = ""
@@ -212,9 +219,8 @@ class CoherenceCheck(evaluators.Evaluator):
             model=self.model or None,
         )
 
-        evaluation_name = self.get_default_evaluation_name()
         return {
-            f"{evaluation_name}_pass": evaluator.EvaluationReason(
+            f"{self._eval_key}_pass": evaluator.EvaluationReason(
                 value=grading.pass_,
                 reason=grading.reason,
             ),
@@ -235,6 +241,8 @@ class CompletenessCheck(evaluators.Evaluator):
 
     Compare the output against a list of expected aspects from the case.
     """
+
+    _eval_key: ClassVar[str] = "completeness"
 
     output_field_path: str = ""
     aspects_field_path: str = ""
@@ -262,9 +270,8 @@ class CompletenessCheck(evaluators.Evaluator):
             model=self.model or None,
         )
 
-        evaluation_name = self.get_default_evaluation_name()
         return {
-            f"{evaluation_name}_pass": evaluator.EvaluationReason(
+            f"{self._eval_key}_pass": evaluator.EvaluationReason(
                 value=grading.pass_,
                 reason=grading.reason,
             ),

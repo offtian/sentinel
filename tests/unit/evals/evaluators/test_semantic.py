@@ -47,7 +47,7 @@ class TestFaithfulnessCheck:
             result = await evaluator.evaluate(ctx)
 
         # Then the assertion passes
-        assert result["FaithfulnessCheck_pass"].value is True
+        assert result["faithfulness_pass"].value is True
 
     async def test_fails_when_judge_rejects(self) -> None:
         # Given a faithfulness evaluator and a failing judge response
@@ -71,7 +71,7 @@ class TestFaithfulnessCheck:
             result = await evaluator.evaluate(ctx)
 
         # Then the assertion fails
-        assert result["FaithfulnessCheck_pass"].value is False
+        assert result["faithfulness_pass"].value is False
 
 
 class TestRelevanceCheck:
@@ -97,7 +97,7 @@ class TestRelevanceCheck:
             result = await evaluator.evaluate(ctx)
 
         # Then the assertion passes
-        assert result["RelevanceCheck_pass"].value is True
+        assert result["relevance_pass"].value is True
 
 
 class TestCoherenceCheck:
@@ -119,7 +119,7 @@ class TestCoherenceCheck:
             result = await evaluator.evaluate(ctx)
 
         # Then the assertion passes
-        assert result["CoherenceCheck_pass"].value is True
+        assert result["coherence_pass"].value is True
 
 
 class TestCompletenessCheck:
@@ -145,7 +145,7 @@ class TestCompletenessCheck:
             result = await evaluator.evaluate(ctx)
 
         # Then the assertion passes
-        assert result["CompletenessCheck_pass"].value is True
+        assert result["completeness_pass"].value is True
 
     async def test_handles_missing_aspects_field(self) -> None:
         # Given a completeness evaluator with a non-existent aspects path
@@ -166,7 +166,7 @@ class TestCompletenessCheck:
             result = await evaluator.evaluate(ctx)
 
         # Then the assertion still passes
-        assert result["CompletenessCheck_pass"].value is True
+        assert result["completeness_pass"].value is True
 
 
 class TestBuildSerializationArguments:

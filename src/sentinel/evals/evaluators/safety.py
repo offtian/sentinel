@@ -51,10 +51,10 @@ _ALL_GENERIC_PHRASES: tuple[str, ...] = (
 )
 
 
-def _contains_generic_phrase(*, text: str, phrases: tuple[str, ...]) -> bool:
-    """Return True if the text contains any of the generic/fallback phrases."""
+def _find_generic_phrases(*, text: str, phrases: tuple[str, ...]) -> tuple[str, ...]:
+    """Return the subset of phrases found in text (case-insensitive)."""
     lowered = text.lower()
-    return any(phrase in lowered for phrase in phrases)
+    return tuple(p for p in phrases if p in lowered)
 
 
 @dataclasses.dataclass
@@ -64,6 +64,8 @@ class GenericPhraseCheck(evaluators.Evaluator):
 
     Uses phrase lists ported from the production quality gate.
     """
+
+    _eval_key: ClassVar[str] = "generic_phrase"
 
     field_path: str = ""
     phrases: tuple[str, ...] = _ALL_GENERIC_PHRASES
@@ -77,18 +79,15 @@ class GenericPhraseCheck(evaluators.Evaluator):
         payload = ctx.inputs.case_payload
         text = str(base.resolve_field(payload=payload, field_path=self.field_path))
 
-        has_generic = _contains_generic_phrase(text=text, phrases=self.phrases)
-        if has_generic:
-            lowered = text.lower()
-            matched = [p for p in self.phrases if p in lowered]
-            reason = f"Found generic phrase(s): {matched}"
+        matched = _find_generic_phrases(text=text, phrases=self.phrases)
+        if matched:
+            reason = f"Found generic phrase(s): {list(matched)}"
         else:
             reason = "No generic phrases detected"
 
-        evaluation_name = self.get_default_evaluation_name()
         return {
-            f"{evaluation_name}_pass": evaluator.EvaluationReason(
-                value=not has_generic,
+            f"{self._eval_key}_pass": evaluator.EvaluationReason(
+                value=not matched,
                 reason=reason,
             ),
         }
@@ -110,6 +109,8 @@ class HallucinationCheck(evaluators.Evaluator):
 
     Uses the LLM judge with a hallucination-specific rubric.
     """
+
+    _eval_key: ClassVar[str] = "hallucination"
 
     source_field_path: str = ""
     output_field_path: str = ""
@@ -135,9 +136,8 @@ class HallucinationCheck(evaluators.Evaluator):
             model=self.model or None,
         )
 
-        evaluation_name = self.get_default_evaluation_name()
         return {
-            f"{evaluation_name}_pass": evaluator.EvaluationReason(
+            f"{self._eval_key}_pass": evaluator.EvaluationReason(
                 value=grading.pass_,
                 reason=grading.reason,
             ),
@@ -159,6 +159,8 @@ class ToneCheck(evaluators.Evaluator):
 
     Verify appropriate empathy, no jargon leakage, and professional language.
     """
+
+    _eval_key: ClassVar[str] = "tone"
 
     field_path: str = ""
     model: str = ""
@@ -188,9 +190,8 @@ class ToneCheck(evaluators.Evaluator):
         lowered = text.lower()
         jargon_found = [p for p in self._JARGON_PATTERNS if p in lowered]
         if jargon_found:
-            evaluation_name = self.get_default_evaluation_name()
             return {
-                f"{evaluation_name}_pass": evaluator.EvaluationReason(
+                f"{self._eval_key}_pass": evaluator.EvaluationReason(
                     value=False,
                     reason=f"Internal jargon detected: {jargon_found}",
                 ),
@@ -203,9 +204,8 @@ class ToneCheck(evaluators.Evaluator):
             model=self.model or None,
         )
 
-        evaluation_name = self.get_default_evaluation_name()
         return {
-            f"{evaluation_name}_pass": evaluator.EvaluationReason(
+            f"{self._eval_key}_pass": evaluator.EvaluationReason(
                 value=grading.pass_,
                 reason=grading.reason,
             ),

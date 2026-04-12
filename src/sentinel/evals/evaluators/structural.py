@@ -106,9 +106,10 @@ class StructuralCheck(evaluators.Evaluator):
         else:
             assert_never(self.check_type)
 
-        evaluation_name = self.get_default_evaluation_name()
+        leaf_field = self.field_path.rsplit(".", maxsplit=1)[-1]
+        key = f"{leaf_field}_{self.check_type}"
         return {
-            f"{evaluation_name}_pass": evaluator.EvaluationReason(
+            f"{key}_pass": evaluator.EvaluationReason(
                 value=passed,
                 reason=reason,
             ),

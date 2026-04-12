@@ -15,15 +15,7 @@ from sentinel.utils import logs
 from . import cases, rendering, reporting, types
 
 
-_KNOWN_AGENTS = (
-    "alert_classifier",
-    "root_cause_analyser",
-    "response_drafter",
-    "chart_generator",
-    "intent_router",
-    "ticket_reviewer",
-    "k8s_investigator",
-)
+_KNOWN_AGENTS = tuple(cases.AGENT_NAMES)
 
 
 async def _noop_task(input_data: types.InputData) -> str:
@@ -119,15 +111,16 @@ def _collect_assertion_results(
     """
     Collect assertion results across all cases in a report.
 
-    Aggregate by taking the average pass rate per assertion key.
+    Aggregate per key: True only if the assertion passed in every case.
+    Uses a running boolean to short-circuit on first failure per key.
     """
-    key_values: dict[str, list[bool]] = {}
-    for case in report.cases:
-        for key, result in case.assertions.items():
-            key_values.setdefault(key, []).append(bool(result.value))
+    if not report.cases:
+        return {}
 
     aggregated: dict[str, bool | float] = {}
-    for key, values in key_values.items():
-        aggregated[key] = all(values) if values else False
+    for case in report.cases:
+        for key, result in case.assertions.items():
+            if key not in aggregated or aggregated[key]:
+                aggregated[key] = bool(result.value)
 
     return aggregated

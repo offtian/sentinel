@@ -120,9 +120,8 @@ AGENT_METRIC_SPECS: dict[str, AgentMetricSpec] = {
     "chart_generator": AgentMetricSpec(
         agent_name="chart_generator",
         metrics=(
-            MetricWeight(name="structure_valid", weight=0.35, evaluator_key="yaml_structure_pass"),
-            MetricWeight(name="spec_coverage", weight=0.35, evaluator_key="spec_coverage_pass"),
-            MetricWeight(name="file_count", weight=0.30, evaluator_key="file_count_gte_pass"),
+            MetricWeight(name="structure_valid", weight=0.50, evaluator_key="yaml_structure_pass"),
+            MetricWeight(name="spec_coverage", weight=0.50, evaluator_key="spec_coverage_pass"),
         ),
     ),
     "intent_router": AgentMetricSpec(

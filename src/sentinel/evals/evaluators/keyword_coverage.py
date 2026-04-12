@@ -63,9 +63,8 @@ class KeywordCoverage(evaluators.Evaluator):
             f"matched: {int(coverage * len(self.keywords))}/{len(self.keywords)})"
         )
 
-        evaluation_name = self.get_default_evaluation_name()
         return {
-            f"{evaluation_name}_pass": evaluator.EvaluationReason(
+            "keyword_coverage_pass": evaluator.EvaluationReason(
                 value=passed,
                 reason=reason,
             ),

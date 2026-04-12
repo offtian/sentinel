@@ -52,9 +52,8 @@ class YamlStructureCheck(evaluators.Evaluator):
             else f"Missing files matching: {', '.join(missing)}"
         )
 
-        evaluation_name = self.get_default_evaluation_name()
         return {
-            f"{evaluation_name}_pass": evaluator.EvaluationReason(
+            "yaml_structure_pass": evaluator.EvaluationReason(
                 value=passed,
                 reason=reason,
             ),
@@ -97,9 +96,8 @@ class SpecCoverageCheck(evaluators.Evaluator):
         passed = actual_count >= int(expected_min)
         reason = f"Generated {actual_count} files (minimum: {expected_min})"
 
-        evaluation_name = self.get_default_evaluation_name()
         return {
-            f"{evaluation_name}_pass": evaluator.EvaluationReason(
+            "spec_coverage_pass": evaluator.EvaluationReason(
                 value=passed,
                 reason=reason,
             ),
