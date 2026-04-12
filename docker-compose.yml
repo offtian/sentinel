@@ -46,6 +46,28 @@ services:
       db:
         condition: service_healthy
 
+  mcp-server:
+    build: .
+    command: ["uv", "run", "python", "-m", "sentinel.interfaces.mcp.server"]
+    ports:
+      - "8811:8811"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/sentinel
+      ENVIRONMENT: localdev
+      MCP_SERVER_PORT: "8811"
+      MCP_SERVER_API_KEY: ${MCP_SERVER_API_KEY:-}
+      # Grafana stack (auto-selected when ENVIRONMENT=localdev)
+      GRAFANA_URL: http://grafana:3000
+      GRAFANA_API_TOKEN: ${GRAFANA_API_TOKEN:-}
+      GRAFANA_PROMETHEUS_DATASOURCE_UID: prometheus
+      GRAFANA_LOKI_DATASOURCE_UID: loki
+      GRAFANA_TEMPO_DATASOURCE_UID: tempo
+      OTEL_TRACES_ENABLED: "true"
+      OTEL_TRACES_ENDPOINT: http://tempo:4318
+    depends_on:
+      db:
+        condition: service_healthy
+
   # ---------------------------------------------------------------------------
   # Observability stack (Grafana + Prometheus + Loki + Tempo)
   # ---------------------------------------------------------------------------
