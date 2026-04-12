@@ -58,6 +58,14 @@ class ExecutionTracer(types.TraceCollector):
         pipeline_type: str,
         job_request_id: uuid.UUID | None = None,
         input_data: dict[str, Any] | None = None,
+        # Replay snapshot fields
+        input_hash: str | None = None,
+        model_ids_json: list[str] | None = None,
+        mcp_endpoints_json: list[str] | None = None,
+        skill_activations_json: list[dict[str, str]] | None = None,
+        prompt_version: str | None = None,
+        prompt_sha256: str | None = None,
+        prompt_text: str | None = None,
     ) -> None:
         """
         Record the start of a pipeline execution.
@@ -65,6 +73,13 @@ class ExecutionTracer(types.TraceCollector):
         :param pipeline_type: Pipeline name (e.g. "sre_investigation").
         :param job_request_id: Associated job request UUID.
         :param input_data: Pipeline input data.
+        :param input_hash: Deterministic SHA-256 of the canonical input.
+        :param model_ids_json: LLM model identifiers used during this run.
+        :param mcp_endpoints_json: MCP server endpoints available to the pipeline.
+        :param skill_activations_json: Skills activated for the pipeline agents.
+        :param prompt_version: Git-SHA-prefixed version tag of the system prompt.
+        :param prompt_sha256: Content hash of the system prompt text.
+        :param prompt_text: Full rendered system prompt text for replay.
         """
         self._trace_id = uuid.uuid4()
         self._pipeline_started_at = datetime.now(tz=UTC)
@@ -81,6 +96,13 @@ class ExecutionTracer(types.TraceCollector):
             job_request_id=job_request_id,
             started_at=self._pipeline_started_at,
             input_json=input_data,
+            input_hash=input_hash,
+            model_ids_json=model_ids_json,
+            mcp_endpoints_json=mcp_endpoints_json,
+            skill_activations_json=skill_activations_json,
+            prompt_version=prompt_version,
+            prompt_sha256=prompt_sha256,
+            prompt_text=prompt_text,
         )
 
     async def complete_pipeline(
@@ -89,6 +111,7 @@ class ExecutionTracer(types.TraceCollector):
         status: str,
         output_data: dict[str, Any] | None = None,
         error_message: str | None = None,
+        final_reply: dict[str, Any] | None = None,
     ) -> None:
         """
         Record the completion of a pipeline execution.
@@ -96,6 +119,7 @@ class ExecutionTracer(types.TraceCollector):
         :param status: Final status ("completed" or "failed").
         :param output_data: Pipeline output data.
         :param error_message: Error message if failed.
+        :param final_reply: Structured final reply payload for replay.
         """
         if self._db is None or self._pipeline_run_id is None:
             return
@@ -112,6 +136,7 @@ class ExecutionTracer(types.TraceCollector):
             output_json=output_data,
             error_message=error_message,
             duration_ms=duration_ms,
+            final_reply=final_reply,
         )
 
     async def start_node(

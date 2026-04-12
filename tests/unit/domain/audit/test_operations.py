@@ -198,3 +198,53 @@ class TestRecordAuditEntry:
         query = call_args[0][0] if call_args[0] else call_args[1].get("query")
         compiled = query.compile(compile_kwargs={"literal_binds": False})
         assert compiled.params.get("input_hash") == expected_hash
+
+    @pytest.mark.asyncio
+    async def test_prompt_sha256_is_passed_through_when_provided(self) -> None:
+        # Given a mock database connection and a specific prompt SHA-256
+        mock_db = mock.AsyncMock()
+        mock_db.execute.return_value = None
+        expected_sha = "b" * 64
+
+        # When an audit entry is recorded with prompt_sha256
+        await operations.record_audit_entry(
+            db=mock_db,
+            actor="system",
+            action="investigate",
+            resource_type="alert",
+            resource_id="PD-100",
+            details={},
+            input_hash="hash000",
+            prompt_sha256=expected_sha,
+        )
+
+        # Then prompt_sha256 is in the insert params
+        call_args = mock_db.execute.call_args
+        query = call_args[0][0] if call_args[0] else call_args[1].get("query")
+        compiled = query.compile(compile_kwargs={"literal_binds": False})
+        assert compiled.params.get("prompt_sha256") == expected_sha
+
+    @pytest.mark.asyncio
+    async def test_pipeline_run_id_is_passed_through_when_provided(self) -> None:
+        # Given a mock database connection and a specific pipeline run UUID
+        mock_db = mock.AsyncMock()
+        mock_db.execute.return_value = None
+        run_id = uuid.UUID("12345678-1234-5678-1234-567812345678")
+
+        # When an audit entry is recorded with pipeline_run_id
+        await operations.record_audit_entry(
+            db=mock_db,
+            actor="pipeline",
+            action="root_cause_analysis",
+            resource_type="investigation",
+            resource_id="inv-200",
+            details={},
+            input_hash="hashfff",
+            pipeline_run_id=run_id,
+        )
+
+        # Then pipeline_run_id is in the insert params
+        call_args = mock_db.execute.call_args
+        query = call_args[0][0] if call_args[0] else call_args[1].get("query")
+        compiled = query.compile(compile_kwargs={"literal_binds": False})
+        assert compiled.params.get("pipeline_run_id") == run_id

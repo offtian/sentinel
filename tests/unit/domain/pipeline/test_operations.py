@@ -114,6 +114,35 @@ class TestPersistPipelineRun:
         query = call_args[0][0] if call_args[0] else call_args[1].get("query")
         assert "pipeline_runs" in str(query)
 
+    @pytest.mark.asyncio
+    async def test_snapshot_fields_are_passed_through(self) -> None:
+        # Given a mock database and replay snapshot metadata
+        mock_db = mock.AsyncMock()
+        mock_db.execute.return_value = None
+
+        # When a pipeline run is persisted with snapshot fields
+        result_id = await operations.persist_pipeline_run(
+            db=mock_db,
+            trace_id=uuid.uuid4(),
+            pipeline_type="sre_investigation",
+            started_at=datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC),
+            input_hash="abc123",
+            model_ids_json=["openai/gpt-4.1-mini", "openai/gpt-4.1"],
+            mcp_endpoints_json=["http://mcp.local:8080"],
+            skill_activations_json=[{"name": "k8s", "scope": "sre"}],
+            prompt_version="538d165abc12:alert_classifier",
+            prompt_sha256="deadbeef" * 8,
+            prompt_text="You are an SRE assistant.",
+        )
+
+        # Then a UUID is returned and the insert includes snapshot values
+        assert isinstance(result_id, uuid.UUID)
+        call_args = mock_db.execute.call_args
+        query = call_args[0][0] if call_args[0] else call_args[1].get("query")
+        compiled = query.compile(compile_kwargs={"literal_binds": False})
+        assert compiled.params.get("input_hash") == "abc123"
+        assert compiled.params.get("prompt_version") == "538d165abc12:alert_classifier"
+
 
 class TestCompletePipelineRun:
     @pytest.mark.asyncio
@@ -170,6 +199,27 @@ class TestCompletePipelineRun:
 
         # Then execute is called once with no error
         mock_db.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_final_reply_is_included_in_update(self) -> None:
+        # Given a mock database connection
+        mock_db = mock.AsyncMock()
+        mock_db.execute.return_value = None
+        reply_payload = {"alert_id": "PD-1", "root_cause": "OOM kill"}
+
+        # When completed with a final_reply payload
+        await operations.complete_pipeline_run(
+            db=mock_db,
+            run_id=uuid.uuid4(),
+            status="completed",
+            final_reply=reply_payload,
+        )
+
+        # Then execute is called and the update includes final_reply
+        call_args = mock_db.execute.call_args
+        query = call_args[0][0] if call_args[0] else call_args[1].get("query")
+        compiled = query.compile(compile_kwargs={"literal_binds": False})
+        assert compiled.params.get("final_reply") == reply_payload
 
 
 class TestPersistNodeExecution:
