@@ -185,6 +185,8 @@ flowchart LR
     subgraph Remaining
       A1[Token usage not extracted<br/>from agent results]
       A2[Skill content hash not<br/>persisted in audit log]
+      A3[LLM call + approval OTel<br/>metrics declared but unwired]
+      A4[SRE approval persistence<br/>in-memory only]
     end
 ```
 

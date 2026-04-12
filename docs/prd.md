@@ -124,13 +124,19 @@ Acceptance criteria:
 - [x] Structured logging via structlog with context-aware event names (e.g. `alert_classified`, `investigation_completed`)
 - [x] PydanticAI spans (`Agent(..., instrument=True)`) exported via OTLP — Logfire SDK configured in `bootstrap_otel.init_traces()`, exports to Tempo/Datadog via `otel_traces_endpoint`
 - [x] Per-pipeline-run snapshot persisted to `pipeline_runs` / `node_executions` / `agent_calls` (graph nodes write to the existing tracing tables)
-- [ ] Token usage and cost recorded per agent call from LiteLLM response metadata
+- [ ] Token usage and cost recorded per agent call from LiteLLM response metadata — DB schema exists (`agent_calls.token_usage_json`) but agents don't extract `result.usage()` from PydanticAI runs
 - [ ] Skill activations logged as structlog events and persisted to the audit log
 - [x] Sentry integration for exception tracking
 - [x] Audit trail of all investigations and reviews persisted to the database
 - [x] Multi-factor confidence scoring (`ConfidenceScore.from_factors`) with source count, relevance, and recency weights
 - [x] Feedback stats endpoint (`GET /api/support/stats`) returns acceptance/rejection rates for tracking accuracy improvement
 - [x] Evaluation framework with golden test datasets (5 SRE + 5 support cases) and automated quality rubrics (`just test-evals`)
+- [x] Custom OTel metrics instruments declared (`utils/metrics.py`): investigation/review counters, pipeline node duration histogram, confidence histogram, job queue metrics
+- [ ] LLM call metrics (`sentinel_llm_calls_total`, `sentinel_llm_call_duration_seconds`) declared but `record_llm_call()` never invoked from pipeline nodes
+- [ ] Approval decision metrics (`sentinel_approval_decisions_total`) declared but `record_approval_decision()` never invoked
+- [ ] SRE approval persistence — currently in-memory dict (`_pending_approvals`), data lost on restart; needs database-backed store
+- [ ] SRE investigation stats endpoint (parity with `GET /api/support/stats`) — approval rates, investigation outcomes over time
+- [ ] Quality verdict persistence — `QualityVerdict` (score + issues) computed by quality gate but not stored on investigation/review records
 
 ### 5. Scheduled Automations
 
@@ -257,15 +263,26 @@ AgentGateway becomes relevant when:
 
 | Gap | Blocked By | Target |
 |-----|------------|--------|
+| **Online Metrics** | | |
+| SRE approval persistence | Section 4 — `_pending_approvals` in-memory dict loses data on restart; needs `approval_records` table + Alembic migration | Phase E |
+| SRE investigation stats endpoint | Section 4 — no `/api/sre/stats` parity with support; cannot track approval rates or investigation outcomes | Phase E |
+| Quality verdict persistence | Section 4 — `QualityVerdict` computed but not stored on investigation/review records | Phase E |
+| **Offline Metrics** | | |
+| Token usage extraction from agent results | Section 4 — DB column exists (`agent_calls.token_usage_json`) but `result.usage()` never called after `agent.run()` | Phase E |
+| LLM cost estimation | Section 4 — no pricing table or cost calculation; `EvaluationMetrics.token_cost` hardcoded to 0 | Phase E |
+| LLM call OTel metrics wiring | Section 4 — `sentinel_llm_calls_total` and `sentinel_llm_call_duration_seconds` declared but `record_llm_call()` never invoked | Phase E |
+| Approval decision OTel metrics | Section 4 — `sentinel_approval_decisions_total` declared but `record_approval_decision()` never invoked | Phase E |
+| **Pipeline Improvements** | | |
 | Hybrid documentation search (BM25 + embeddings) | Section 2 — Confluence keyword-only search misses semantic matches | Phase E |
 | Ticket classifier skill selection | Section 2 — `auth-error-response`, `rate-limit-response` skills exist but not triggered from ticket classifier output | Phase E |
-| Token usage recording from LLM responses | Section 4 — DB schema exists (`token_usage_json`) but agents don't extract usage from PydanticAI results | Phase E |
 | Skill content hash in audit log | Section 6 — `SkillHandle.sha256` computed but not persisted alongside prompt hash in `AuditLogRecord` | Phase E |
+| **Infrastructure** | | |
+| LiteLLM deployment mode | Gateway proxy adds SPOF + network hop; SDK mode (in-process) is better for single-service architecture | Phase E |
+| Eval framework maturity | pydantic_evals lacks dashboard, regression tracking, community metrics. Consider DeepEval or Braintrust | Phase E |
+| **Post-Deploy Validation** | | |
 | Investigation < 2min benchmark | Production deployment (separate repo) | Post-deploy |
 | Review < 3min benchmark | Production deployment (separate repo) | Post-deploy |
-| LiteLLM deployment mode | Gateway proxy adds SPOF + network hop; SDK mode (in-process) is better for single-service architecture | Phase E |
-| Eval framework maturity | pydantic_evals lacks dashboard, regression tracking, community metrics. Consider DeepEval or Braintrust. | Phase E |
-| Real incident data validation | All development has been against synthetic data. Architecture is sound but unvalidated against real PagerDuty alerts, Jira tickets, and incident data. | Post-deploy |
+| Real incident data validation | All development has been against synthetic data. Architecture is sound but unvalidated against real PagerDuty alerts, Jira tickets, and incident data | Post-deploy |
 
 ---
 
