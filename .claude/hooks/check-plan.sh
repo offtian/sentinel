@@ -4,6 +4,15 @@
 
 branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
+# Branches that skip plan enforcement (small changes, config, etc.)
+SKIP_PREFIXES="chore/ fix/ docs/ refactor/ test/ ci/ perf/"
+
+for prefix in $SKIP_PREFIXES; do
+  case "$branch" in
+    "$prefix"*) exit 0 ;;
+  esac
+done
+
 # Only enforce on feat/ or feature/ branches
 case "$branch" in
   feat/*|feature/*)
