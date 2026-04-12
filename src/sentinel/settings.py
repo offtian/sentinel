@@ -100,9 +100,9 @@ class SupportSettings(BaseSettings):
 
 
 class LLMSettings(BaseSettings):
-    """LLM gateway and model routing settings."""
+    """LLM model routing settings."""
 
-    ai_gateway_url: str = "http://localhost:11434"
+    ollama_base_url: str = "http://localhost:11434"
     intent_router_llm: str = "ollama/qwen3:8b"
     alert_classifier_llm: str = "ollama/qwen3:8b"
     root_cause_llm: str = "ollama/qwen3:8b"

@@ -38,6 +38,7 @@ dependencies = [
     "psycopg2-binary",
     "alembic",
     "pydantic-ai>=1.0.7",
+    "litellm>=1.60",
     "structlog",
     "Jinja2",
     "aiofiles",
@@ -264,7 +265,7 @@ allow_untyped_defs = true
 disable_error_code = "attr-defined"
 
 [[tool.mypy.overrides]]
-module = ["aioboto3", "holmesgpt.*", "holmes.*", "pdpyras", "jira.*", "atlassian.*"]
+module = ["aioboto3", "holmesgpt.*", "holmes.*", "litellm", "litellm.*", "pdpyras", "jira.*", "atlassian.*"]
 ignore_missing_imports = true
 
 # Pytest
@@ -279,7 +280,7 @@ asyncio_default_fixture_loop_scope = "session"
 env = [
     "PYTHONBREAKPOINT=ipdb.set_trace",
     "DATABASE_URL=postgresql+asyncpg://postgres@localhost/sentinel-test",
-    "AI_GATEWAY_URL=http://localhost:4000",
+    "OLLAMA_BASE_URL=http://localhost:11434",
     "INTENT_ROUTER_LLM=openai/gpt-test",
     "ALERT_CLASSIFIER_LLM=openai/gpt-test",
     "ROOT_CAUSE_LLM=openai/gpt-test",

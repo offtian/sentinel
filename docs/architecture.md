@@ -46,15 +46,15 @@ Both adapters return `HolmesInvestigationResult` (analysis text, tool calls, sou
 | Framework | Position |
 |-----------|----------|
 | PydanticAI + Pydantic Graph | Keep -- current orchestration layer, well-integrated |
-| LiteLLM | Keep -- model routing gateway, already deployed |
-| LangFuse | Adopt via LiteLLM callbacks -- no direct dependency |
+| LiteLLM | Keep — SDK mode (in-process), no proxy |
+| LangFuse | Adopt via direct integration -- no proxy dependency |
 | kagent | Narrow pilot for K8s troubleshooting -- not a replacement |
 | agentgateway | Defer until multiple MCP backends or agent runtimes need centralised routing |
 | Claude Agent SDK / OpenAI Agent SDK | Evaluate -- may complement PydanticAI for specific workflows |
 | LangGraph / LangChain | Evaluate -- compare with Pydantic Graph for complex branching |
 | FastMCP | **Adopted everywhere** — server at `interfaces/mcp/`, client builder at `plugins/toolsets/mcp.py` consumed by every pipeline agent via `Configuration.build_mcp_toolsets()` |
 | Logfire | Adopt for dev — exports PydanticAI spans via OTel; production swaps the exporter for Datadog APM OTLP |
-| Anthropic prompt caching | Adopt — wired via LiteLLM `extra_body` `cache_control` on agent system prompts |
+| Anthropic prompt caching | Adopt — wired via `cache_control` on agent system prompts |
 | Skills (file-based runbooks) | Adopt — `domain/skills/` catalogue loaded by `domain.skills.load_skills_for()` |
 
 ### Quality Over Time
@@ -294,9 +294,7 @@ The `GrafanaClient` queries Prometheus (metrics), Loki (logs), and Tempo (traces
 | `ticket_reviewer` | Classify ticket, extract questions, generate search queries | GPT-4.1-mini |
 | `response_drafter` | Draft customer response from documentation | GPT-4.1 |
 
-All agents are defined with `model="test"` at module level to avoid import-time validation. The actual model is injected at runtime via `model=utils.get_model_with_gateway(_config.MODEL_SETTING)`.
-
-All agents route through a LiteLLM gateway for model management, cost tracking, and fallback.
+All agents are defined with `model="test"` at module level to avoid import-time validation. The actual model is injected at runtime via PydanticAI's `litellm:` model prefix, which delegates to LiteLLM SDK for in-process provider routing (e.g., `litellm:openai/gpt-4.1-mini`).
 
 ## Configuration
 
@@ -309,7 +307,7 @@ Key settings groups:
 
 - **Environment** - `ENVIRONMENT` (`localdev`/`production`), `DATABASE_URL`
 - **Observability** - `OBSERVABILITY_BACKEND` (auto: grafana for localdev, datadog for production), Datadog or Grafana credentials
-- **LLM models** - Per-agent model selection via LiteLLM gateway
+- **LLM models** - Per-agent model selection via LiteLLM SDK (in-process) through PydanticAI's `litellm:` prefix
 - **SRE config** - PagerDuty API key, HolmesGPT toggle
 - **Support config** - Jira/Confluence URLs and tokens
 - **Feature flags** - `SRE_AUTO_INVESTIGATE`, `SUPPORT_AUTO_DRAFT`
@@ -434,7 +432,7 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 | Pydantic Graph pipeline | `src/sentinel/interfaces/graphs/sre_investigation.py` |
 | Search abstraction | `src/sentinel/domain/search/searcher.py` |
 | PydanticAI agents | `src/sentinel/interfaces/graphs/agents/alert_classifier.py` |
-| LiteLLM gateway helper | `src/sentinel/interfaces/graphs/agents/utils.py` |
+| Model routing helper | `src/sentinel/interfaces/graphs/agents/utils.py` |
 | Configuration pattern | `src/sentinel/config.py`, `src/sentinel/settings.py` |
 | Import-linter contracts | `pyproject.toml` |
 | Confidence scoring | `src/sentinel/domain/confidence/entities.py` |

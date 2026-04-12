@@ -24,7 +24,7 @@ data/          Database models and migrations (PostgreSQL + SQLModel)
 vendors/       External SDK wrappers (Slack, PagerDuty, Jira)
 ```
 
-Both pipelines are built as [Pydantic Graph](https://ai.pydantic.dev/pydantic-graph/) DAGs with [PydanticAI](https://ai.pydantic.dev/) agents at key decision nodes. LLM calls route through a [LiteLLM](https://github.com/BerriAI/litellm) gateway.
+Both pipelines are built as [Pydantic Graph](https://ai.pydantic.dev/pydantic-graph/) DAGs with [PydanticAI](https://ai.pydantic.dev/) agents at key decision nodes. LLM calls route through [LiteLLM](https://github.com/BerriAI/litellm) SDK (in-process) via PydanticAI's `litellm:` model prefix — no external proxy.
 
 ### SRE Investigation Pipeline
 
@@ -110,7 +110,7 @@ Key settings:
 
 | Variable               | Description                           | Default                                     |
 | ---------------------- | ------------------------------------- | ------------------------------------------- |
-| `AI_GATEWAY_URL`       | LiteLLM gateway URL                   | `http://litellm.litellm.svc.cluster.local/` |
+| `OLLAMA_BASE_URL`      | Ollama API URL for local development  | `http://localhost:11434`                     |
 | `ALERT_CLASSIFIER_LLM` | Model for alert classification        | `openai/gpt-4.1-mini`                       |
 | `ROOT_CAUSE_LLM`       | Model for root cause analysis         | `openai/gpt-4.1`                            |
 | `TICKET_REVIEWER_LLM`  | Model for ticket classification       | `openai/gpt-4.1-mini`                       |
@@ -127,7 +127,7 @@ Key settings:
 - **Python 3.13**, FastAPI, PydanticAI, Pydantic Graph
 - **PostgreSQL** + SQLModel/SQLAlchemy (async)
 - **HolmesGPT** (hybrid integration — adapter pattern)
-- **LiteLLM** gateway for LLM routing
+- **LiteLLM** SDK for in-process model routing (no proxy)
 - **structlog**, Datadog, Sentry for observability
 
 ## Project Structure

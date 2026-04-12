@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 
+import litellm
+
 from sentinel import bootstrap_otel, settings
 from sentinel.utils import logs
 
@@ -11,29 +13,30 @@ _initialised = False
 
 def _configure_llm_env() -> None:
     """
-    Bridge ``AI_GATEWAY_URL`` to the provider-specific environment variables.
+    Configure LiteLLM SDK and provider-specific environment variables.
 
-    pydantic-ai selects a provider based on the model prefix (``openai:``,
-    ``ollama:``, etc.) and each provider reads its own env vars:
+    LiteLLM runs in-process (SDK mode) — no external proxy.  PydanticAI
+    delegates to LiteLLM via the ``litellm:`` model prefix, and LiteLLM
+    routes to the correct provider based on the model name
+    (e.g. ``openai/gpt-4.1-mini`` → OpenAI, ``ollama/qwen3:8b`` → Ollama).
 
-    - **OpenAI** — ``OPENAI_BASE_URL``, ``OPENAI_API_KEY``
+    LiteLLM SDK settings replace the former ``litellm_config.yaml`` proxy
+    configuration.  Provider-specific env vars:
+
+    - **OpenAI** — ``OPENAI_API_KEY``
     - **Ollama** — ``OLLAMA_BASE_URL``
-
-    This function ensures the gateway URL is available under whichever
-    name the selected provider expects.  We read from :class:`Settings`
-    so that values defined in ``.env`` are picked up even when the
-    corresponding shell variable is not exported.
     """
     cfg = settings.get_settings()
-    gateway_url = cfg.ai_gateway_url
 
-    ollama_url = gateway_url.rstrip("/")
+    # LiteLLM SDK settings (equivalent to litellm_settings in proxy config)
+    litellm.drop_params = True  # Ignore unsupported params per provider
+    litellm.request_timeout = 300  # type: ignore[attr-defined]  # Local models can be slow
+
+    ollama_url = cfg.ollama_base_url.rstrip("/")
     if not ollama_url.endswith("/v1"):
         ollama_url = f"{ollama_url}/v1"
 
-    os.environ.setdefault("OPENAI_BASE_URL", gateway_url)
     os.environ.setdefault("OLLAMA_BASE_URL", ollama_url)
-    os.environ.setdefault("OPENAI_API_KEY", "sentinel-not-needed")
 
 
 def initialise() -> None:

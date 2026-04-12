@@ -168,7 +168,7 @@ class CommonConfiguration(BaseConfiguration):
                 enabled=True,
                 model=self._normalise_model_name(self.settings.holmes_sdk_model),
                 api_key=None,
-                api_base=self.settings.ai_gateway_url or None,
+                api_base=None,
                 toolsets=toolsets,
             )
 

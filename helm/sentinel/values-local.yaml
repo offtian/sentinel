@@ -87,7 +87,7 @@ service:
 env:
   ENVIRONMENT: localdev
   DATABASE_URL: "postgresql+asyncpg://postgres:postgres@sentinel-postgres:5432/sentinel"
-  AI_GATEWAY_URL: "http://ollama:11434"
+  OLLAMA_BASE_URL: "http://ollama:11434"
   # LLM models routed through Ollama (override to match your pulled models)
   INTENT_ROUTER_LLM: "ollama/qwen3:8b"
   ALERT_CLASSIFIER_LLM: "ollama/qwen3:8b"

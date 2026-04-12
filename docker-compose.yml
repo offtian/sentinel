@@ -21,7 +21,7 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/sentinel
-      AI_GATEWAY_URL: http://host.docker.internal:4000
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
       ENVIRONMENT: localdev
       # Grafana stack (auto-selected when ENVIRONMENT=localdev)
       GRAFANA_URL: http://grafana:3000

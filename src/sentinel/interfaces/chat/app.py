@@ -90,7 +90,7 @@ def _fetch_ollama_models() -> tuple[str, ...]:
     Returns a tuple of model names (e.g. ``("qwen3:8b", "qwen3-coder:30b")``).
     Results are cached for 30 seconds to avoid hammering the API on every rerun.
     """
-    gateway_url = get_settings().ai_gateway_url.rstrip("/")
+    gateway_url = get_settings().ollama_base_url.rstrip("/")
     try:
         resp = httpx.get(f"{gateway_url}/api/tags", timeout=5)
         resp.raise_for_status()
@@ -793,7 +793,7 @@ def _render_sidebar() -> None:
         st.toggle("Show agent traces", key="show_traces")
 
         st.divider()
-        st.caption(f"Gateway: `{settings.ai_gateway_url}`")
+        st.caption(f"Ollama: `{settings.ollama_base_url}`")
         st.caption(f"Doc search: `{settings.document_searcher}`")
         st.caption(f"Observability: `{settings.observability_backend or 'auto'}`")
 
