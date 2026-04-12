@@ -33,6 +33,19 @@ def _get_table_row(
     return row
 
 
+def _format_composite_score(*, score: float | None) -> str:
+    """
+    Format the composite score with a color-coded quality indicator.
+    """
+    if score is None:
+        return "N/A"
+    if score >= 0.8:
+        return f"[green]{score:.4f}[/green]"
+    if score >= 0.5:
+        return f"[yellow]{score:.4f}[/yellow]"
+    return f"[red]{score:.4f}[/red]"
+
+
 def render_report_as_rich_table(*, report: reporting.EvaluationReport) -> rich_table.Table:
     """
     Render the evaluation report as a ``rich`` table.
@@ -46,6 +59,9 @@ def render_report_as_rich_table(*, report: reporting.EvaluationReport) -> rich_t
     headers_and_footers.append(
         ("Duration", f"{report.average_duration:.2f}s"),
     )
+
+    # Add composite score footer if available.
+    composite_footer = _format_composite_score(score=report.composite_score)
 
     rows = [
         _get_table_row(
@@ -65,7 +81,13 @@ def render_report_as_rich_table(*, report: reporting.EvaluationReport) -> rich_t
     for header, footer in headers_and_footers:
         table.add_column(header, footer)
 
+    if report.composite_score is not None:
+        table.add_column("Composite", composite_footer)
+
     for row in rows:
+        # Pad row if composite column was added.
+        if report.composite_score is not None:
+            row.append("")
         table.add_row(*row)
 
     return table

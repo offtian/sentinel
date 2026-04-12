@@ -14,21 +14,10 @@ from pydantic_evals import evaluators
 from pydantic_evals.evaluators import evaluator
 
 from sentinel.evals import types
+from sentinel.evals.evaluators import base
 
 
 CheckType = Literal["non_empty", "has_items", "exact_match", "gte"]
-
-
-def _resolve_field(*, payload: dict[str, Any], field_path: str) -> Any:
-    """
-    Traverse a nested dict using a dot-separated field path.
-
-    :raises KeyError: if any segment is missing.
-    """
-    current: Any = payload
-    for segment in field_path.split("."):
-        current = current[segment]
-    return current
 
 
 def _check_non_empty(*, value: Any) -> tuple[bool, str]:
@@ -98,24 +87,29 @@ class StructuralCheck(evaluators.Evaluator):
         Run the configured structural check and return a pass/fail assertion.
         """
         payload = ctx.inputs.case_payload
-        actual = _resolve_field(payload=payload, field_path=self.field_path)
+        actual = base.resolve_field(payload=payload, field_path=self.field_path)
 
         if self.check_type == "non_empty":
             passed, reason = _check_non_empty(value=actual)
         elif self.check_type == "has_items":
             passed, reason = _check_has_items(value=actual)
         elif self.check_type == "exact_match":
-            expected = _resolve_field(payload=payload, field_path=self.expected_field_path or "")
+            expected = base.resolve_field(
+                payload=payload, field_path=self.expected_field_path or ""
+            )
             passed, reason = _check_exact_match(actual=actual, expected=expected)
         elif self.check_type == "gte":
-            expected = _resolve_field(payload=payload, field_path=self.expected_field_path or "")
+            expected = base.resolve_field(
+                payload=payload, field_path=self.expected_field_path or ""
+            )
             passed, reason = _check_gte(actual=actual, expected=expected)
         else:
             assert_never(self.check_type)
 
-        evaluation_name = self.get_default_evaluation_name()
+        leaf_field = self.field_path.rsplit(".", maxsplit=1)[-1]
+        key = f"{leaf_field}_{self.check_type}"
         return {
-            f"{evaluation_name}_pass": evaluator.EvaluationReason(
+            f"{key}_pass": evaluator.EvaluationReason(
                 value=passed,
                 reason=reason,
             ),

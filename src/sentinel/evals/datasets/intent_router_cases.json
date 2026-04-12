@@ -1,0 +1,82 @@
+[
+  {
+    "id": "ir-001",
+    "description": "PagerDuty alert about high CPU usage",
+    "input": {
+      "message": "ALERT: CPU usage on api-gateway-prod has exceeded 95% for the last 10 minutes. Multiple pods are being throttled.",
+      "source": "pagerduty"
+    },
+    "output": {
+      "intent": "sre",
+      "confidence": 0.95,
+      "rationale": "This is a production infrastructure alert about CPU resource exhaustion affecting the API gateway. Requires SRE investigation to identify root cause and remediate."
+    },
+    "expected": {
+      "intent": "sre"
+    }
+  },
+  {
+    "id": "ir-002",
+    "description": "Jira ticket about password reset",
+    "input": {
+      "message": "Customer reports they cannot reset their password. They click the reset link but get a 'token expired' error every time, even with a fresh link.",
+      "source": "jira"
+    },
+    "output": {
+      "intent": "support",
+      "confidence": 0.92,
+      "rationale": "This is a customer-facing issue with the password reset flow. It requires support investigation of the token generation mechanism and customer communication."
+    },
+    "expected": {
+      "intent": "support"
+    }
+  },
+  {
+    "id": "ir-003",
+    "description": "Slack message about deployment failure",
+    "input": {
+      "message": "Deploy of order-service v3.2.0 failed in staging — pods stuck in CrashLoopBackOff. Rollback initiated but still seeing errors. Can someone look?",
+      "source": "slack"
+    },
+    "output": {
+      "intent": "sre",
+      "confidence": 0.93,
+      "rationale": "Deployment failure with CrashLoopBackOff is a Kubernetes infrastructure issue requiring SRE investigation of pod logs and deployment configuration."
+    },
+    "expected": {
+      "intent": "sre"
+    }
+  },
+  {
+    "id": "ir-004",
+    "description": "Jira ticket about API documentation question",
+    "input": {
+      "message": "We are integrating with the Sentinel API and need clarification on the webhook payload format for PagerDuty events. The docs mention V3 format but our payloads seem to use V2.",
+      "source": "jira"
+    },
+    "output": {
+      "intent": "support",
+      "confidence": 0.88,
+      "rationale": "This is an API documentation and integration question from an external consumer. Requires support team to clarify documentation and assist with integration."
+    },
+    "expected": {
+      "intent": "support"
+    }
+  },
+  {
+    "id": "ir-005",
+    "description": "Ambiguous — service slow and customer complaining",
+    "input": {
+      "message": "The checkout service is responding very slowly and we have a customer on the line complaining they can't complete their purchase. Response times are over 30 seconds.",
+      "source": "slack"
+    },
+    "output": {
+      "intent": "sre",
+      "confidence": 0.78,
+      "rationale": "While there is a customer impact component, the root issue is service performance degradation. High response times indicate a production infrastructure problem requiring SRE investigation."
+    },
+    "expected": {
+      "intent": "sre"
+    }
+  }
+]

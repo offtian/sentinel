@@ -65,6 +65,9 @@ async def persist_eval_run(
     average_score: float | None,
     results_json: dict[str, Any],
     run_duration_ms: int,
+    agent_name: str | None = None,
+    composite_score: float | None = None,
+    assertion_details_json: dict[str, Any] | None = None,
 ) -> uuid.UUID:
     """
     Insert an evaluation run record.
@@ -77,17 +80,23 @@ async def persist_eval_run(
     :param average_score: Mean score across all cases (nullable).
     :param results_json: Full per-case results payload.
     :param run_duration_ms: Total evaluation run duration.
+    :param agent_name: Name of the agent being evaluated (nullable).
+    :param composite_score: Weighted composite score from metrics (nullable).
+    :param assertion_details_json: Per-evaluator assertion breakdown (nullable).
     :returns: The UUID of the inserted row.
     """
     row_id = uuid.uuid4()
     query = insert(evaluation_models.EvalRunRecord).values(
         id=row_id,
         dataset_name=dataset_name,
+        agent_name=agent_name,
         total_cases=total_cases,
         passed_cases=passed_cases,
         failed_cases=failed_cases,
         average_score=average_score,
+        composite_score=composite_score,
         results_json=results_json,
+        assertion_details_json=assertion_details_json,
         run_duration_ms=run_duration_ms,
     )
     await db.execute(query)

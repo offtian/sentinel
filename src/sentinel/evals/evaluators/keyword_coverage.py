@@ -15,18 +15,7 @@ from pydantic_evals import evaluators
 from pydantic_evals.evaluators import evaluator
 
 from sentinel.evals import types
-
-
-def _resolve_field(*, payload: dict[str, Any], field_path: str) -> Any:
-    """
-    Traverse a nested dict using a dot-separated field path.
-
-    :raises KeyError: if any segment is missing.
-    """
-    current: Any = payload
-    for segment in field_path.split("."):
-        current = current[segment]
-    return current
+from sentinel.evals.evaluators import base
 
 
 def _compute_keyword_coverage(*, text: str, keywords: tuple[str, ...]) -> float:
@@ -64,7 +53,7 @@ class KeywordCoverage(evaluators.Evaluator):
         Compute keyword coverage and return a pass/fail assertion with the score as reason.
         """
         payload = ctx.inputs.case_payload
-        text = str(_resolve_field(payload=payload, field_path=self.field_path))
+        text = str(base.resolve_field(payload=payload, field_path=self.field_path))
         coverage = _compute_keyword_coverage(text=text, keywords=self.keywords)
         passed = coverage >= self.threshold
 
@@ -74,9 +63,8 @@ class KeywordCoverage(evaluators.Evaluator):
             f"matched: {int(coverage * len(self.keywords))}/{len(self.keywords)})"
         )
 
-        evaluation_name = self.get_default_evaluation_name()
         return {
-            f"{evaluation_name}_pass": evaluator.EvaluationReason(
+            "keyword_coverage_pass": evaluator.EvaluationReason(
                 value=passed,
                 reason=reason,
             ),

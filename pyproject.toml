@@ -79,6 +79,7 @@ dev = [
     "pytest-mock",
     "pytest-xdist>=3.8.0",
     "factory-boy",
+    "pydantic-evals",
 
     # Linting
     "import-linter",
