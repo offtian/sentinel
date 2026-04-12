@@ -54,6 +54,9 @@ class PipelineRunRecord(SQLModel, table=True):
     agent_prompts_json: list[dict[str, str]] | None = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
+    total_token_usage_json: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
 
 
 class NodeExecutionRecord(SQLModel, table=True):

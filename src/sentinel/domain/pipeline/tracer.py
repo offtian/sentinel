@@ -43,6 +43,7 @@ class ExecutionTracer(types.TraceCollector):
         self._pipeline_started_at: datetime | None = None
         self._node_order: int = 0
         self._node_started_at: dict[uuid.UUID, datetime] = {}
+        self._agent_cost_breakdowns: list[dict[str, Any]] = []
 
     @property
     def trace_id(self) -> uuid.UUID | None:
@@ -134,6 +135,24 @@ class ExecutionTracer(types.TraceCollector):
             delta = datetime.now(tz=UTC) - self._pipeline_started_at
             duration_ms = int(delta.total_seconds() * 1000)
 
+        total_token_usage = None
+        if self._agent_cost_breakdowns:
+            total_token_usage = {
+                "total_input_tokens": sum(
+                    b.get("input_tokens") or 0 for b in self._agent_cost_breakdowns
+                ),
+                "total_output_tokens": sum(
+                    b.get("output_tokens") or 0 for b in self._agent_cost_breakdowns
+                ),
+                "total_tokens": sum(
+                    b.get("total_tokens") or 0 for b in self._agent_cost_breakdowns
+                ),
+                "total_cost_usd": sum(
+                    b.get("cost_usd") or 0.0 for b in self._agent_cost_breakdowns
+                ),
+                "agent_breakdowns": self._agent_cost_breakdowns,
+            }
+
         await pipeline_ops.complete_pipeline_run(
             db=self._db,
             run_id=self._pipeline_run_id,
@@ -142,6 +161,7 @@ class ExecutionTracer(types.TraceCollector):
             error_message=error_message,
             duration_ms=duration_ms,
             final_reply=final_reply,
+            total_token_usage_json=total_token_usage,
         )
 
     async def start_node(
@@ -320,3 +340,15 @@ class ExecutionTracer(types.TraceCollector):
             token_usage=token_usage,
             duration_ms=duration_ms,
         )
+
+        if token_usage is not None:
+            self._agent_cost_breakdowns.append(
+                {
+                    "agent_name": agent_name,
+                    "model_id": model_id,
+                    "input_tokens": token_usage.get("input_tokens"),
+                    "output_tokens": token_usage.get("output_tokens"),
+                    "total_tokens": token_usage.get("total_tokens"),
+                    "cost_usd": token_usage.get("cost_usd"),
+                }
+            )
