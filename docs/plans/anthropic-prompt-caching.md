@@ -1,14 +1,14 @@
 # Plan: Anthropic Prompt Caching
 
-**Status:** draft
+**Status:** in-progress
 **Created:** 2026-04-08
-**Last updated:** 2026-04-08
+**Last updated:** 2026-04-12
 
 > **For agentic workers:** REQUIRED SUB-SKILL — use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task.
 
 ## Goal
 
-Enable Anthropic prompt caching on the static system prompts of every Sentinel SRE and support agent so repeat invocations of the same agent reuse the ~600-token static system prompt cache, cutting TTFT and token cost by an expected 50–80%.
+Enable vendor-agnostic prompt caching on the static system prompts of every Sentinel agent. For Anthropic models, set `anthropic_cache_instructions=True` so repeat invocations reuse the cached system prompt. For OpenAI models, set `openai_prompt_cache_key` using the prompt's SHA-256 digest. Expected savings: 50–80% reduction in TTFT and input token cost for Anthropic; automatic prefix caching for OpenAI.
 
 Ticks:
 - `docs/prd.md` §1: "Anthropic prompt-cache markers applied to all SRE agent system prompts via LiteLLM `extra_body`"
@@ -26,29 +26,27 @@ Ticks:
 7. Update every agent call site to use `build_model_for_agent(template=..., model_name=...)`.
 
 ### Out of scope
-- Skills loading (slice 1)
-- `Configuration.build_mcp_toolsets()` (slice 2)
 - OTel exporter (slice 4)
-- `PromptHandle` class itself (slice 5) — consumed, not produced
-- Caching tool definitions or conversation messages (only `anthropic_cache_instructions`)
+- Caching tool definitions or conversation messages (only system prompt caching)
 - Production measurement of TTFT / cost savings
-- Non-Anthropic provider caching
+- DB persistence of prompt sha256 on AgentCallRecord/AuditLogRecord (PRD §6 — separate plan)
 
-## Depends-on: slice 5 (`PromptHandle`)
+## Delivered: PromptTemplate foundation (Steps 1–3)
 
-Minimal contract this slice relies on:
+`PromptTemplate` is an `@attrs.frozen` class at `domain/prompts/template.py`:
 ```python
 @attrs.frozen
-class PromptHandle:
+class PromptTemplate:
     template_name: str
-    text: str
-    sha256: str
-    version: str
+    system_text: str          # pre-rendered static system prompt
+    sha256: str               # SHA-256 of system_text, for cache keying
+    version: str = "1"
+    _jinja_template: Template | None  # renders user block on demand
 
-def load_system_prompt(template_name: str) -> PromptHandle: ...
+    def render_user(self, **kwargs) -> str: ...
 ```
 
-**If slice 5 has not landed when this slice starts:** Step 2 introduces a *temporary* shim at `sentinel.plugins.prompts._handle` so this slice can merge independently. Slice 5 later deletes the shim and moves the class into `sentinel.plugins.prompts` without a public-API break.
+`prompts.load_template("name")` loads the `.j2` file, pre-renders the system block, and returns a `PromptTemplate`. All 8 agent modules use `_PROMPT_TEMPLATE = prompts.load_template("x")` at module level. Guard-rail test ensures system blocks are static.
 
 ## Design Decisions
 
@@ -84,40 +82,39 @@ def load_system_prompt(template_name: str) -> PromptHandle: ...
 
 ## Steps
 
-- [ ] **Step 1: Guard-rail test for static system blocks** — `tests/unit/plugins/prompts/test_static_system_blocks.py`. Parametrise over every `.j2` in `plugins/prompts/`; render the `system` block with empty context; assert no `UndefinedError`. Commit: `test: lock in static system prompt invariant`
+- [x] **Step 1: Guard-rail test for static system blocks** — `tests/unit/domain/prompts/test_static_system_blocks.py`. Parametrised over every `.j2`; asserts system block renders via `load_template()` without `UndefinedError`.
 
-- [ ] **Step 2: Introduce `PromptHandle` shim** — if slice 5 hasn't landed, create `plugins/prompts/_handle.py` with the attrs class; update `load_system_prompt()` to return it. Commit: `feat: introduce PromptHandle with sha256 for prompt caching integration`
+- [x] **Step 2: Introduce `PromptTemplate`** — `domain/prompts/template.py` with `@attrs.frozen` class. `from_jinja()` pre-renders system block + computes sha256. `from_text()` for tests. `render_user()` for user block.
 
-- [ ] **Step 3: Migrate existing agent modules to consume `PromptHandle`** — in each agent file, change `SYSTEM_PROMPT = prompts.load_system_prompt("x")` to `SYSTEM_PROMPT_HANDLE = prompts.load_system_prompt("x"); SYSTEM_PROMPT = SYSTEM_PROMPT_HANDLE.text`. No behaviour change. Commit: `refactor: agents carry PromptHandle alongside rendered text`
+- [x] **Step 3: Migrate agent modules** — All 8 agents use `_PROMPT_TEMPLATE = prompts.load_template("x")`, `_PROMPT_TEMPLATE.system_text` inlined at `compose_system_prompt` call sites, `_PROMPT_TEMPLATE.render_user(...)` replaces `render_user_prompt()`.
 
-- [ ] **Step 4: Failing tests for `build_model_for_agent`** — `tests/unit/interfaces/graphs/agents/test_model_binding.py`:
-  - `test_returns_anthropic_settings_for_anthropic_model`
-  - `test_returns_no_settings_for_openai_model`
-  - `test_detects_bare_claude_prefix`
-  - `test_returned_binding_exposes_prompt_handle`
-  - `test_cache_key_stable_across_invocations`
-  - `test_raises_when_system_block_has_runtime_vars`
-  Commit: `test: specify contract for build_model_for_agent wrapper`
+- [ ] **Step 4: Tests + implementation for `build_cache_settings`** — `tests/unit/interfaces/graphs/agents/test_cache_settings.py` + `src/sentinel/interfaces/graphs/agents/_cache_settings.py`. Pure function `build_cache_settings(model_name, prompt_sha256) -> dict | None`:
+  - Anthropic models → `{"anthropic_cache_instructions": True}`
+  - OpenAI models → `{"openai_prompt_cache_key": prompt_sha256}`
+  - Other/test → `None`
+  - Provider detection: `_is_anthropic(name)`, `_is_openai(name)`
+  - Tests: one per provider + unknown + bare `claude-` prefix
+  Commit: `feat: add build_cache_settings with vendor-agnostic provider detection`
 
-- [ ] **Step 5: Implement `_model_binding.py`** — `NonStaticSystemPromptError`, `ModelBinding`, `_is_anthropic`, `build_model_for_agent`. Re-export from `agents/utils.py`. Commit: `feat: add build_model_for_agent wrapper with Anthropic cache markers`
+- [ ] **Step 5: Add `get_model_name` helper to agents/utils.py** — Extract model name from a pre-built PydanticAI agent. Generalise `_get_agent_model_name()` from `chart_generation.py`. Returns `""` for test/mock models. Re-export from `utils.py`.
+  Commit: `refactor: extract get_model_name helper into agents/utils`
 
-- [ ] **Step 6: Migrate graph call sites (SRE investigation)** — `sre_investigation.py` call sites for classifier + analyser. Commit: `refactor: route SRE investigation agents through build_model_for_agent`
+- [ ] **Step 6: Migrate SRE pipeline call sites** — `sre_investigation.py`: add `model_settings=build_cache_settings(...)` to classifier + analyser `.run()` calls. Import agent modules for `_PROMPT_TEMPLATE.sha256`.
+  Commit: `feat: enable prompt caching on SRE investigation agents`
 
-- [ ] **Step 7: Migrate support review call sites** — `support_review.py` for ticket reviewer + response drafter. Commit: `refactor: route support review agents through build_model_for_agent`
+- [ ] **Step 7: Migrate support pipeline call sites** — `support_review.py`: same for ticket reviewer + response drafter.
+  Commit: `feat: enable prompt caching on support review agents`
 
-- [ ] **Step 8: Migrate remaining call sites** — `chart_generation.py` (×2), `k8s_runner.py`, `chat/app.py`, `slack/event_handlers.py`. Commit: `refactor: route remaining agents through build_model_for_agent`
+- [ ] **Step 8: Migrate remaining call sites** — `chart_generation.py` (×2), `k8s_runner.py`.
+  Commit: `feat: enable prompt caching on chart and k8s agents`
 
-- [ ] **Step 9: Integration test — assert markers reach the wire** — `tests/integration/interfaces/graphs/test_prompt_cache_wiring.py`:
-  - Configure `alert_classifier` with an Anthropic model
-  - Use `respx` to intercept `/anthropic/v1/messages`
-  - Run `alert_classifier.agent.run(...)` with factory-built `Alert`
-  - Assert `body["system"][0]["cache_control"] == {"type": "ephemeral"}`
-  - Second test case: OpenAI model → no cache_control
-  Commit: `test: assert Anthropic cache_control markers reach LiteLLM for alert classifier`
+- [ ] **Step 9: Integration test** — `tests/integration/interfaces/graphs/test_prompt_cache_wiring.py`. Use `respx` to intercept outgoing request, assert `cache_control` present for Anthropic model, absent for OpenAI.
+  Commit: `test: assert prompt cache markers reach LiteLLM`
 
-- [ ] **Step 10: Documentation sweep** — Tick PRD §1 and §2 boxes. Update `docs/plans/INDEX.md` status. Commit: `docs: mark Anthropic prompt caching slice complete`
+- [ ] **Step 10: Documentation** — Tick PRD §1 and §2 boxes. Update PRD wording (PydanticAI model settings, not `extra_body`). Update `docs/plans/INDEX.md`.
+  Commit: `docs: mark prompt caching complete`
 
-- [ ] **Step 11: Full gate** — `just test && just lint`. Address import-linter violations.
+- [ ] **Step 11: Full gate** — `just test && just lint`.
 
 ## Test Plan
 
@@ -153,6 +150,9 @@ def load_system_prompt(template_name: str) -> PromptHandle: ...
 ## Changes
 | Date | What changed | Why |
 |------|-------------|-----|
+| 2026-04-12 | Renamed `PromptHandle` → `PromptTemplate`, unified system + user blocks, made vendor-agnostic | User feedback: template handles both blocks; OpenAI also has caching |
+| 2026-04-12 | Simplified Steps 4-8: `build_cache_settings` pure function instead of `ModelBinding` class | Models are baked into agents at build time; `.run()` just needs `model_settings` dict |
+| 2026-04-12 | Removed `BASE_SYSTEM_PROMPT` redundant state, renamed `_handle.py` → `template.py` | Code review findings |
 
 ## Outcome
 _Fill in after completion._
