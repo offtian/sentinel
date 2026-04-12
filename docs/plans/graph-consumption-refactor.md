@@ -51,10 +51,16 @@ Make pipeline graph nodes read agents from `Configuration.agent_for()` instead o
 
 ## Outcome
 
-_Fill in after completion._
-
 ### What was delivered
-- ...
+- All graph pipelines (`sre_investigation`, `support_review`, `chart_generation`) read agents via `agent_for("name")` callable instead of module-level singletons
+- Module-level `agent = build_agent()` fallback removed from all 8 agent modules
+- `append_skills_to_prompt` removed, replaced by config-driven `compose_system_prompt`
+- Functional tests mock via `_build_fake_config()` + `cfg.agent_for` — no direct agent module patching
+- Dead `patch_*` backward-compatibility fixtures removed from test conftest files
+- `chart_parser_model`/`chart_generator_model` string params removed from `generate_chart()` — model names now extracted from pre-built agents via `agent.model.model_name`
 
 ### Follow-up / tech debt
-- ...
+- `render_skills_section` retained in `utils.py` — serves dynamic runtime skill injection (not dead code)
+- Agent module imports remain in graph files for `Dependencies` type access (e.g., `alert_classifier.Dependencies(...)`) — this is correct and expected
+- `ChartGenerationReply.parser_model`/`.generator_model` fields default to `""` in tests where agents use `"test"` model — production populates real model names via `config.load_agents()`
+- Full model-per-call audit trail deferred to prompt-versioning slice (PRD Section 4/6)

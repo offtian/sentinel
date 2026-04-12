@@ -1,12 +1,58 @@
 from __future__ import annotations
 
 import asyncio
+import types
 from unittest import mock
 
 from sentinel.domain.charts import validation
 from sentinel.interfaces.graphs import chart_generation
 from tests import factories
 from tests.functional.conftest import _build_fake_config
+
+
+class TestGetAgentModelName:
+    def test_extracts_model_name_from_agent(self):
+        # Given a fake agent with a model.model_name attribute
+        fake_model = types.SimpleNamespace(model_name="openai/gpt-4.1")
+        fake_agent = types.SimpleNamespace(model=fake_model)
+
+        # When extracting the model name
+        result = chart_generation._get_agent_model_name(fake_agent)
+
+        # Then the model name string is returned
+        assert result == "openai/gpt-4.1"
+
+    def test_returns_empty_string_when_model_attr_missing(self):
+        # Given an object with no model attribute
+        not_an_agent = object()
+
+        # When extracting the model name
+        result = chart_generation._get_agent_model_name(not_an_agent)
+
+        # Then an empty string is returned
+        assert result == ""
+
+    def test_returns_empty_string_when_model_name_attr_missing(self):
+        # Given an object whose model has no model_name attribute
+        fake_agent = types.SimpleNamespace(model=object())
+
+        # When extracting the model name
+        result = chart_generation._get_agent_model_name(fake_agent)
+
+        # Then an empty string is returned
+        assert result == ""
+
+    def test_returns_empty_string_when_model_name_is_not_a_string(self):
+        # Given an agent whose model.model_name is not a string (e.g. a Mock)
+        fake_agent = types.SimpleNamespace(
+            model=types.SimpleNamespace(model_name=mock.MagicMock())
+        )
+
+        # When extracting the model name
+        result = chart_generation._get_agent_model_name(fake_agent)
+
+        # Then an empty string is returned rather than raising a validation error
+        assert result == ""
 
 
 class TestGenerateChart:
