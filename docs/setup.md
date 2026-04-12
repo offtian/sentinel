@@ -138,6 +138,89 @@ just lint
 just lint-fix
 ```
 
+## K8s Investigation Agent
+
+Sentinel supports K8s-native investigation via a PydanticAI agent with kubernetes-asyncio tools, or delegation to kagent CRDs.
+
+### Environment Variables
+
+```bash
+# Backend: "native" (PydanticAI agent), "kagent" (CRD delegation), "both" (A/B comparison), or "" (disabled)
+K8S_INVESTIGATION_BACKEND=native
+
+# LLM model for the K8s investigator agent
+K8S_INVESTIGATOR_LLM=openai/gpt-4.1
+
+# Cluster context (used in investigation reports and audit trail)
+K8S_CLUSTER_NAME=my-cluster
+K8S_DEFAULT_NAMESPACE=default
+
+# Kagent (only when backend includes kagent)
+KAGENT_INVESTIGATION_TIMEOUT_SECONDS=120
+KAGENT_NAMESPACE=kagent-system
+
+# Optional kubectl MCP server for extended K8s operations
+K8S_MCP_SERVER_URL=http://localhost:9090/sse
+```
+
+### In-Cluster vs Kubeconfig
+
+The K8s client auto-detects its environment:
+- **In-cluster**: Uses the service account token mounted at `/var/run/secrets/kubernetes.io/serviceaccount/`
+- **Local dev**: Falls back to `~/.kube/config` (current context)
+
+### Local Kind Cluster
+
+For local development with kagent:
+
+```bash
+# Start a Kind cluster with kagent CRDs installed
+just kagent-dev-up
+
+# Tear down
+just kagent-dev-down
+```
+
+### RBAC
+
+The Helm chart creates a read-only ClusterRole when `k8sAgent.enabled=true`:
+- `get`, `list`, `watch` on pods, deployments, replicasets, events, services, nodes
+- `get` on `pods/log`
+- `create`, `get`, `list`, `watch` on kagent `investigations` CRDs (when `kagent.enabled=true`)
+
+No write access to core K8s resources — hedge fund compliance requires minimal blast radius.
+
+## MCP Server
+
+Sentinel exposes an MCP (Model Context Protocol) server for external agents to discover and call Sentinel tools.
+
+```bash
+# Port for the MCP server (also configurable via Helm)
+MCP_SERVER_PORT=8811
+
+# API key authentication (empty = auth disabled)
+MCP_SERVER_API_KEY=your-secret-key
+```
+
+The MCP server is included in `docker-compose.yaml` and available as a separate Helm deployment (`mcpServer.enabled=true`). It exposes observability, documentation, and investigation tools via streamable HTTP transport.
+
+### MCP Client (Consuming External Servers)
+
+Configure external MCP servers for all pipeline agents via `MCP_SERVERS`:
+
+```bash
+# Single HTTP server
+MCP_SERVERS=[{"name": "datadog", "url": "http://localhost:9090/sse"}]
+
+# Stdio server
+MCP_SERVERS=[{"name": "confluence", "command": "npx", "args": ["-y", "@confluence/mcp"]}]
+
+# Multiple servers
+MCP_SERVERS=[{"name": "datadog", "url": "http://localhost:9090/sse"}, {"name": "github", "url": "http://localhost:9091/sse"}]
+```
+
+See `.env.default` for more examples.
+
 ## Setting Up External Integrations
 
 ### PagerDuty

@@ -44,7 +44,7 @@ Reduce mean time to investigate (MTTI) for production alerts and mean time to fi
 ### Out of scope
 
 1. **Automated remediation** — Sentinel investigates and suggests, but does not execute fixes or auto-respond to customers
-2. **Custom Kubernetes operators** — Integration with kagent/AgentGateway is deferred to a future phase pending evaluation
+2. ~~**Custom Kubernetes operators**~~ — kagent integration delivered (CRD-based delegation with polling, comparison mode). AgentGateway deferred until multiple MCP backends justify it
 3. **Multi-tenant / multi-team** — V1 targets a single team's alerts and tickets
 4. **Fine-tuned models** — V1 uses general-purpose LLMs via LiteLLM; fine-tuning is a future optimisation
 
@@ -294,7 +294,7 @@ AgentGateway becomes relevant when:
 - **Job queue consistency** — Ensuring exactly-once processing with idempotency keys across multiple worker replicas under failure conditions
 - **Multi-factor confidence scoring** — `ConfidenceScore.from_factors()` independently weighs source count, relevance, and recency with configurable weights
 - **Human approval gate** — Confidence-gated publishing with Slack interactive messages (approve/reject buttons) for hedge fund compliance
-- **Kubernetes-native agent management** — Future evaluation of kagent and AgentGateway for deploying, scaling, and observing agents as first-class Kubernetes resources
+- **Kubernetes-native agent management** — Dual K8s investigation backends (native PydanticAI agent + kagent CRD delegation) with config-driven A/B comparison mode, read-only RBAC, and typed audit trail for hedge fund compliance
 - **Skills + MCP capability plane** — runtime composition of agent capabilities from on-disk Skills (procedural runbooks) and remote MCP tool servers, with deterministic ordering, content hashing, and per-run capture for replay
 
 ## Technical Stuff
@@ -334,4 +334,4 @@ AgentGateway becomes relevant when:
 
 **Serving suggestion:** Kubernetes via Helm chart with separate API deployment (user-facing, 2 replicas) and Worker deployment (background processing, 2 replicas). PostgreSQL for state. LiteLLM sidecar or shared gateway for LLM routing.
 
-**Test suite:** 695+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.
+**Test suite:** 770+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.

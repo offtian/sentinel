@@ -25,12 +25,12 @@
 | [graph-consumption-refactor](graph-consumption-refactor.md) | Agents read from `config.agent_for()` instead of module singletons | PR #TBD |
 | [anthropic-prompt-caching](anthropic-prompt-caching.md) | Vendor-agnostic prompt caching on all agent system prompts | PR #14 |
 | [prompt-versioning-and-replay](prompt-versioning-and-replay.md) | Prompt version/hash + pipeline run replay + re-execution | PR #15 |
+| [k8s-agent-and-mcp-integration](k8s-agent-and-mcp-integration.md) | Dual K8s backends (native + kagent) with MCP server/client | PR #TBD |
 
 ### In Progress
 
 | Plan | Goal | Progress | Notes |
 |------|------|----------|-------|
-| [k8s-agent-and-mcp-integration](k8s-agent-and-mcp-integration.md) | Dual K8s backends (native + kagent) with MCP | 49/51 | Phases A–K complete; Phase L (docs) remaining |
 | [grafana-metrics](grafana-metrics.md) | OTel metrics instrumentation for Grafana dashboards | 2/5 | Prometheus reader + basic metrics wired |
 
 ### Draft (Not Started)
