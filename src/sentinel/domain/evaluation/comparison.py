@@ -109,6 +109,7 @@ _LOWER_IS_BETTER = frozenset(
         "latency_p95_ms",
         "latency_p99_ms",
         "token_cost",
+        "token_cost_usd",
         "hallucination_rate",
     }
 )
