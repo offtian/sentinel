@@ -1,0 +1,131 @@
+[
+  {
+    "id": "tr-001",
+    "description": "Account access issue — locked out",
+    "input": {
+      "ticket_summary": "Cannot access my account after password change",
+      "ticket_description": "I changed my password yesterday through the settings page. Now when I try to log in with the new password it says 'account locked'. I've tried the reset flow three times but the unlock email never arrives. This is blocking my team from accessing our project dashboard.",
+      "ticket_source": "jira"
+    },
+    "output": {
+      "category": "access_management",
+      "urgency": "high",
+      "key_questions": [
+        "When exactly was the password changed?",
+        "Is the email address on the account correct?",
+        "Are other team members also affected?"
+      ],
+      "search_queries": [
+        "account locked after password change",
+        "unlock email not received troubleshooting"
+      ]
+    },
+    "expected": {
+      "category": "access_management",
+      "urgency": "high"
+    }
+  },
+  {
+    "id": "tr-002",
+    "description": "Feature request for dark mode",
+    "input": {
+      "ticket_summary": "Request: Dark mode for dashboard",
+      "ticket_description": "Would love to have a dark mode option for the monitoring dashboard. Working night shifts and the bright white background causes eye strain. Several colleagues have mentioned the same thing.",
+      "ticket_source": "jira"
+    },
+    "output": {
+      "category": "feature_request",
+      "urgency": "low",
+      "key_questions": [
+        "Which specific dashboard pages are most used during night shifts?",
+        "Would a browser-level dark mode extension be an acceptable workaround?"
+      ],
+      "search_queries": [
+        "dark mode dashboard feature request",
+        "UI theme customization options"
+      ]
+    },
+    "expected": {
+      "category": "feature_request",
+      "urgency": "low"
+    }
+  },
+  {
+    "id": "tr-003",
+    "description": "Billing discrepancy",
+    "input": {
+      "ticket_summary": "Invoice amount doesn't match agreed pricing",
+      "ticket_description": "Our latest invoice (INV-2026-0412) shows $4,250 but our contract specifies $3,800/month. The difference appears to be an 'overage charge' line item that we don't understand. We need this resolved before our AP team processes payment on Friday.",
+      "ticket_source": "jira"
+    },
+    "output": {
+      "category": "billing",
+      "urgency": "medium",
+      "key_questions": [
+        "What is the contract reference number?",
+        "Were there any usage spikes that could trigger overage charges?",
+        "What billing period does INV-2026-0412 cover?"
+      ],
+      "search_queries": [
+        "overage charge billing explanation",
+        "invoice dispute resolution process"
+      ]
+    },
+    "expected": {
+      "category": "billing",
+      "urgency": "medium"
+    }
+  },
+  {
+    "id": "tr-004",
+    "description": "Production data export failure — critical",
+    "input": {
+      "ticket_summary": "URGENT: Daily data export to S3 has been failing for 3 days",
+      "ticket_description": "Our automated daily export pipeline to s3://customer-exports/acme-corp/ has been failing since April 9th. We rely on this data for downstream analytics and regulatory reporting. The export job returns 'AccessDenied' errors. Our compliance team needs this resolved immediately as we have a regulatory deadline on Monday.",
+      "ticket_source": "jira"
+    },
+    "output": {
+      "category": "data_issue",
+      "urgency": "critical",
+      "key_questions": [
+        "Were there any IAM policy or S3 bucket policy changes around April 9th?",
+        "Which export job ID is failing?",
+        "Is this affecting other customers' exports as well?"
+      ],
+      "search_queries": [
+        "S3 export AccessDenied troubleshooting",
+        "data export pipeline failure resolution"
+      ]
+    },
+    "expected": {
+      "category": "data_issue",
+      "urgency": "critical"
+    }
+  },
+  {
+    "id": "tr-005",
+    "description": "API integration help",
+    "input": {
+      "ticket_summary": "Need help with webhook integration setup",
+      "ticket_description": "We're trying to set up a webhook integration to receive alert notifications in our internal Slack channel. We've followed the documentation but our test webhooks are returning 401 Unauthorized. We've regenerated the API key twice. Not blocking anything critical but would like to get this working this week.",
+      "ticket_source": "jira"
+    },
+    "output": {
+      "category": "integration_support",
+      "urgency": "medium",
+      "key_questions": [
+        "Which API key are you using — the webhook-specific key or the general API key?",
+        "Are you including the key in the Authorization header or as a query parameter?",
+        "What is the exact endpoint URL you're sending test webhooks to?"
+      ],
+      "search_queries": [
+        "webhook integration 401 unauthorized",
+        "API key authentication setup guide"
+      ]
+    },
+    "expected": {
+      "category": "integration_support",
+      "urgency": "medium"
+    }
+  }
+]

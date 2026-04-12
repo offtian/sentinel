@@ -1,0 +1,179 @@
+[
+  {
+    "id": "ki-001",
+    "description": "OOMKilled pod — memory limit exceeded",
+    "input": {
+      "alert_title": "Pod OOMKilled: payment-service-7f8b9c6d4-x2k9p",
+      "alert_description": "Pod payment-service-7f8b9c6d4-x2k9p was OOMKilled. Container memory usage reached 512Mi limit. Pod has restarted 3 times in the last hour.",
+      "namespace": "production",
+      "cluster": "us-east-1-prod",
+      "pod_logs": "2026-04-12T14:23:01Z INFO Starting payment batch processing\n2026-04-12T14:23:15Z WARN Memory usage at 450Mi/512Mi\n2026-04-12T14:23:22Z WARN Memory usage at 498Mi/512Mi\n2026-04-12T14:23:23Z ERROR java.lang.OutOfMemoryError: Java heap space",
+      "events": "14:23:24 OOMKilled container payment-service\n14:23:25 Back-off restarting failed container\n14:23:30 Pulled image payment-service:v2.1.0\n14:23:32 Started container payment-service"
+    },
+    "output": {
+      "root_cause": "The payment-service pod is being OOMKilled due to Java heap space exhaustion during batch processing. The container memory limit of 512Mi is insufficient for the payment batch processing workload, causing the JVM to run out of heap memory.",
+      "confidence": 0.88,
+      "evidence": [
+        "Pod logs show java.lang.OutOfMemoryError: Java heap space",
+        "Memory usage climbed from 450Mi to 498Mi within 7 seconds during batch processing",
+        "Container has memory limit of 512Mi which is being exceeded"
+      ],
+      "remediation_steps": [
+        "1. Increase container memory limit to 1Gi in the deployment spec",
+        "2. Set JVM heap flags: -Xmx768m -Xms256m to match new container limit",
+        "3. Review batch processing to implement chunked processing for large payment batches",
+        "4. Add memory-based HPA to scale out under high memory pressure"
+      ],
+      "affected_resources": [
+        "deployment/payment-service",
+        "pod/payment-service-7f8b9c6d4-x2k9p"
+      ]
+    },
+    "expected": {
+      "root_cause_keywords": ["OOMKilled", "memory", "heap", "batch processing"],
+      "min_confidence": 0.7
+    }
+  },
+  {
+    "id": "ki-002",
+    "description": "CrashLoopBackOff — missing config map",
+    "input": {
+      "alert_title": "CrashLoopBackOff: user-service-5d4f8c7b2-m3n1p",
+      "alert_description": "Pod user-service-5d4f8c7b2-m3n1p is in CrashLoopBackOff. Container has restarted 12 times. Last deployed 30 minutes ago.",
+      "namespace": "production",
+      "cluster": "us-east-1-prod",
+      "pod_logs": "2026-04-12T14:00:01Z INFO Loading configuration...\n2026-04-12T14:00:01Z ERROR FileNotFoundError: /etc/config/database.yaml not found\n2026-04-12T14:00:01Z FATAL Cannot start without database configuration. Exiting.",
+      "events": "14:00:00 Pulled image user-service:v3.2.0\n14:00:01 Started container user-service\n14:00:02 Back-off restarting failed container\n13:59:55 Warning FailedMount: MountVolume.SetUp failed for volume 'db-config': configmap 'user-service-db-config' not found"
+    },
+    "output": {
+      "root_cause": "The user-service pod is crashing because the ConfigMap 'user-service-db-config' referenced in the deployment does not exist. The v3.2.0 deployment likely introduced a new config dependency that was not created in the target namespace.",
+      "confidence": 0.92,
+      "evidence": [
+        "Pod events show 'configmap user-service-db-config not found'",
+        "Container logs show FileNotFoundError for /etc/config/database.yaml",
+        "Issue started immediately after deployment of v3.2.0"
+      ],
+      "remediation_steps": [
+        "1. Create the missing ConfigMap: kubectl create configmap user-service-db-config --from-file=database.yaml",
+        "2. Verify the ConfigMap exists in the production namespace",
+        "3. If the ConfigMap was removed intentionally, check if v3.2.0 deployment manifest references the correct config name",
+        "4. Add ConfigMap existence to the deployment pre-flight check"
+      ],
+      "affected_resources": [
+        "deployment/user-service",
+        "configmap/user-service-db-config"
+      ]
+    },
+    "expected": {
+      "root_cause_keywords": ["configmap", "not found", "database.yaml", "CrashLoopBackOff"],
+      "min_confidence": 0.7
+    }
+  },
+  {
+    "id": "ki-003",
+    "description": "ImagePullBackOff — wrong image tag",
+    "input": {
+      "alert_title": "ImagePullBackOff: notification-service-8a9b2c1d3-k4l5m",
+      "alert_description": "Pod notification-service-8a9b2c1d3-k4l5m unable to pull container image. Deployment scaled to 0 ready replicas.",
+      "namespace": "staging",
+      "cluster": "us-east-1-staging",
+      "pod_logs": "",
+      "events": "13:45:00 Scheduled pod on node ip-10-0-1-42\n13:45:05 Pulling image registry.internal/notification-service:v2.0.0-rc1\n13:45:08 Failed to pull image: rpc error: code = NotFound desc = failed to pull and unpack image: manifest for registry.internal/notification-service:v2.0.0-rc1 not found\n13:45:08 Error: ImagePullBackOff"
+    },
+    "output": {
+      "root_cause": "The notification-service deployment references image tag v2.0.0-rc1 which does not exist in the container registry. The image was either not pushed or was pushed with a different tag name.",
+      "confidence": 0.95,
+      "evidence": [
+        "Events show 'manifest for notification-service:v2.0.0-rc1 not found'",
+        "No pod logs available because the container never started",
+        "Image pull explicitly failed with NotFound error"
+      ],
+      "remediation_steps": [
+        "1. Verify the correct image tag by checking CI/CD pipeline output for the latest build",
+        "2. If the image exists with a different tag, update the deployment manifest",
+        "3. If the image was not built, trigger the CI pipeline to build and push v2.0.0-rc1",
+        "4. Roll back to the previous working tag if immediate fix is needed"
+      ],
+      "affected_resources": [
+        "deployment/notification-service",
+        "pod/notification-service-8a9b2c1d3-k4l5m"
+      ]
+    },
+    "expected": {
+      "root_cause_keywords": ["image", "not found", "v2.0.0-rc1", "registry"],
+      "min_confidence": 0.8
+    }
+  },
+  {
+    "id": "ki-004",
+    "description": "Node NotReady — disk pressure",
+    "input": {
+      "alert_title": "Node NotReady: ip-10-0-2-87.ec2.internal",
+      "alert_description": "Node ip-10-0-2-87.ec2.internal transitioned to NotReady state. 8 pods affected. Node was previously healthy for 45 days.",
+      "namespace": "kube-system",
+      "cluster": "us-east-1-prod",
+      "pod_logs": "2026-04-12T13:10:00Z kubelet: node condition DiskPressure is now: True\n2026-04-12T13:10:01Z kubelet: eviction manager: attempting to reclaim ephemeral-storage\n2026-04-12T13:10:05Z kubelet: eviction manager: evicted pod logging-agent-9f8d7\n2026-04-12T13:10:10Z kubelet: node condition Ready is now: False",
+      "events": "13:10:00 NodeHasDiskPressure: Node ip-10-0-2-87 status is DiskPressure\n13:10:10 NodeNotReady: Node ip-10-0-2-87 status is NotReady\n13:10:15 Evicted pod logging-agent-9f8d7 due to disk pressure\n13:10:20 Evicted pod metrics-collector-a1b2c due to disk pressure"
+    },
+    "output": {
+      "root_cause": "Node ip-10-0-2-87 entered NotReady state due to disk pressure. Ephemeral storage on the node was exhausted, likely from accumulated container logs or temporary files. The kubelet began evicting pods to reclaim storage.",
+      "confidence": 0.85,
+      "evidence": [
+        "Kubelet logs show DiskPressure condition triggered",
+        "Eviction manager actively evicting pods to reclaim ephemeral-storage",
+        "Node transitioned from DiskPressure to NotReady within 10 seconds"
+      ],
+      "remediation_steps": [
+        "1. SSH into the node and check disk usage: df -h and du -sh /var/lib/docker/",
+        "2. Clean up unused container images: docker system prune or crictl rmi --prune",
+        "3. Check for pods writing excessive logs without rotation configured",
+        "4. Consider increasing node disk size or adding log rotation policies"
+      ],
+      "affected_resources": [
+        "node/ip-10-0-2-87.ec2.internal",
+        "pod/logging-agent-9f8d7",
+        "pod/metrics-collector-a1b2c"
+      ]
+    },
+    "expected": {
+      "root_cause_keywords": ["disk pressure", "NotReady", "ephemeral", "evict"],
+      "min_confidence": 0.7
+    }
+  },
+  {
+    "id": "ki-005",
+    "description": "Service unreachable — misconfigured network policy",
+    "input": {
+      "alert_title": "Service Unreachable: inventory-service.production.svc.cluster.local",
+      "alert_description": "Service inventory-service is returning connection timeouts from order-service. Started after network policy update at 12:30 UTC. All pods are healthy.",
+      "namespace": "production",
+      "cluster": "us-east-1-prod",
+      "pod_logs": "2026-04-12T12:35:00Z order-service: ERROR ConnectionTimeout connecting to inventory-service:8080 after 30s\n2026-04-12T12:35:01Z order-service: WARN Retry 1/3 for inventory lookup\n2026-04-12T12:35:31Z order-service: ERROR ConnectionTimeout connecting to inventory-service:8080 after 30s\n2026-04-12T12:36:01Z order-service: ERROR All retries exhausted for inventory-service",
+      "events": "12:30:00 NetworkPolicy inventory-service-netpol updated\n12:30:01 Applied network policy with ingress rules\n12:34:55 order-service health check warning: dependency inventory-service unreachable"
+    },
+    "output": {
+      "root_cause": "A network policy update at 12:30 UTC restricted ingress to the inventory-service, blocking traffic from the order-service namespace. The updated policy likely has overly restrictive ingress rules that do not include the order-service as an allowed source.",
+      "confidence": 0.82,
+      "evidence": [
+        "Issue started immediately after NetworkPolicy update at 12:30 UTC",
+        "All inventory-service pods are healthy (ruling out application issue)",
+        "Connection timeouts indicate network-level blocking, not application errors"
+      ],
+      "remediation_steps": [
+        "1. Review the current network policy: kubectl get networkpolicy inventory-service-netpol -o yaml",
+        "2. Add an ingress rule allowing traffic from the order-service namespace/pods",
+        "3. Apply the corrected policy and verify connectivity: kubectl exec -it order-service-pod -- curl inventory-service:8080/health",
+        "4. Add network policy validation to the CI/CD pipeline to catch connectivity regressions"
+      ],
+      "affected_resources": [
+        "networkpolicy/inventory-service-netpol",
+        "service/inventory-service",
+        "deployment/order-service"
+      ]
+    },
+    "expected": {
+      "root_cause_keywords": ["network policy", "ingress", "blocked", "connection timeout"],
+      "min_confidence": 0.7
+    }
+  }
+]
