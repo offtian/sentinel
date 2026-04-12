@@ -150,18 +150,24 @@ See [Architecture](docs/architecture.md) for the full layer diagram with file-le
 
 ## Documentation
 
-Documents are organised by audience and purpose. Review in this order for onboarding:
+### Primary Documents
 
-| Priority | Document | Audience | Purpose |
-|----------|----------|----------|---------|
-| 1 | **This README** | Everyone | Project overview, quick start, API surface |
-| 2 | [Architecture](docs/architecture.md) | Engineers | Layer diagram, pipeline flows, vendor adapters, decisions, capability plane |
-| 3 | [PRD](docs/prd.md) | Product + Engineering | Requirements, acceptance criteria checkboxes (canonical status tracker) |
-| 4 | [Plan Index](docs/plans/INDEX.md) | Engineering | Status of all implementation plans at a glance |
-| 5 | [AGENTS.md](AGENTS.md) | AI agents | Coding conventions, testing rules, naming patterns |
-| 6 | [CLAUDE.md](CLAUDE.md) | AI agents | Essential commands, gotchas, documentation workflow |
+| Document | What it is | When to read it |
+|----------|-----------|-----------------|
+| **[PRD](docs/prd.md)** | Product requirements with user stories and acceptance criteria checkboxes — the canonical status tracker | Understanding what Sentinel does and what's left to build |
+| **[Architecture](docs/architecture.md)** | Layer diagram, pipeline flows, vendor adapters, design decisions, capability plane | Understanding how Sentinel works and why decisions were made |
+| **[Setup Guide](docs/setup.md)** | Prerequisites, installation, environment config, running locally, integration setup | Getting Sentinel running on your machine |
+| **[Plan Index](docs/plans/INDEX.md)** | Status of all implementation plans at a glance | Checking what's in progress, complete, or planned |
 
-**Ownership rules:**
+### For AI Agents
+
+| Document | Purpose |
+|----------|---------|
+| [AGENTS.md](AGENTS.md) | Coding conventions, testing rules, naming patterns |
+| [CLAUDE.md](CLAUDE.md) | Essential commands, gotchas, documentation workflow |
+
+### Ownership rules
+
 - **Status tracking** lives only in `docs/prd.md` (acceptance criteria) and `docs/plans/INDEX.md` (plan progress)
 - **Architecture, decisions, and roadmap** live in `docs/architecture.md` — other docs link here, not duplicate
 - **`docs/reviews/*`** are frozen historical snapshots — never update
