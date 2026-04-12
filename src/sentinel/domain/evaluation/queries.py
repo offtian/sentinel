@@ -45,13 +45,15 @@ async def fetch_eval_runs(
     *,
     db: databases.Database,
     dataset_name: str,
+    agent_name: str | None = None,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
     """
-    Fetch recent evaluation runs for a dataset.
+    Fetch recent evaluation runs for a dataset, optionally filtered by agent.
 
     :param db: The async database connection.
     :param dataset_name: Dataset name to filter by.
+    :param agent_name: Agent name to filter by (optional).
     :param limit: Maximum rows to return.
     :returns: List of row dicts ordered by created_at descending.
     """
@@ -61,5 +63,7 @@ async def fetch_eval_runs(
         .order_by(col(evaluation_models.EvalRunRecord.created_at).desc())
         .limit(limit)
     )
+    if agent_name is not None:
+        query = query.where(col(evaluation_models.EvalRunRecord.agent_name) == agent_name)
     rows = await db.fetch_all(query)
     return [dict(row._mapping) for row in rows]  # noqa: SLF001

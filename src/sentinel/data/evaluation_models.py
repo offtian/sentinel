@@ -36,11 +36,16 @@ class EvalRunRecord(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     dataset_name: str = Field(index=True)
+    agent_name: str | None = Field(default=None, index=True)
     total_cases: int
     passed_cases: int
     failed_cases: int
     average_score: float | None = None
+    composite_score: float | None = None
     results_json: dict[str, Any] = Field(sa_column=Column(JSON, nullable=False))
+    assertion_details_json: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
     run_duration_ms: int
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(tz=UTC),
