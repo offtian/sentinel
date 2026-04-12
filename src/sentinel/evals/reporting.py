@@ -30,13 +30,20 @@ class EvaluationReport:
 
     average_assertion_success_rate: decimal.Decimal = decimal.Decimal(0)
     average_duration: decimal.Decimal = decimal.Decimal(0)
+    composite_score: float | None = None
 
-    def __init__(self, report: reporting.EvaluationReport) -> None:
+    def __init__(
+        self,
+        report: reporting.EvaluationReport,
+        *,
+        composite_score: float | None = None,
+    ) -> None:
         self._report = report
         self.name = self._report.name
         self.cases = self._report.cases
         self.failures = self._report.failures
         self.has_assertions = any(case.assertions for case in self.cases)
+        self.composite_score = composite_score
 
         averages = self._report.averages()
         if averages is not None and self.cases:
@@ -68,7 +75,7 @@ def get_assertions_as_str(
     assertions: dict[str, evaluators.EvaluationResult[bool]],
 ) -> str:
     """
-    Format assertions as a human-readable multi-line string.
+    Format assertions as a human-readable multi-line string with pass/fail indicators.
     """
     if not assertions:
         return "N/A"
