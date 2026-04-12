@@ -30,7 +30,7 @@
 
 | Plan | Goal | Progress | Notes |
 |------|------|----------|-------|
-| [k8s-agent-and-mcp-integration](k8s-agent-and-mcp-integration.md) | Dual K8s backends (native + kagent) with MCP | 35/41 | 6 remaining items (kagent CRD, dev env, integration tests, comparison report, e2e test, docs) |
+| [k8s-agent-and-mcp-integration](k8s-agent-and-mcp-integration.md) | Dual K8s backends (native + kagent) with MCP | 35/51 | Phases H-L: wiring, kagent CRD, MCP security, infra hardening, docs |
 | [grafana-metrics](grafana-metrics.md) | OTel metrics instrumentation for Grafana dashboards | 2/5 | Prometheus reader + basic metrics wired |
 
 ### Draft (Not Started)
