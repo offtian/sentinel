@@ -88,7 +88,7 @@ class PromptTemplate:
 
 - [x] **Step 3: Migrate agent modules** — All 8 agents use `_PROMPT_TEMPLATE = prompts.load_template("x")`, `_PROMPT_TEMPLATE.system_text` inlined at `compose_system_prompt` call sites, `_PROMPT_TEMPLATE.render_user(...)` replaces `render_user_prompt()`.
 
-- [ ] **Step 4: Tests + implementation for `build_cache_settings`** — `tests/unit/interfaces/graphs/agents/test_cache_settings.py` + `src/sentinel/interfaces/graphs/agents/_cache_settings.py`. Pure function `build_cache_settings(model_name, prompt_sha256) -> dict | None`:
+- [x] **Step 4: Tests + implementation for `build_cache_settings`** — `tests/unit/interfaces/graphs/agents/test_cache_settings.py` + `src/sentinel/interfaces/graphs/agents/_cache_settings.py`. Pure function `build_cache_settings(model_name, prompt_sha256) -> dict | None`:
   - Anthropic models → `{"anthropic_cache_instructions": True}`
   - OpenAI models → `{"openai_prompt_cache_key": prompt_sha256}`
   - Other/test → `None`
@@ -96,16 +96,16 @@ class PromptTemplate:
   - Tests: one per provider + unknown + bare `claude-` prefix
   Commit: `feat: add build_cache_settings with vendor-agnostic provider detection`
 
-- [ ] **Step 5: Add `get_model_name` helper to agents/utils.py** — Extract model name from a pre-built PydanticAI agent. Generalise `_get_agent_model_name()` from `chart_generation.py`. Returns `""` for test/mock models. Re-export from `utils.py`.
+- [x] **Step 5: Add `get_model_name` helper to agents/utils.py** — Extract model name from a pre-built PydanticAI agent. Generalise `_get_agent_model_name()` from `chart_generation.py`. Returns `""` for test/mock models. Re-export from `utils.py`.
   Commit: `refactor: extract get_model_name helper into agents/utils`
 
-- [ ] **Step 6: Migrate SRE pipeline call sites** — `sre_investigation.py`: add `model_settings=build_cache_settings(...)` to classifier + analyser `.run()` calls. Import agent modules for `_PROMPT_TEMPLATE.sha256`.
+- [x] **Step 6: Migrate SRE pipeline call sites** — `sre_investigation.py`: add `model_settings=build_cache_settings(...)` to classifier + analyser `.run()` calls. Import agent modules for `_PROMPT_TEMPLATE.sha256`.
   Commit: `feat: enable prompt caching on SRE investigation agents`
 
-- [ ] **Step 7: Migrate support pipeline call sites** — `support_review.py`: same for ticket reviewer + response drafter.
+- [x] **Step 7: Migrate support pipeline call sites** — `support_review.py`: same for ticket reviewer + response drafter.
   Commit: `feat: enable prompt caching on support review agents`
 
-- [ ] **Step 8: Migrate remaining call sites** — `chart_generation.py` (×2), `k8s_runner.py`.
+- [x] **Step 8: Migrate remaining call sites** — `chart_generation.py` (×2), `k8s_runner.py`.
   Commit: `feat: enable prompt caching on chart and k8s agents`
 
 - [ ] **Step 9: Integration test** — `tests/integration/interfaces/graphs/test_prompt_cache_wiring.py`. Use `respx` to intercept outgoing request, assert `cache_control` present for Anthropic model, absent for OpenAI.
