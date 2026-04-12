@@ -158,34 +158,6 @@ def fake_support_config() -> mock.MagicMock:
     )
 
 
-@pytest.fixture
-def patch_alert_classifier(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Deterministic alert classification — always returns infrastructure/high."""
-    # Kept for backward compatibility with tests that use fixture-based patching.
-    # New tests should use fake_sre_config instead.
-
-
-@pytest.fixture
-def patch_root_cause_analyser(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Deterministic root cause analysis with high confidence."""
-    # Kept for backward compatibility with tests that use fixture-based patching.
-    # New tests should use fake_sre_config instead.
-
-
-@pytest.fixture
-def patch_ticket_reviewer(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Deterministic ticket classification."""
-    # Kept for backward compatibility with tests that use fixture-based patching.
-    # New tests should use fake_sre_config instead.
-
-
-@pytest.fixture
-def patch_response_drafter(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Deterministic response drafting."""
-    # Kept for backward compatibility with tests that use fixture-based patching.
-    # New tests should use fake_sre_config instead.
-
-
 class StubDocumentSearcher(searcher.BaseDocumentSearcher):
     def __init__(self, results: list[searcher.DocumentSearchResult] | None = None) -> None:
         self._results = results or [
