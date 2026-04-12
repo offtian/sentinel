@@ -11,27 +11,24 @@ _initialised = False
 
 def _configure_llm_env() -> None:
     """
-    Bridge ``AI_GATEWAY_URL`` to the provider-specific environment variables.
+    Set provider-specific environment variables for LLM routing.
 
-    pydantic-ai selects a provider based on the model prefix (``openai:``,
-    ``ollama:``, etc.) and each provider reads its own env vars:
+    PydanticAI routes directly to providers based on the model prefix
+    (``openai:``, ``ollama:``, etc.).  Each provider reads its own env vars:
 
-    - **OpenAI** — ``OPENAI_BASE_URL``, ``OPENAI_API_KEY``
+    - **OpenAI** — ``OPENAI_BASE_URL`` (default ``https://api.openai.com/v1``),
+      ``OPENAI_API_KEY``
     - **Ollama** — ``OLLAMA_BASE_URL``
 
-    This function ensures the gateway URL is available under whichever
-    name the selected provider expects.  We read from :class:`Settings`
-    so that values defined in ``.env`` are picked up even when the
-    corresponding shell variable is not exported.
+    We read from :class:`Settings` so that values defined in ``.env`` are
+    picked up even when the corresponding shell variable is not exported.
     """
     cfg = settings.get_settings()
-    gateway_url = cfg.ai_gateway_url
 
-    ollama_url = gateway_url.rstrip("/")
+    ollama_url = cfg.ollama_base_url.rstrip("/")
     if not ollama_url.endswith("/v1"):
         ollama_url = f"{ollama_url}/v1"
 
-    os.environ.setdefault("OPENAI_BASE_URL", gateway_url)
     os.environ.setdefault("OLLAMA_BASE_URL", ollama_url)
     os.environ.setdefault("OPENAI_API_KEY", "sentinel-not-needed")
 

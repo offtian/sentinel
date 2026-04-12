@@ -70,7 +70,7 @@ def _normalise_model_name(model_name: str) -> str:
     Normalise LLM model names for pydantic-ai.
 
     Config uses ``openai/gpt-4.1-mini``; pydantic-ai expects ``openai:gpt-4.1-mini``.
-    LiteLLM runs as an OpenAI-compatible proxy on ``OPENAI_BASE_URL``.
+    PydanticAI routes directly to each provider (no proxy).
     """
     model_name = model_name.removeprefix("litellm_proxy/")
     if "/" in model_name:

@@ -23,7 +23,7 @@ def _make_settings(**overrides: object) -> mock.MagicMock:
     s.holmesgpt_enabled = True
     s.holmes_backend = "sdk"
     s.holmes_sdk_model = "openai/gpt-4.1"
-    s.ai_gateway_url = ""
+    s.ollama_base_url = "http://localhost:11434"
     s.confluence_base_url = ""
     s.jira_user_email = ""
     s.jira_api_token = ""
