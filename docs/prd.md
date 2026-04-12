@@ -122,7 +122,7 @@ As a **platform engineer**, I want **structured logging, distributed tracing, an
 Acceptance criteria:
 
 - [x] Structured logging via structlog with context-aware event names (e.g. `alert_classified`, `investigation_completed`)
-- [ ] PydanticAI spans (`Agent(..., instrument=True)`) exported via OTLP — Logfire in dev, Datadog APM in production
+- [x] PydanticAI spans (`Agent(..., instrument=True)`) exported via OTLP — Logfire SDK configured in `bootstrap_otel.init_traces()`, exports to Tempo/Datadog via `otel_traces_endpoint`
 - [x] Per-pipeline-run snapshot persisted to `pipeline_runs` / `node_executions` / `agent_calls` (graph nodes write to the existing tracing tables)
 - [ ] Token usage and cost recorded per agent call from LiteLLM response metadata
 - [ ] Skill activations logged as structlog events and persisted to the audit log
@@ -176,7 +176,7 @@ Acceptance criteria:
 - [x] Skills are appended to the system prompt by `interfaces/graphs/agents/utils.py` so every agent picks them up uniformly
 - [x] `Configuration.build_mcp_toolsets()` is the single place that builds the shared MCP toolset list, consumed by all SRE and Support pipeline dependencies — thread-safe with double-checked locking, memoised per instance
 - [x] `MCP_SERVERS` documented in `.env.default` with examples for Datadog MCP, GitHub MCP, Confluence MCP
-- [ ] `bootstrap.initialise()` configures an OTLP exporter (Logfire in dev, Datadog APM in prod) so PydanticAI's `instrument=True` spans are emitted
+- [x] `bootstrap.initialise()` configures an OTLP exporter via Logfire SDK (`bootstrap_otel.init_traces()`) — `send_to_logfire=False` routes spans to Tempo/Datadog via `otel_traces_endpoint`
 - [x] FastMCP server (`interfaces/mcp/server.py`) gains a `list_skills` tool exposing the installed skill catalogue to external agents
 
 ---
@@ -185,8 +185,8 @@ Acceptance criteria:
 
 ### Pipeline Completion Estimates
 
-- **AI SRE Pipeline** — ~95% complete. Core pipeline functional end-to-end. HolmesGPT SDK integrated via fork; DirectToolsetAdapter is primary with HolmesAdapter as opt-in alternative. Key gaps: production benchmarking, prompt caching.
-- **AI Support Pipeline** — ~80% complete. Core pipeline functional end-to-end. Key gaps: hybrid documentation search (keyword-only today), Notion/S3 doc sources, production benchmarking.
+- **AI SRE Pipeline** — ~98% complete. Core pipeline functional end-to-end. HolmesGPT SDK integrated via fork; DirectToolsetAdapter is primary with HolmesAdapter as opt-in alternative. Prompt caching, prompt versioning, and replay re-execution all shipped. Key gaps: production benchmarking against real incidents.
+- **AI Support Pipeline** — ~85% complete. Core pipeline functional end-to-end. Prompt caching and versioning shipped. Key gaps: hybrid documentation search (keyword-only today), ticket classifier skill selection, production benchmarking.
 
 ### Resolved — Originally Out of Scope
 
@@ -247,25 +247,24 @@ AgentGateway becomes relevant when:
 - We need centralised tool auth (one API key per tool, not per agent)
 - We need cross-agent observability (which agent called which tool, when)
 
-**Status:** MCP integration is planned for Phase C. AgentGateway evaluation is Phase D, contingent on whether we add a second agent runtime.
+**Status:** MCP integration shipped — FastMCP server at `interfaces/mcp/`, MCP client builder at `plugins/toolsets/mcp.py`, universal injection via `Configuration.build_mcp_toolsets()`. AgentGateway evaluation deferred until a second agent runtime is added.
+
+### Resolved Dependencies
+
+**HolmesGPT SDK** — installed via fork (`offtian/holmesgpt@httpx-compat`) which relaxes httpx and postgrest pins. DirectToolsetAdapter remains the primary/default investigation engine. `HolmesAdapter` provides a real SDK integration as an opt-in alternative.
 
 ### Remaining Gaps
 
-**HolmesGPT SDK dependency resolved** — installed via fork (`offtian/holmesgpt@httpx-compat`) which relaxes httpx and postgrest pins. DirectToolsetAdapter remains the primary/default investigation engine. `HolmesAdapter` now provides a real SDK integration as an opt-in alternative, using HolmesGPT's toolsets (Datadog, Kubernetes, Grafana) for data gathering.
-
 | Gap | Blocked By | Target |
 |-----|------------|--------|
-| ~~**HolmesGPT upstream SDK**~~ | ~~httpx version conflict~~ — resolved via fork (`offtian/holmesgpt@httpx-compat`). DirectToolsetAdapter is the default; `HolmesAdapter` provides real SDK integration as opt-in alternative. Track upstream for when they merge compatible pins. | **Phase E — done** |
-| ~~Dynamic skill selection from classifier output~~ | ~~Sections 1 & 2~~ | **Done** — `ClassifyAlert` → `classification_category` → `root_cause_analyser` |
 | Hybrid documentation search (BM25 + embeddings) | Section 2 — Confluence keyword-only search misses semantic matches | Phase E |
+| Ticket classifier skill selection | Section 2 — `auth-error-response`, `rate-limit-response` skills exist but not triggered from ticket classifier output | Phase E |
+| Token usage recording from LLM responses | Section 4 — DB schema exists (`token_usage_json`) but agents don't extract usage from PydanticAI results | Phase E |
+| Skill content hash in audit log | Section 6 — `SkillHandle.sha256` computed but not persisted alongside prompt hash in `AuditLogRecord` | Phase E |
 | Investigation < 2min benchmark | Production deployment (separate repo) | Post-deploy |
 | Review < 3min benchmark | Production deployment (separate repo) | Post-deploy |
-| Pipeline OTel/Logfire exporter | Section 4 acceptance criteria | Phase D |
-| ~~Universal MCP injection across all agents~~ | ~~Section 7~~ | **Done** — PR #6 |
-| ~~Prompt versioning + replay re-execution~~ | ~~Versioning done; re-execution scaffold only~~ | **Done** — PR #15: versioning, multi-agent capture, `--replay` + `--diff` CLI |
-| ~~Prompt caching across agents~~ | ~~Sections 1 & 2~~ | **Done** — vendor-agnostic via `build_cache_settings()` |
-| LiteLLM deployment mode | Gateway proxy adds SPOF + network hop; SDK mode (in-process) is better for single-service architecture | Phase D |
-| Eval framework maturity | pydantic_evals lacks dashboard, regression tracking, community metrics. Consider DeepEval or Braintrust. | Phase D |
+| LiteLLM deployment mode | Gateway proxy adds SPOF + network hop; SDK mode (in-process) is better for single-service architecture | Phase E |
+| Eval framework maturity | pydantic_evals lacks dashboard, regression tracking, community metrics. Consider DeepEval or Braintrust. | Phase E |
 | Real incident data validation | All development has been against synthetic data. Architecture is sound but unvalidated against real PagerDuty alerts, Jira tickets, and incident data. | Post-deploy |
 
 ---
@@ -318,4 +317,4 @@ AgentGateway becomes relevant when:
 
 **Serving suggestion:** Kubernetes via Helm chart with separate API deployment (user-facing, 2 replicas) and Worker deployment (background processing, 2 replicas). PostgreSQL for state. LiteLLM sidecar or shared gateway for LLM routing.
 
-**Test suite:** 569+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.
+**Test suite:** 695+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.

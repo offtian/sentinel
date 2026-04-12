@@ -177,21 +177,15 @@ flowchart LR
     subgraph Delivered
       B1[Skills: runbooks +<br/>response patterns<br/>config-driven per agent]
       B2[Universal MCP injection<br/>via Configuration.build_mcp_toolsets]
-    end
-    subgraph Today
-      A3[instrument=True but no exporter]
-      A4[No prompt versioning]
-      A5[No reproducibility snapshot]
-    end
-    subgraph Proposed
-      B3[OTel/Logfire exporter<br/>for PydanticAI spans]
+      B3[OTel traces via Logfire SDK<br/>instrument=True + OTLP export]
       B4[Prompt version + SHA256<br/>recorded in audit log]
-      B5[Replay snapshot per pipeline run<br/>persisted in pipeline_runs]
-      B6[Anthropic prompt cache markers<br/>on system prompts via LiteLLM]
+      B5[ReplayBundle snapshot per pipeline run<br/>with --replay and --diff CLI]
+      B6[Vendor-agnostic prompt caching<br/>via build_cache_settings]
     end
-    A3 --> B3
-    A4 --> B4
-    A4 --> B5
+    subgraph Remaining
+      A1[Token usage not extracted<br/>from agent results]
+      A2[Skill content hash not<br/>persisted in audit log]
+    end
 ```
 
 ### Agent Inventory
@@ -377,7 +371,7 @@ pipeline_runs (trace_id, pipeline_type, status, duration_ms)
 
 **Domain types:** `data/tracing_models.py` defines `PipelineRunRecord`, `NodeExecutionRecord`, `AgentCallRecord`.
 
-**ExecutionTracer** (`domain/pipeline/tracer.py`, pending) — DB-backed replacement for the in-memory `TraceCollector`. Satisfies the same `.record()` interface for backward compatibility with the Streamlit chat UI.
+**ExecutionTracer** (`domain/pipeline/tracer.py`) — DB-backed tracer that records pipeline runs, node executions, and agent calls with prompt version metadata. Each `AgentCallRecord` captures `prompt_version` (git SHA + filename) and `prompt_sha256` for regulatory traceability. `ReplayBundle` (`domain/pipeline/types.py`) aggregates the full snapshot (model, prompts, MCP servers, skills, input payload) for reproducibility via `python -m sentinel.replay`.
 
 ## Deployment
 
@@ -413,7 +407,7 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 
 ## Test Count
 
-555+ tests covering:
+695+ tests covering:
 
 - Domain entities and operations (SRE, Support, Confidence, Search, Pipeline errors, Approval, Supervisor)
 - Webhook parsers (PagerDuty, Datadog) with dedup handling
@@ -428,6 +422,8 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 - Evaluation framework (pydantic_evals based)
 - Domain layer persistence (queries and operations via databases library)
 - Pipeline traceability (trace_id correlation, pipeline/node/agent recording)
+- Prompt versioning (version/hash round-trip, replay bundle serialisation)
+- Prompt caching (vendor-agnostic cache settings, agent integration)
 
 ## Key Reference Files
 
@@ -455,4 +451,7 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 | Skills loader | `src/sentinel/domain/skills/__init__.py` |
 | Universal MCP builder | `src/sentinel/config.py` `Configuration.build_mcp_toolsets()` |
 | Prompt templates | `src/sentinel/domain/prompts/` |
+| Prompt cache settings | `src/sentinel/interfaces/graphs/agents/_cache_settings.py` |
+| Replay CLI | `src/sentinel/replay.py` |
+| ReplayBundle type | `src/sentinel/domain/pipeline/types.py` |
 | OTel bootstrap | `src/sentinel/bootstrap_otel.py` |
