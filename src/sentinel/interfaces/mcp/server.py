@@ -16,11 +16,15 @@ this file.
 
 from __future__ import annotations
 
+import hmac
 import json
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from fastmcp import FastMCP
+from starlette import requests as starlette_requests
+from starlette import responses as starlette_responses
+from starlette import types as starlette_types
 
 from sentinel.data import db as async_db
 from sentinel.domain import skills as skills_mod
@@ -168,6 +172,67 @@ async def list_skills() -> str:
         for handle in handles
     ]
     return json.dumps(entries)
+
+
+# ---------------------------------------------------------------------------
+# API key authentication middleware
+# ---------------------------------------------------------------------------
+
+_API_KEY_HEADER = "X-API-Key"
+
+
+class _ApiKeyMiddleware:
+    """
+    ASGI middleware that validates an ``X-API-Key`` header.
+
+    When *expected_key* is empty, authentication is disabled (local dev mode)
+    and all requests pass through.
+    """
+
+    def __init__(
+        self,
+        app: starlette_types.ASGIApp,
+        *,
+        expected_key: str,
+    ) -> None:
+        self._app = app
+        self._expected_key = expected_key
+
+    async def __call__(
+        self,
+        scope: starlette_types.Scope,
+        receive: starlette_types.Receive,
+        send: starlette_types.Send,
+    ) -> None:
+        """
+        Validate the API key for HTTP requests.
+
+        Non-HTTP scopes (lifespan, websocket) pass through unconditionally.
+        """
+        if scope["type"] != "http" or not self._expected_key:
+            await self._app(scope, receive, send)
+            return
+
+        request = starlette_requests.Request(scope)
+        provided_key = request.headers.get(_API_KEY_HEADER, "")
+
+        if not provided_key or not hmac.compare_digest(provided_key, self._expected_key):
+            response = starlette_responses.PlainTextResponse("Unauthorized", status_code=401)
+            await response(scope, receive, send)
+            return
+
+        await self._app(scope, receive, send)
+
+
+def build_asgi_app(*, api_key: str = "") -> starlette_types.ASGIApp:
+    """
+    Build a Starlette ASGI app wrapping the FastMCP server with auth middleware.
+
+    :param api_key: Expected API key value. Empty string disables auth.
+    :returns: ASGI application ready to be served.
+    """
+    inner_app = mcp.http_app()
+    return _ApiKeyMiddleware(inner_app, expected_key=api_key)
 
 
 if __name__ == "__main__":
