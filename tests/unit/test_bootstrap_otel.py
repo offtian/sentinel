@@ -9,6 +9,7 @@ from sentinel.utils import metrics
 class TestInitOtel:
     def setup_method(self):
         bootstrap_otel._initialised = False
+        metrics.reset_meters()
 
     def teardown_method(self):
         bootstrap_otel._initialised = False
