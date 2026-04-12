@@ -217,7 +217,6 @@ class TestWorkerK8sAdapterWiring:
         tpl.system_text = "test prompt"
         return tpl
 
-    @pytest.mark.xfail(reason="Step 43: worker does not yet pass k8s_adapter to investigate_alert")
     @pytest.mark.asyncio
     async def test_worker_passes_k8s_adapter_when_backend_configured(self) -> None:
         # Given a worker with K8S_INVESTIGATION_BACKEND="native"
@@ -244,10 +243,13 @@ class TestWorkerK8sAdapterWiring:
             # When the worker runs an SRE investigation
             await worker_mod._run_sre_investigation(
                 {
-                    "alert_id": "test-123",
+                    "id": "test-123",
+                    "source": "pagerduty",
                     "title": "High CPU",
+                    "description": "CPU usage exceeded 90%",
                     "severity": "high",
                     "service": "api",
+                    "triggered_at": "2026-04-12T20:00:00Z",
                 },
             )
 
@@ -255,9 +257,6 @@ class TestWorkerK8sAdapterWiring:
             call_kwargs = fake_investigate.call_args.kwargs
             assert call_kwargs.get("k8s_adapter") is fake_k8s_adapter
 
-    @pytest.mark.xfail(
-        reason="Step 44: worker does not yet pass challenger_adapter to investigate_alert"
-    )
     @pytest.mark.asyncio
     async def test_worker_passes_challenger_adapter_when_configured(self) -> None:
         # Given a worker with K8S_INVESTIGATION_BACKEND="both" and CHALLENGER_ADAPTER="kagent"
@@ -285,10 +284,13 @@ class TestWorkerK8sAdapterWiring:
             # When the worker runs an SRE investigation
             await worker_mod._run_sre_investigation(
                 {
-                    "alert_id": "test-456",
+                    "id": "test-456",
+                    "source": "pagerduty",
                     "title": "Pod CrashLoop",
+                    "description": "Pod payments-7f8b6c is in CrashLoopBackOff",
                     "severity": "critical",
                     "service": "payments",
+                    "triggered_at": "2026-04-12T20:00:00Z",
                 },
             )
 

@@ -185,6 +185,10 @@ async def _run_sre(
         trace_collector=trace_collector,
         classifier_toolsets=shared_mcp,
         analyser_toolsets=shared_mcp,
+        k8s_adapter=cfg.build_k8s_investigation_adapter(
+            agent_runner=k8s_runner.run_k8s_agent,
+        ),
+        challenger_adapter=cfg.build_challenger_adapter(),
     )
 
     # Stash K8s result for the UI to render alongside Holmes result
