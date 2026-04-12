@@ -23,6 +23,8 @@
 | [holmesgpt](holmesgpt.md) | Formalize DirectToolsetAdapter, add K8s queries, HolmesGPT SDK integration | PR #TBD |
 | [skills-runtime](skills-runtime.md) | On-disk Skills catalogue + runtime loader + config-driven agent wiring | PR #TBD |
 | [graph-consumption-refactor](graph-consumption-refactor.md) | Agents read from `config.agent_for()` instead of module singletons | PR #TBD |
+| [anthropic-prompt-caching](anthropic-prompt-caching.md) | Vendor-agnostic prompt caching on all agent system prompts | PR #14 |
+| [prompt-versioning-and-replay](prompt-versioning-and-replay.md) | Prompt version/hash + pipeline run replay + re-execution | PR #15 |
 
 ### In Progress
 
@@ -31,12 +33,10 @@
 | [k8s-agent-and-mcp-integration](k8s-agent-and-mcp-integration.md) | Dual K8s backends (native + kagent) with MCP | 35/41 | Spec-level plan |
 | [k8s-agent-mcp-implementation](k8s-agent-mcp-implementation.md) | Detailed implementation of K8s + MCP integration | 67/76 | Execution-level plan |
 | [grafana-metrics](grafana-metrics.md) | OTel metrics instrumentation for Grafana dashboards | 2/5 | Prometheus reader + basic metrics wired |
-| [anthropic-prompt-caching](anthropic-prompt-caching.md) | Vendor-agnostic prompt caching on all agent system prompts | 8/11 | Steps 1-8 done; integration test + docs remaining |
 
 ### Draft (Not Started)
 
 | Plan | Goal | PRD Section |
 |------|------|-------------|
 | [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | 4, 7 |
-| [prompt-versioning-and-replay](prompt-versioning-and-replay.md) | Prompt version/hash + pipeline run replay | 6 |
 | [llm-settings-to-config](llm-settings-to-config.md) | Move LLM model config into CommonConfiguration | Internal |

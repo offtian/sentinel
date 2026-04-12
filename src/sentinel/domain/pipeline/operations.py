@@ -24,6 +24,14 @@ async def persist_pipeline_run(
     job_request_id: uuid.UUID | None = None,
     started_at: datetime,
     input_json: dict[str, Any] | None = None,
+    input_hash: str | None = None,
+    model_ids_json: list[str] | None = None,
+    mcp_endpoints_json: list[str] | None = None,
+    skill_activations_json: list[dict[str, str]] | None = None,
+    prompt_version: str | None = None,
+    prompt_sha256: str | None = None,
+    prompt_text: str | None = None,
+    agent_prompts_json: list[dict[str, str]] | None = None,
 ) -> uuid.UUID:
     """
     Insert a pipeline_runs row with status "running".
@@ -34,6 +42,14 @@ async def persist_pipeline_run(
     :param job_request_id: Optional job request UUID to correlate with job queue.
     :param started_at: Timestamp when the pipeline started.
     :param input_json: Optional structured input payload.
+    :param input_hash: Deterministic SHA-256 of the canonical input.
+    :param model_ids_json: LLM model identifiers used during this run.
+    :param mcp_endpoints_json: MCP server endpoints available to the pipeline.
+    :param skill_activations_json: Skills activated for the pipeline agents.
+    :param prompt_version: Git-SHA-prefixed version tag of the system prompt.
+    :param prompt_sha256: Content hash of the system prompt text.
+    :param prompt_text: Full rendered system prompt text for replay.
+    :param agent_prompts_json: Per-agent prompt metadata for multi-agent pipelines.
     :returns: The UUID of the inserted row.
     """
     row_id = uuid.uuid4()
@@ -51,6 +67,14 @@ async def persist_pipeline_run(
         completed_at=None,
         duration_ms=None,
         created_at=created_at,
+        input_hash=input_hash,
+        model_ids_json=model_ids_json,
+        mcp_endpoints_json=mcp_endpoints_json,
+        skill_activations_json=skill_activations_json,
+        prompt_version=prompt_version,
+        prompt_sha256=prompt_sha256,
+        prompt_text=prompt_text,
+        agent_prompts_json=agent_prompts_json,
     )
     await db.execute(query)
     logs.log_event(
@@ -72,6 +96,7 @@ async def complete_pipeline_run(
     output_json: dict[str, Any] | None = None,
     error_message: str | None = None,
     duration_ms: int | None = None,
+    final_reply: dict[str, Any] | None = None,
 ) -> None:
     """
     Update a pipeline_runs row to its final status.
@@ -82,6 +107,7 @@ async def complete_pipeline_run(
     :param output_json: Optional structured output payload.
     :param error_message: Optional error description if the run failed.
     :param duration_ms: Wall-clock duration of the run in milliseconds.
+    :param final_reply: Optional structured final reply payload for replay.
     """
     completed_at = datetime.now(tz=UTC)
     query = (
@@ -93,6 +119,7 @@ async def complete_pipeline_run(
             error_message=error_message,
             completed_at=completed_at,
             duration_ms=duration_ms,
+            final_reply=final_reply,
         )
     )
     await db.execute(query)

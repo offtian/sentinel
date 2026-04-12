@@ -30,3 +30,5 @@ class AuditLogRecord(SQLModel, table=True):
     input_hash: str = Field(max_length=64)
     model_id: str = Field(default="")
     prompt_version: str = Field(default="")
+    prompt_sha256: str | None = Field(default=None, max_length=64)
+    pipeline_run_id: uuid.UUID | None = Field(default=None, index=True)

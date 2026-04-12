@@ -27,8 +27,10 @@ from sentinel import config as config_mod
 from sentinel.application.automations import runner as automation_runner
 from sentinel.data import database
 from sentinel.data import db as async_db
+from sentinel.domain import prompts
 from sentinel.domain.jobs import entities
 from sentinel.domain.jobs import operations as job_ops
+from sentinel.domain.pipeline import queries as pipeline_queries
 from sentinel.domain.pipeline import tracer as pipeline_tracer
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre import operations as sre_ops
@@ -38,6 +40,11 @@ from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.graphs import common, sre_investigation, support_review
 from sentinel.settings import get_settings
 from sentinel.utils import logs
+
+
+def _collect_model_ids(settings: object, *attr_names: str) -> list[str]:
+    """Return model ID strings from the settings object for the given attribute names."""
+    return [str(getattr(settings, name, "")) for name in attr_names if getattr(settings, name, "")]
 
 
 _shutdown_requested = False
@@ -119,11 +126,44 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     alert = sre_entities.Alert.model_validate(payload)
 
     cfg = config_mod.get_config()
+    settings = get_settings()
     holmes = cfg.build_holmes_adapter()
-    pd_client = cfg.pagerduty_client if get_settings().pagerduty_api_key else None
+    pd_client = cfg.pagerduty_client if settings.pagerduty_api_key else None
 
     db = _get_optional_db()
     et = pipeline_tracer.ExecutionTracer(db=db)
+
+    # Build replay snapshot metadata — ALL agent prompts
+    classifier_tpl = prompts.load_template("alert_classifier")
+    analyser_tpl = prompts.load_template("root_cause_analyser")
+    agent_prompts = [
+        {
+            "agent_name": "alert_classifier",
+            "prompt_version": classifier_tpl.version,
+            "prompt_sha256": classifier_tpl.sha256,
+        },
+        {
+            "agent_name": "root_cause_analyser",
+            "prompt_version": analyser_tpl.version,
+            "prompt_sha256": analyser_tpl.sha256,
+        },
+    ]
+    input_hash = pipeline_queries.canonical_input_hash(payload=alert.model_dump())
+    model_ids = _collect_model_ids(settings, "alert_classifier_llm", "root_cause_llm")
+
+    await et.start_pipeline(
+        pipeline_type="sre_investigation",
+        input_data=alert.model_dump(),
+        input_hash=input_hash,
+        model_ids_json=model_ids,
+        mcp_endpoints_json=[],
+        skill_activations_json=[],
+        # Keep lead-agent scalar fields for backward compatibility
+        prompt_version=classifier_tpl.version,
+        prompt_sha256=classifier_tpl.sha256,
+        prompt_text=classifier_tpl.system_text,
+        agent_prompts_json=agent_prompts,
+    )
 
     async def _persist(reply: common.InvestigationReply) -> None:
         if db is None:
@@ -147,15 +187,26 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
         service_name=str(payload.get("service", "")),
     )
 
-    result = await sre_investigation.investigate_alert(
-        alert=alert,
-        agent_for=cfg.agent_for,
-        holmes=holmes,
-        pagerduty_client=pd_client,
-        persist_fn=_persist,
-        trace_collector=et,
-        classifier_toolsets=shared_mcp,
-        analyser_toolsets=(observability_toolset, *shared_mcp),
+    try:
+        result = await sre_investigation.investigate_alert(
+            alert=alert,
+            agent_for=cfg.agent_for,
+            holmes=holmes,
+            pagerduty_client=pd_client,
+            persist_fn=_persist,
+            trace_collector=et,
+            classifier_toolsets=shared_mcp,
+            analyser_toolsets=(observability_toolset, *shared_mcp),
+        )
+    except Exception:
+        await et.complete_pipeline(status="failed", error_message="pipeline raised")
+        raise
+
+    result_data = json.loads(result.model_dump_json())
+    await et.complete_pipeline(
+        status="completed",
+        output_data=result_data,
+        final_reply=result_data,
     )
 
     return result.model_dump_json()
@@ -165,9 +216,42 @@ async def _run_support_review(payload: dict[str, object]) -> str:
     """Execute the support review pipeline for a job payload."""
     ticket = support_entities.Ticket.model_validate(payload)
     cfg = config_mod.get_config()
+    settings = get_settings()
 
     db = _get_optional_db()
     et = pipeline_tracer.ExecutionTracer(db=db)
+
+    # Build replay snapshot metadata — ALL agent prompts
+    reviewer_tpl = prompts.load_template("ticket_reviewer")
+    drafter_tpl = prompts.load_template("response_drafter")
+    agent_prompts = [
+        {
+            "agent_name": "ticket_reviewer",
+            "prompt_version": reviewer_tpl.version,
+            "prompt_sha256": reviewer_tpl.sha256,
+        },
+        {
+            "agent_name": "response_drafter",
+            "prompt_version": drafter_tpl.version,
+            "prompt_sha256": drafter_tpl.sha256,
+        },
+    ]
+    input_hash = pipeline_queries.canonical_input_hash(payload=ticket.model_dump())
+    model_ids = _collect_model_ids(settings, "ticket_reviewer_llm", "response_drafter_llm")
+
+    await et.start_pipeline(
+        pipeline_type="support_review",
+        input_data=ticket.model_dump(),
+        input_hash=input_hash,
+        model_ids_json=model_ids,
+        mcp_endpoints_json=[],
+        skill_activations_json=[],
+        # Keep lead-agent scalar fields for backward compatibility
+        prompt_version=reviewer_tpl.version,
+        prompt_sha256=reviewer_tpl.sha256,
+        prompt_text=reviewer_tpl.system_text,
+        agent_prompts_json=agent_prompts,
+    )
 
     async def _persist(reply: common.SupportReply) -> None:
         if db is None:
@@ -185,15 +269,26 @@ async def _run_support_review(payload: dict[str, object]) -> str:
 
     shared_mcp = cfg.build_mcp_toolsets()
 
-    result = await support_review.review_ticket(
-        ticket=ticket,
-        agent_for=cfg.agent_for,
-        document_searcher=cfg.build_document_searcher(),
-        ticket_searcher=cfg.build_ticket_searcher(),
-        persist_fn=_persist,
-        trace_collector=et,
-        reviewer_toolsets=(cfg.build_ticket_triage_toolset(), *shared_mcp),
-        drafter_toolsets=(cfg.build_support_search_toolset(), *shared_mcp),
+    try:
+        result = await support_review.review_ticket(
+            ticket=ticket,
+            agent_for=cfg.agent_for,
+            document_searcher=cfg.build_document_searcher(),
+            ticket_searcher=cfg.build_ticket_searcher(),
+            persist_fn=_persist,
+            trace_collector=et,
+            reviewer_toolsets=(cfg.build_ticket_triage_toolset(), *shared_mcp),
+            drafter_toolsets=(cfg.build_support_search_toolset(), *shared_mcp),
+        )
+    except Exception:
+        await et.complete_pipeline(status="failed", error_message="pipeline raised")
+        raise
+
+    result_data = json.loads(result.model_dump_json())
+    await et.complete_pipeline(
+        status="completed",
+        output_data=result_data,
+        final_reply=result_data,
     )
 
     return result.model_dump_json()

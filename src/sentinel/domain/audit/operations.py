@@ -27,6 +27,8 @@ async def record_audit_entry(
     input_hash: str,
     model_id: str = "",
     prompt_version: str = "",
+    prompt_sha256: str | None = None,
+    pipeline_run_id: uuid.UUID | None = None,
 ) -> uuid.UUID:
     """
     Insert an append-only audit log entry.
@@ -40,6 +42,10 @@ async def record_audit_entry(
     :param input_hash: SHA-256 hex digest of the normalized input payload.
     :param model_id: Optional LLM model identifier used during the action.
     :param prompt_version: Optional prompt template version used during the action.
+    :param prompt_sha256: Optional SHA-256 hex digest of the rendered prompt text for exact
+        reproducibility tracing. Links this audit row to a specific prompt snapshot.
+    :param pipeline_run_id: Optional UUID of the pipeline run that produced this audit entry,
+        enabling correlation of all audit rows belonging to a single pipeline execution.
     :returns: The UUID of the inserted audit log row.
     """
     row_id = uuid.uuid4()
@@ -56,6 +62,8 @@ async def record_audit_entry(
         input_hash=input_hash,
         model_id=model_id,
         prompt_version=prompt_version,
+        prompt_sha256=prompt_sha256,
+        pipeline_run_id=pipeline_run_id,
     )
     await db.execute(query)
     logs.log_event(

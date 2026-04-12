@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 import attrs
 
 
@@ -27,3 +29,13 @@ class PipelineNodeFailed(Exception):
     def __init__(self, *, node_error: NodeError) -> None:
         self.node_error = node_error
         super().__init__(f"Pipeline node '{node_error.node_name}' failed: {node_error.message}")
+
+
+class ReplayBundleNotFoundError(Exception):
+    """
+    Raise when no pipeline run record exists for the requested run_id.
+    """
+
+    def __init__(self, run_id: uuid.UUID) -> None:
+        super().__init__(f"No pipeline run found for run_id={run_id}")
+        self.run_id = run_id

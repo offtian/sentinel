@@ -65,6 +65,57 @@ class TestStartPipeline:
         assert et.trace_id is not None
         assert et.pipeline_run_id is not None
 
+    @pytest.mark.asyncio
+    async def test_passes_snapshot_fields_to_persist(self) -> None:
+        # Given an ExecutionTracer with a mock database
+        mock_db = mock.AsyncMock()
+        et = tracer.ExecutionTracer(db=mock_db)
+
+        # When start_pipeline is called with snapshot fields
+        with mock.patch.object(tracer, "pipeline_ops") as mock_ops:
+            mock_ops.persist_pipeline_run = mock.AsyncMock(return_value=uuid.uuid4())
+            await et.start_pipeline(
+                pipeline_type="sre_investigation",
+                input_data={"alert_id": "PD-1"},
+                input_hash="abc123",
+                model_ids_json=["openai/gpt-4.1-mini"],
+                mcp_endpoints_json=[],
+                skill_activations_json=[],
+                prompt_version="538d165abc12:alert_classifier",
+                prompt_sha256="deadbeef" * 8,
+                prompt_text="You are an SRE assistant.",
+            )
+
+        # Then persist_pipeline_run receives all snapshot fields
+        call_kwargs = mock_ops.persist_pipeline_run.call_args.kwargs
+        assert call_kwargs["input_hash"] == "abc123"
+        assert call_kwargs["model_ids_json"] == ["openai/gpt-4.1-mini"]
+        assert call_kwargs["prompt_version"] == "538d165abc12:alert_classifier"
+        assert call_kwargs["prompt_sha256"] == "deadbeef" * 8
+        assert call_kwargs["prompt_text"] == "You are an SRE assistant."
+
+    @pytest.mark.asyncio
+    async def test_passes_agent_prompts_json_to_persist(self) -> None:
+        # Given an ExecutionTracer with a mock database and multi-agent prompt metadata
+        mock_db = mock.AsyncMock()
+        et = tracer.ExecutionTracer(db=mock_db)
+        agent_prompts = [
+            {"agent_name": "alert_classifier", "prompt_version": "v1", "prompt_sha256": "aaa"},
+            {"agent_name": "root_cause_analyser", "prompt_version": "v2", "prompt_sha256": "bbb"},
+        ]
+
+        # When start_pipeline is called with agent_prompts_json
+        with mock.patch.object(tracer, "pipeline_ops") as mock_ops:
+            mock_ops.persist_pipeline_run = mock.AsyncMock(return_value=uuid.uuid4())
+            await et.start_pipeline(
+                pipeline_type="sre_investigation",
+                agent_prompts_json=agent_prompts,
+            )
+
+        # Then persist_pipeline_run receives agent_prompts_json
+        call_kwargs = mock_ops.persist_pipeline_run.call_args.kwargs
+        assert call_kwargs["agent_prompts_json"] == agent_prompts
+
 
 class TestCompletePipeline:
     @pytest.mark.asyncio
@@ -87,6 +138,29 @@ class TestCompletePipeline:
         # Then complete_pipeline_run is called with correct status
         mock_ops.complete_pipeline_run.assert_awaited_once()
         assert mock_ops.complete_pipeline_run.call_args.kwargs["status"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_passes_final_reply_to_complete(self) -> None:
+        # Given a started pipeline tracer
+        mock_db = mock.AsyncMock()
+        et = tracer.ExecutionTracer(db=mock_db)
+        et._trace_id = uuid.uuid4()
+        et._pipeline_run_id = uuid.uuid4()
+        et._pipeline_started_at = datetime(2026, 4, 4, 10, 0, tzinfo=UTC)
+        reply_payload = {"alert_id": "PD-1", "root_cause": "OOM"}
+
+        # When complete_pipeline is called with final_reply
+        with mock.patch.object(tracer, "pipeline_ops") as mock_ops:
+            mock_ops.complete_pipeline_run = mock.AsyncMock()
+            await et.complete_pipeline(
+                status="completed",
+                output_data={"root_cause": "OOM"},
+                final_reply=reply_payload,
+            )
+
+        # Then complete_pipeline_run receives the final_reply
+        call_kwargs = mock_ops.complete_pipeline_run.call_args.kwargs
+        assert call_kwargs["final_reply"] == reply_payload
 
     @pytest.mark.asyncio
     async def test_noop_when_db_is_none(self) -> None:
