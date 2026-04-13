@@ -44,7 +44,7 @@ Reduce mean time to investigate (MTTI) for production alerts and mean time to fi
 ### Out of scope
 
 1. **Automated remediation** — Sentinel investigates and suggests, but does not execute fixes or auto-respond to customers
-2. **Custom Kubernetes operators** — Integration with kagent/AgentGateway is deferred to a future phase pending evaluation
+2. ~~**Custom Kubernetes operators**~~ — kagent integration delivered (CRD-based delegation with polling, comparison mode). AgentGateway deferred until multiple MCP backends justify it
 3. **Multi-tenant / multi-team** — V1 targets a single team's alerts and tickets
 4. **Fine-tuned models** — V1 uses general-purpose LLMs via LiteLLM; fine-tuning is a future optimisation
 
@@ -124,7 +124,7 @@ Acceptance criteria:
 - [x] Structured logging via structlog with context-aware event names (e.g. `alert_classified`, `investigation_completed`)
 - [x] PydanticAI spans (`Agent(..., instrument=True)`) exported via OTLP — Logfire SDK configured in `bootstrap_otel.init_traces()`, exports to Tempo/Datadog via `otel_traces_endpoint`
 - [x] Per-pipeline-run snapshot persisted to `pipeline_runs` / `node_executions` / `agent_calls` (graph nodes write to the existing tracing tables)
-- [ ] Token usage and cost recorded per agent call from LiteLLM response metadata — DB schema exists (`agent_calls.token_usage_json`) but agents don't extract `result.usage()` from PydanticAI runs
+- [x] Token usage and cost recorded per agent call — `record_agent_result()` extracts `result.usage()` from PydanticAI runs in all SRE and support graph nodes; `estimate_cost_usd()` computes USD cost via LiteLLM pricing lookup; `token_cost_usd` field on `EvaluationMetrics` for backend comparison
 - [ ] Skill activations logged as structlog events and persisted to the audit log
 - [x] Sentry integration for exception tracking
 - [x] Audit trail of all investigations and reviews persisted to the database
@@ -268,8 +268,8 @@ AgentGateway becomes relevant when:
 | SRE investigation stats endpoint | Section 4 — no `/api/sre/stats` parity with support; cannot track approval rates or investigation outcomes | Phase E |
 | Quality verdict persistence | Section 4 — `QualityVerdict` computed but not stored on investigation/review records | Phase E |
 | **Offline Metrics** | | |
-| Token usage extraction from agent results | Section 4 — DB column exists (`agent_calls.token_usage_json`) but `result.usage()` never called after `agent.run()` | Phase E |
-| LLM cost estimation | Section 4 — no pricing table or cost calculation; `EvaluationMetrics.token_cost` hardcoded to 0 | Phase E |
+| ~~Token usage extraction from agent results~~ | ~~Delivered in PR #18~~ | ~~Done~~ |
+| ~~LLM cost estimation~~ | ~~Delivered in PR #18 — `estimate_cost_usd()` with LiteLLM pricing lookup~~ | ~~Done~~ |
 | LLM call OTel metrics wiring | Section 4 — `sentinel_llm_calls_total` and `sentinel_llm_call_duration_seconds` declared but `record_llm_call()` never invoked | Phase E |
 | Approval decision OTel metrics | Section 4 — `sentinel_approval_decisions_total` declared but `record_approval_decision()` never invoked | Phase E |
 | **Pipeline Improvements** | | |
@@ -277,7 +277,7 @@ AgentGateway becomes relevant when:
 | Ticket classifier skill selection | Section 2 — `auth-error-response`, `rate-limit-response` skills exist but not triggered from ticket classifier output | Phase E |
 | Skill content hash in audit log | Section 6 — `SkillHandle.sha256` computed but not persisted alongside prompt hash in `AuditLogRecord` | Phase E |
 | **Infrastructure** | | |
-| LiteLLM deployment mode | Gateway proxy adds SPOF + network hop; SDK mode (in-process) is better for single-service architecture | Phase E |
+| ~~LiteLLM deployment mode~~ | ~~Delivered in PR #17 — removed proxy, routes via LiteLLM SDK in-process~~ | ~~Done~~ |
 | Eval framework maturity | pydantic_evals lacks dashboard, regression tracking, community metrics. Consider DeepEval or Braintrust | Phase E |
 | **Post-Deploy Validation** | | |
 | Investigation < 2min benchmark | Production deployment (separate repo) | Post-deploy |
@@ -289,12 +289,12 @@ AgentGateway becomes relevant when:
 ## High complexity features
 
 - **Pluggable observability backends** — `BaseObservabilityClient` ABC with `DatadogClient` and `GrafanaClient` implementations. Auto-selects Grafana for local dev, Datadog for production. Each backend provides its own query templates (Datadog query syntax vs PromQL/LogQL/TraceQL)
-- **LiteLLM gateway routing** — All LLM calls route through a LiteLLM proxy, mapping model names to backend providers (Ollama for local dev, cloud providers for production). Configuration management across environments is non-trivial
+- **LiteLLM SDK routing** — All LLM calls route through LiteLLM SDK in-process via PydanticAI's `litellm:` model prefix, mapping model names to backend providers (Ollama for local dev, cloud providers for production)
 - **Multi-source documentation search** — Parallel search across Confluence, Jira, and potentially S3/Notion requires careful timeout handling and result ranking
 - **Job queue consistency** — Ensuring exactly-once processing with idempotency keys across multiple worker replicas under failure conditions
 - **Multi-factor confidence scoring** — `ConfidenceScore.from_factors()` independently weighs source count, relevance, and recency with configurable weights
 - **Human approval gate** — Confidence-gated publishing with Slack interactive messages (approve/reject buttons) for hedge fund compliance
-- **Kubernetes-native agent management** — Future evaluation of kagent and AgentGateway for deploying, scaling, and observing agents as first-class Kubernetes resources
+- **Kubernetes-native agent management** — Dual K8s investigation backends (native PydanticAI agent + kagent CRD delegation) with config-driven A/B comparison mode, read-only RBAC, and typed audit trail for hedge fund compliance
 - **Skills + MCP capability plane** — runtime composition of agent capabilities from on-disk Skills (procedural runbooks) and remote MCP tool servers, with deterministic ordering, content hashing, and per-run capture for replay
 
 ## Technical Stuff
@@ -334,4 +334,4 @@ AgentGateway becomes relevant when:
 
 **Serving suggestion:** Kubernetes via Helm chart with separate API deployment (user-facing, 2 replicas) and Worker deployment (background processing, 2 replicas). PostgreSQL for state. LiteLLM sidecar or shared gateway for LLM routing.
 
-**Test suite:** 695+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.
+**Test suite:** 770+ tests — unit, functional, evaluation, and integration. Golden test datasets with automated quality rubrics.

@@ -161,6 +161,17 @@ k8s-down:
 k8s-logs:
     kubectl logs -l app.kubernetes.io/name=sentinel --all-containers --prefix -f
 
+# Kagent (local Kind cluster)
+# ---------------------------
+
+# Create a Kind cluster with kagent CRDs for local development
+kagent-dev-up:
+    ./scripts/kind-setup.sh
+
+# Delete the local Kind cluster
+kagent-dev-down:
+    kind delete cluster --name sentinel-dev
+
 # Housekeeping
 # ------------
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+from kubernetes_asyncio import client as k8s_async_client
 from pydantic import ConfigDict, PrivateAttr
 from pydantic_ai.mcp import MCPServerSSE
 from pydantic_ai.toolsets import FunctionToolset
@@ -39,6 +40,7 @@ from sentinel.plugins.toolsets import documentation as doc_toolsets
 from sentinel.plugins.toolsets import mcp as mcp_toolset_mod
 from sentinel.plugins.toolsets import observability as obs_toolsets
 from sentinel.utils import logs
+from sentinel.vendors import kubernetes_client as k8s_client_mod
 
 
 try:
@@ -80,6 +82,7 @@ class CommonConfiguration(BaseConfiguration):
 
     # Memoised shared MCP toolsets — populated lazily by build_mcp_toolsets().
     _mcp_toolsets: tuple[Any, ...] | None = PrivateAttr(default=None)
+    _k8s_client_cache: k8s_client_mod.KubernetesClient | None = PrivateAttr(default=None)
 
     def load_vendors(self) -> None:
         """
@@ -236,6 +239,31 @@ class CommonConfiguration(BaseConfiguration):
         )
         return tuple(enabled)
 
+    def _build_k8s_client(self) -> k8s_client_mod.KubernetesClient:
+        """
+        Build a Kubernetes client, caching the instance for reuse.
+
+        Uses the synchronous constructor which attempts in-cluster config.
+        The client's ``is_configured`` property indicates whether a valid
+        cluster connection was established.
+        """
+        if self._k8s_client_cache is None:
+            self._k8s_client_cache = k8s_client_mod.KubernetesClient()
+        return self._k8s_client_cache
+
+    def _build_k8s_custom_objects_api(self) -> k8s_async_client.CustomObjectsApi | None:
+        """
+        Build a CustomObjectsApi for CRD operations.
+
+        Return None when no K8s cluster is reachable, so the kagent adapter
+        gracefully degrades via its ``is_configured`` check.
+        """
+        k8s_client = self._build_k8s_client()
+        if not k8s_client.is_configured:
+            return None
+
+        return k8s_async_client.CustomObjectsApi()
+
     def build_k8s_investigation_adapter(
         self,
         *,
@@ -266,7 +294,7 @@ class CommonConfiguration(BaseConfiguration):
                 mcp_toolsets.append(MCPServerSSE(url=self.settings.k8s_mcp_server_url))
 
             return k8s_native_agent.NativeK8sAgent(
-                k8s_client=None,  # Wire real K8s client when kubernetes lib is integrated
+                k8s_client=self._build_k8s_client(),
                 model_name=self._normalise_model_name(self.settings.k8s_investigator_llm),
                 mcp_toolsets=tuple(mcp_toolsets),
                 agent_runner=agent_runner,
@@ -291,13 +319,14 @@ class CommonConfiguration(BaseConfiguration):
 
         if backend == "kagent":
             return kagent_adapter_mod.KagentAdapter(
+                k8s_api_client=self._build_k8s_custom_objects_api(),
                 kagent_namespace=self.settings.kagent_namespace,
                 timeout_seconds=self.settings.kagent_investigation_timeout_seconds,
             )
 
         if backend == "native_k8s":
             return k8s_native_agent.NativeK8sAgent(
-                k8s_client=None,
+                k8s_client=self._build_k8s_client(),
                 model_name=self._normalise_model_name(self.settings.k8s_investigator_llm),
             )
 

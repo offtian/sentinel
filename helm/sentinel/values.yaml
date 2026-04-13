@@ -157,6 +157,8 @@ networkPolicy:
 k8sAgent:
   enabled: false
   backend: "native"  # "native", "kagent", or "both" (comparison mode)
+  # Restrict to your cluster's API server CIDR in production
+  apiServerCIDR: "0.0.0.0/0"
   rbac:
     create: true
     namespaces: []  # Empty = cluster-wide, or restrict to specific namespaces

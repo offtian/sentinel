@@ -11,7 +11,7 @@ from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre.holmes_adapter import HolmesAdapter
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.graphs import common, sre_investigation, support_review
-from sentinel.interfaces.graphs.agents import intent_router
+from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
 from sentinel.interfaces.slack.app import app
 from sentinel.interfaces.slack.status_update import SlackStatusUpdateClient
 from sentinel.settings import get_settings
@@ -171,12 +171,17 @@ async def _run_sre(
         raw_payload={"slack_text": text},
     )
 
+    cfg = config_mod.get_config()
     reply = await sre_investigation.investigate_alert(
         alert=alert,
-        agent_for=config_mod.get_config().agent_for,
+        agent_for=cfg.agent_for,
         holmes=HolmesAdapter(enabled=get_settings().holmesgpt_enabled),
         status_update_client=status,
         post_to_slack=False,  # we post directly in this thread instead
+        k8s_adapter=cfg.build_k8s_investigation_adapter(
+            agent_runner=k8s_runner.run_k8s_agent,
+        ),
+        challenger_adapter=cfg.build_challenger_adapter(),
     )
 
     blocks = _investigation_blocks(reply, alert.title)

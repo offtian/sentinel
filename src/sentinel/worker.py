@@ -38,6 +38,7 @@ from sentinel.domain.support import entities as support_entities
 from sentinel.domain.support import operations as support_ops
 from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.graphs import common, sre_investigation, support_review
+from sentinel.interfaces.graphs.agents import k8s_runner
 from sentinel.settings import get_settings
 from sentinel.utils import logs
 
@@ -129,6 +130,10 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     settings = get_settings()
     holmes = cfg.build_holmes_adapter()
     pd_client = cfg.pagerduty_client if settings.pagerduty_api_key else None
+    k8s_adapter = cfg.build_k8s_investigation_adapter(
+        agent_runner=k8s_runner.run_k8s_agent,
+    )
+    challenger_adapter = cfg.build_challenger_adapter()
 
     db = _get_optional_db()
     et = pipeline_tracer.ExecutionTracer(db=db)
@@ -197,6 +202,8 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
             trace_collector=et,
             classifier_toolsets=shared_mcp,
             analyser_toolsets=(observability_toolset, *shared_mcp),
+            k8s_adapter=k8s_adapter,
+            challenger_adapter=challenger_adapter,
         )
     except Exception:
         await et.complete_pipeline(status="failed", error_message="pipeline raised")

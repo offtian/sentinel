@@ -48,7 +48,7 @@ Both adapters return `HolmesInvestigationResult` (analysis text, tool calls, sou
 | PydanticAI + Pydantic Graph | Keep -- current orchestration layer, well-integrated |
 | LiteLLM | Keep — SDK mode (in-process), no proxy |
 | LangFuse | Adopt via direct integration -- no proxy dependency |
-| kagent | Narrow pilot for K8s troubleshooting -- not a replacement |
+| kagent | **Adopted as CRD-based K8s investigation backend** — `KagentAdapter` delegates via CRD creation/polling; comparison mode with native agent via `K8S_INVESTIGATION_BACKEND=both` |
 | agentgateway | Defer until multiple MCP backends or agent runtimes need centralised routing |
 | Claude Agent SDK / OpenAI Agent SDK | Evaluate -- may complement PydanticAI for specific workflows |
 | LangGraph / LangChain | Evaluate -- compare with Pydantic Graph for complex branching |
@@ -154,7 +154,7 @@ BaseInvestigationAdapter (ABC)           domain/sre/investigation.py
 
 - **DirectToolsetAdapter** — queries observability backends directly (resolves HolmesGPT pydantic-ai dependency conflict)
 - **NativeK8sAgent** — PydanticAI agent with kubernetes Python client tools (pods, deployments, events, logs)
-- **KagentAdapter** — delegates to kagent K8s operator via CRD creation/polling (skeleton, pending operator deployment)
+- **KagentAdapter** — delegates to kagent K8s operator via CRD creation/polling with exponential backoff, timeout handling, and degraded result fallback
 
 All adapters return `InvestigationResult` with an `audit_trail` (typed envelope + freeform payload) for hedge fund compliance traceability. Config-driven backend selection via `K8S_INVESTIGATION_BACKEND` (native/kagent/both).
 
@@ -183,7 +183,6 @@ flowchart LR
       B6[Vendor-agnostic prompt caching<br/>via build_cache_settings]
     end
     subgraph Remaining
-      A1[Token usage not extracted<br/>from agent results]
       A2[Skill content hash not<br/>persisted in audit log]
       A3[LLM call + approval OTel<br/>metrics declared but unwired]
       A4[SRE approval persistence<br/>in-memory only]
@@ -407,7 +406,7 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 
 ## Test Count
 
-695+ tests covering:
+770+ tests covering:
 
 - Domain entities and operations (SRE, Support, Confidence, Search, Pipeline errors, Approval, Supervisor)
 - Webhook parsers (PagerDuty, Datadog) with dedup handling
@@ -424,6 +423,11 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 - Pipeline traceability (trace_id correlation, pipeline/node/agent recording)
 - Prompt versioning (version/hash round-trip, replay bundle serialisation)
 - Prompt caching (vendor-agnostic cache settings, agent integration)
+- K8s investigation adapters (NativeK8sAgent, KagentAdapter, comparison wiring)
+- MCP server tools (observability, documentation, investigation endpoints)
+- MCP client builder (HTTP and stdio server configs)
+- Kagent CRD lifecycle (creation, polling, result mapping, timeout handling)
+- K8s vendor client (namespace validation, resource queries, field selector sanitization)
 
 ## Key Reference Files
 

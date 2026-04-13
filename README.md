@@ -4,7 +4,9 @@ AI-powered automation platform for production operations and customer support.
 
 ## What It Does
 
-**AI SRE** — Automatically triages and investigates production alerts from PagerDuty and Datadog. Queries logs, metrics, traces, and Kubernetes state to identify root causes and suggest remediation steps. Posts findings back to Slack and PagerDuty.
+**AI SRE** — Automatically triages and investigates production alerts from PagerDuty and Datadog. Queries logs, metrics, traces, and Kubernetes state to identify root causes and suggest remediation steps. Supports multiple investigation backends — direct observability queries, a native K8s PydanticAI agent, or delegation to kagent CRDs — with config-driven A/B comparison mode. Posts findings back to Slack and PagerDuty.
+
+**MCP Integration** — Exposes Sentinel tools (observability, documentation, investigation) to external agents via a FastMCP server, and consumes external MCP tool servers (e.g., kubectl, Datadog, Confluence) as pluggable PydanticAI toolsets.
 
 **AI Support Agent** — Automatically reviews Jira Service Desk tickets, searches documentation across Notion, Confluence, and S3, then drafts response suggestions for support staff to review before sending.
 
@@ -120,6 +122,15 @@ Key settings:
 | `HOLMESGPT_ENABLED`    | Enable HolmesGPT investigation engine | `true`                                      |
 | `REQUIRE_APPROVAL_BELOW_CONFIDENCE` | Confidence threshold requiring human approval | `0.7`                |
 | `APPROVAL_TIMEOUT_SECONDS` | Timeout for pending approvals (0 = no timeout) | `0`                        |
+| `K8S_INVESTIGATION_BACKEND` | K8s investigation backend: `native`, `kagent`, `both`, or empty (disabled) | `` (disabled)     |
+| `K8S_INVESTIGATOR_LLM` | Model for K8s investigation agent | `ollama/qwen3-coder:30b`           |
+| `K8S_CLUSTER_NAME` | Target K8s cluster name for investigation context | ``                              |
+| `K8S_DEFAULT_NAMESPACE` | Default namespace for K8s investigations | ``                                       |
+| `KAGENT_INVESTIGATION_TIMEOUT_SECONDS` | Timeout for kagent CRD investigations | `120`                       |
+| `MCP_SERVERS` | JSON list of external MCP servers to inject as toolsets | ``                              |
+| `K8S_MCP_SERVER_URL` | Optional kubectl MCP server URL for K8s agent | ``                                  |
+| `MCP_SERVER_PORT` | Port for Sentinel's MCP server | `8811`                                              |
+| `MCP_SERVER_API_KEY` | API key for MCP server authentication (empty = disabled) | ``                    |
 
 
 ## Tech Stack
@@ -128,6 +139,8 @@ Key settings:
 - **PostgreSQL** + SQLModel/SQLAlchemy (async)
 - **HolmesGPT** (hybrid integration — adapter pattern)
 - **LiteLLM** SDK for in-process model routing (no proxy)
+- **FastMCP** for MCP server/client integration
+- **kubernetes-asyncio** for native K8s investigation
 - **structlog**, Datadog, Sentry for observability
 
 ## Project Structure

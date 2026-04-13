@@ -215,6 +215,10 @@ class BaseConfiguration(BaseModel):
         """Build the K8s investigation adapter. Override in subclass."""
         raise NotImplementedError
 
+    def build_challenger_adapter(self) -> Any:
+        """Build the challenger adapter for A/B comparison. Override in subclass."""
+        raise NotImplementedError
+
     def build_document_searcher(self) -> Any:
         """Build the configured document searcher. Override in subclass."""
         raise NotImplementedError

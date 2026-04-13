@@ -32,6 +32,18 @@ spec:
               protocol: TCP
           resources:
             {{- toYaml .Values.mcpServer.resources | nindent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: mcp
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: mcp
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
           {{- with .Values.envFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}

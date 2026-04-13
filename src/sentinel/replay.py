@@ -30,6 +30,7 @@ from sentinel.domain.pipeline import types as pipeline_types
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.graphs import sre_investigation, support_review
+from sentinel.interfaces.graphs.agents import k8s_runner
 
 
 async def _fetch_and_print(*, run_id: uuid.UUID) -> None:
@@ -116,6 +117,10 @@ async def _replay_sre(
         agent_for=cfg.agent_for,
         holmes=cfg.build_holmes_adapter(),
         trace_collector=et,
+        k8s_adapter=cfg.build_k8s_investigation_adapter(
+            agent_runner=k8s_runner.run_k8s_agent,
+        ),
+        challenger_adapter=cfg.build_challenger_adapter(),
     )
 
     await et.complete_pipeline(

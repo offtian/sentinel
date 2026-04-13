@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from sentinel.domain.tools import observability as obs_tools
 from sentinel.domain.vendor_adapters.observability import base as obs_base
+from sentinel.interfaces.mcp.tools import _helpers
 
 
 async def query_logs(
@@ -18,11 +19,15 @@ async def query_logs(
     """
     Search recent logs for a service.
     """
-    return await obs_tools.query_recent_logs(
-        client=obs_client,
-        service=service,
-        query=query,
-        minutes_back=minutes_back,
+    return await _helpers.instrumented_mcp_tool(
+        tool_name="query_logs",
+        params={"service": service, "query": query},
+        fn=lambda: obs_tools.query_recent_logs(
+            client=obs_client,
+            service=service,
+            query=query,
+            minutes_back=minutes_back,
+        ),
     )
 
 
@@ -36,11 +41,15 @@ async def query_metrics(
     """
     Fetch metric time series for a service.
     """
-    return await obs_tools.query_metrics(
-        client=obs_client,
-        service=service,
-        metric_name=metric_name,
-        minutes_back=minutes_back,
+    return await _helpers.instrumented_mcp_tool(
+        tool_name="query_metrics",
+        params={"service": service, "metric_name": metric_name},
+        fn=lambda: obs_tools.query_metrics(
+            client=obs_client,
+            service=service,
+            metric_name=metric_name,
+            minutes_back=minutes_back,
+        ),
     )
 
 
@@ -53,8 +62,12 @@ async def query_error_traces(
     """
     Search distributed traces for error spans.
     """
-    return await obs_tools.query_error_traces(
-        client=obs_client,
-        service=service,
-        minutes_back=minutes_back,
+    return await _helpers.instrumented_mcp_tool(
+        tool_name="query_error_traces",
+        params={"service": service},
+        fn=lambda: obs_tools.query_error_traces(
+            client=obs_client,
+            service=service,
+            minutes_back=minutes_back,
+        ),
     )
