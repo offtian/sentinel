@@ -46,6 +46,18 @@ Exception: `if TYPE_CHECKING:` blocks and `if __name__ == "__main__":` blocks ar
 - Use `tuple[str, ...]` over `list[str]` in frozen attrs classes for full immutability
 - Use `frozenset` over `set`, `Sequence` over `list` when data shouldn't change
 - Exception: `@dataclasses.dataclass` is acceptable for PydanticAI agent Dependencies and Graph node state
+- Exception: `pydantic.BaseModel` is the contract for configuration types (`Settings`, `BaseConfiguration`) and API/webhook boundary types — attrs is for pure-Python domain shapes
+
+## Shared Primitives (`data/`)
+
+Pure data shapes that both `config` and `domain` need to agree on live in `src/sentinel/data/` alongside the SQLModel tables. Examples: policy types (`ApprovalPolicy`, `OutputChannel`, `RedactionPolicy`), identity envelopes (`Envelope` carrying `request_id` / `tenant_id` / `pii_class`), capability tokens, discriminator enums (`TeamId`, `ApproverRole`, `OutputKind`).
+
+- `attrs.frozen(kw_only=True, slots=True)` — immutable, kw-only construction, slot-backed.
+- Pure data only: no vendor binding, no business logic, no I/O. If the type needs a vendor SDK or a query, it belongs in `domain/` instead.
+- For primitives carried by config (`ApprovalPolicy`, `RedactionPolicy`), expose a `.default()` classmethod returning firm-wide-safe values and a `.empty()` classmethod returning a fail-closed placeholder. `BaseConfiguration` composes them via `Field(default_factory=Primitive.default)` (or `.empty`). Mis-wired pipelines fail closed instead of silently permitting.
+- No `Settings`-driven primitives — every primitive is constructed in code with deterministic defaults. Env-var knobs that customise a primitive's fields surface on `BaseConfiguration` via `@property`, not on the primitive itself.
+- Use `Literal` aliases for shared discriminator strings (`ConfidenceLabel`, `ApproverRole`, `OutputKind`, `TeamId`). When a discriminator overlaps with an existing domain enum (e.g., `domain.confidence.entities.ConfidenceLabel`), reuse the existing enum rather than introducing a parallel `Literal` with different casing — duplicates silently mismatch on equality. If the discriminator must live in `data/` for layering reasons, lift the canonical enum down to `data/` and re-export from the domain module so there is exactly one definition.
+- Why `data/` and not `domain/`: `data/` sits below `config` in the import-linter layer order, so `config.py` can compose primitives without an extra layer reshuffle. `domain/` and above can also import freely from `data/` (lower layer). Both layers depend on the same shape without either importing the other — that's the point.
 
 ## Error Handling
 - Never catch exceptions and do nothing silently — always log, re-raise, or raise a domain-specific exception
