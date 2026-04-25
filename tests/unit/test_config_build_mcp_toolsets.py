@@ -13,7 +13,7 @@ from unittest import mock
 from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
 
 from sentinel import settings as settings_mod
-from sentinel.plugins import config as plugins_config_mod
+from sentinel.plugins.common import config as plugins_config_mod
 
 
 def _make_settings(**overrides: object) -> mock.MagicMock:

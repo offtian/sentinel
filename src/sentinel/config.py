@@ -3,11 +3,13 @@ Base application configuration: interface and singleton cache.
 
 The ``BaseConfiguration`` class defines the interface that all layers depend
 on — settings access, model-name normalisation, the agent registry, and
-stub methods for vendor adapters, searchers, and toolset builders.
+stub methods for vendor adapters, searchers, and toolset builders. It also
+carries the layered configuration fields that team profiles fill in
+(loop caps, confidence thresholds, redaction / approval policies, etc.).
 
 The concrete implementation lives in
-``sentinel.plugins.config.CommonConfiguration`` which inherits from this
-base and adds all domain/plugin wiring.  ``get_config()`` auto-creates
+``sentinel.plugins.common.config.CommonConfiguration`` which inherits from this
+base and adds all domain/plugin wiring. ``get_config()`` auto-creates
 the concrete instance via ``importlib`` on first access, so callers
 never need to import from the plugins layer.
 """
@@ -15,11 +17,16 @@ never need to import from the plugins layer.
 from __future__ import annotations
 
 import importlib
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, PrivateAttr
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
+from sentinel.data import policies
 from sentinel.settings import Settings, get_settings
+
+
+TeamId = Literal["sre", "devops", "ace"]
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +100,7 @@ class BaseConfiguration(BaseModel):
     and stub methods for vendor adapters, searchers, and toolset builders.
 
     The concrete implementation
-    ``sentinel.plugins.config.CommonConfiguration`` overrides the stubs
+    ``sentinel.plugins.common.config.CommonConfiguration`` overrides the stubs
     with real wiring.  ``get_config()`` auto-creates the concrete
     instance so callers never interact with this base directly.
     """
@@ -115,6 +122,53 @@ class BaseConfiguration(BaseModel):
     jira_client: Any | None = None
     confluence_client: Any | None = None
     observability_circuit_breaker: Any | None = None
+
+    # -- Layered configuration fields with firm-wide defaults -----------------
+
+    investigation_loop_cap: int = 8
+    investigation_timeout_seconds: int = 300
+    enrichment_timeout_seconds: int = 30
+    job_poll_interval_seconds: float = 1.0
+    job_max_retries: int = 3
+    job_max_concurrent_per_worker: int = 4
+
+    confidence_publish_min: float = 0.7
+    confidence_human_review_min: float = 0.4
+
+    redaction_policy: policies.RedactionPolicy = Field(
+        default_factory=policies.RedactionPolicy.default,
+    )
+
+    case_retrieval_top_k: int = 5
+    case_retrieval_show_top_n_to_agent: int = 3
+    case_retrieval_min_redaction_score: float = 0.9
+
+    eval_groundedness_min: float = 0.7
+    enable_replay_bundle: bool = True
+
+    runbooks_paths: tuple[Path, ...] = ()
+    skills_paths: tuple[Path, ...] = ()
+    tool_modules: tuple[str, ...] = ()
+    allowed_tools: frozenset[str] = Field(default_factory=frozenset)
+    allowed_skills: frozenset[str] = Field(default_factory=frozenset)
+
+    output_channels: tuple[policies.OutputChannel, ...] = ()
+    approval_policy: policies.ApprovalPolicy = Field(
+        default_factory=policies.ApprovalPolicy.empty,
+    )
+    model_id_primary: str = ""
+    model_id_judge: str = ""
+
+    @property
+    def team_id(self) -> TeamId:
+        """
+        Return the team profile this config represents.
+
+        Reads from ``settings.team_profile`` so the discriminator stays
+        in one place. Subclasses may override with a hardcoded literal
+        when team profiles need divergent behaviour.
+        """
+        return self.settings.team_profile
 
     # -- LLM model names (normalised for pydantic-ai) -------------------------
 
@@ -244,22 +298,30 @@ class BaseConfiguration(BaseModel):
         raise NotImplementedError
 
 
-_CONFIG_CLASS_PATH = "sentinel.plugins.config"
-_CONFIG_CLASS_NAME = "CommonConfiguration"
+# Module:Class references for each team profile. Resolved at startup
+# via importlib so the config layer doesn't statically depend on the
+# plugins layer above. Devops/ACE references land in their own plans.
+TEAM_CONFIG_REFS: dict[TeamId, str] = {
+    "sre": "sentinel.plugins.common.config:CommonConfiguration",
+}
 
 _config: BaseConfiguration | None = None
 
 
 def _build_default_config() -> BaseConfiguration:
-    """
-    Build a ``CommonConfiguration`` via importlib.
+    """Resolve the team-specific concrete configuration and load vendors."""
+    settings = get_settings()
+    if settings.team_profile not in TEAM_CONFIG_REFS:
+        raise NotImplementedError(
+            f"team profile {settings.team_profile!r} not yet wired — "
+            "add an entry to TEAM_CONFIG_REFS pointing at its concrete "
+            "configuration class.",
+        )
 
-    Dynamically imports the concrete class to avoid a static dependency
-    from the ``config`` layer to the ``plugins`` layer.
-    """
-    module = importlib.import_module(_CONFIG_CLASS_PATH)
-    kls = getattr(module, _CONFIG_CLASS_NAME)
-    instance: BaseConfiguration = kls(settings=get_settings())
+    module_path, class_name = TEAM_CONFIG_REFS[settings.team_profile].split(":")
+    module = importlib.import_module(module_path)
+    cls = getattr(module, class_name)
+    instance: BaseConfiguration = cls(settings=settings)
     instance.load_vendors()
     return instance
 

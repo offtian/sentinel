@@ -7,7 +7,9 @@ All tuneable parameters in one place, overridable via environment variables.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
+from pydantic import HttpUrl, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -127,6 +129,20 @@ class Settings(LLMSettings, SRESettings, K8sChartSettings, SupportSettings):
     # Environment
     environment: str = "production"
     database_url: str = ""
+
+    team_profile: Literal["sre", "devops", "ace"] = "sre"
+
+    # Unset = in-process LiteLLM SDK fallback.
+    litellm_base_url: HttpUrl | None = None
+    litellm_virtual_key: SecretStr | None = None
+
+    # Unset = OTel console exporter fallback.
+    langfuse_host: HttpUrl | None = None
+    langfuse_public_key: SecretStr | None = None
+    langfuse_secret_key: SecretStr | None = None
+
+    otel_collector_endpoint: HttpUrl | None = None
+    runbooks_root: Path = _PACKAGE_ROOT / "domain" / "runbooks"
 
     @property
     def is_local(self) -> bool:

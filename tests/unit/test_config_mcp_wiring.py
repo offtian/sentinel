@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest import mock
 
 from sentinel import settings
-from sentinel.plugins import config as plugin_config_mod
+from sentinel.plugins.common import config as plugin_config_mod
 
 
 class TestBuildK8sInvestigationAdapterMcpWiring:

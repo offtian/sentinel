@@ -297,23 +297,56 @@ All agents are defined with `model="test"` at module level to avoid import-time 
 
 ## Configuration
 
-Two modules:
+Three layers, top to bottom:
 
-- **`settings.py`** — Pydantic `Settings` class with env var overrides, `get_settings()` singleton
-- **`config.py`** — Application-level `Configuration` class with `load_vendors()`, `build_holmes_adapter()`, `build_k8s_investigation_adapter()`, `build_document_searcher()`, LLM model name properties
+- **`settings.py`** — Pydantic `Settings` class. The only module that
+  reads env vars; `get_settings()` returns a process-wide singleton.
+- **`config.py`** — `BaseConfiguration` (Pydantic). Carries the
+  layered configuration fields with firm-wide defaults
+  (`investigation_loop_cap`, `investigation_timeout_seconds`,
+  `confidence_publish_min`, `redaction_policy`, `approval_policy`,
+  `runbooks_paths`, etc.). `team_id` is a property that reads
+  `settings.team_profile`. `get_config()` dispatches via
+  `TEAM_CONFIG_REFS` to the concrete configuration class.
+- **`plugins/common/config.py`** — `CommonConfiguration` (concrete).
+  Subclass of `BaseConfiguration` that wires vendor adapters, MCP
+  toolsets, agent registry, and HolmesGPT / K8s investigation
+  builders.
 
-Key settings groups:
+Profile dispatch lives in `config.py`:
 
-- **Environment** - `ENVIRONMENT` (`localdev`/`production`), `DATABASE_URL`
-- **Observability** - `OBSERVABILITY_BACKEND` (auto: grafana for localdev, datadog for production), Datadog or Grafana credentials
-- **LLM models** - Per-agent model selection via LiteLLM SDK (in-process) through PydanticAI's `litellm:` prefix
-- **SRE config** - PagerDuty API key, HolmesGPT toggle
-- **Support config** - Jira/Confluence URLs and tokens
-- **Feature flags** - `SRE_AUTO_INVESTIGATE`, `SUPPORT_AUTO_DRAFT`
-- **Approval** - `REQUIRE_APPROVAL_BELOW_CONFIDENCE` (default 0.7), `APPROVAL_TIMEOUT_SECONDS` (default 0)
-- **K8s agent** - `K8S_INVESTIGATION_BACKEND` (native/kagent/both/disabled), `K8S_INVESTIGATOR_LLM`, cluster/namespace config
-- **MCP** - `MCP_SERVERS` (JSON list of HTTP/stdio server configs), `K8S_MCP_SERVER_URL`, `MCP_SERVER_PORT`
-- **Slack** - Bot token, app token, channel IDs
+```python
+TEAM_CONFIG_REFS: dict[TeamId, str] = {
+    "sre": "sentinel.plugins.common.config:CommonConfiguration",
+}
+```
+
+Future DevOps and ACE profiles add an entry pointing at their own
+concrete configuration class.
+
+Policy primitives — `ApprovalPolicy`, `OutputChannel`,
+`RedactionPolicy` — live as `attrs.frozen` dataclasses in
+`src/sentinel/data/policies.py` and are referenced by
+`BaseConfiguration` field defaults.
+
+Key env-var groups (see `.env.default` for the full list):
+
+- **Environment** — `ENVIRONMENT` (`localdev`/`production`),
+  `DATABASE_URL`, `TEAM_PROFILE` (`sre`/`devops`/`ace`).
+- **LiteLLM proxy** — `LITELLM_BASE_URL`, `LITELLM_VIRTUAL_KEY`
+  (unset = in-process SDK fallback).
+- **Langfuse** — `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`,
+  `LANGFUSE_SECRET_KEY` (unset = OTel console exporter fallback).
+- **OTel collector** — `OTEL_COLLECTOR_ENDPOINT` (firm-shared,
+  separate from the signal-specific `OTEL_TRACES_ENDPOINT`).
+- **Runbook root** — `RUNBOOKS_ROOT` (loader resolves team-specific
+  subdirectories from this path).
+- **Observability** — `OBSERVABILITY_BACKEND`, Datadog or Grafana
+  credentials.
+- **LLM models** — per-agent model selection routed through
+  PydanticAI's `litellm:` prefix.
+- **SRE / Support / K8s / MCP / Slack / approval** — see
+  `.env.default`.
 
 ## Database
 
