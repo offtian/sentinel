@@ -32,13 +32,14 @@
 | Plan | Goal | Progress | Notes |
 |------|------|----------|-------|
 | [grafana-metrics](grafana-metrics.md) | OTel metrics instrumentation for Grafana dashboards | 2/5 | Prometheus reader + basic metrics wired |
-| [sentinel-foundations-f1-config-layering](sentinel-foundations-f1-config-layering.md) | Land the F1 layered config substrate on `BaseConfiguration` (Pydantic) + new env-vars + policy primitives + `TEAM_CONFIG_REFS` dispatch | 6/8 | F1 of foundations plan; original 4-layer chain consolidated to two practical layers — see plan for the pivot rationale |
+| [sentinel-hedgefund-foundations](sentinel-hedgefund-foundations.md) | Evolve current codebase into RFC-001 v0.4 foundations (config, identity, OTel→Langfuse→replay, LiteLLM proxy, runbooks, capability tokens, groundedness) | 2/9 phases | F1 + F2 complete (PR #22, this PR); F3 (DB schema) next |
+| [sentinel-foundations-f1-config-layering](sentinel-foundations-f1-config-layering.md) | F1 layered config substrate on `BaseConfiguration` (Pydantic) + new env-vars + policy primitives + `TEAM_CONFIG_REFS` dispatch | complete | F1 of foundations plan; PR #22 |
+| [sentinel-foundations-f2-envelope](sentinel-foundations-f2-envelope.md) | F2 identity envelope: middleware mints `request_id`, webhook factories build `Envelope`, pipelines + spans + log contexts carry it through | complete | F2 of foundations plan; this PR |
 
 ### Draft (Not Started)
 
 | Plan | Goal | PRD Section |
 |------|------|-------------|
-| [sentinel-hedgefund-foundations](sentinel-hedgefund-foundations.md) | Evolve current codebase into RFC-001 v0.4 foundations (config layering, identity propagation, OTEL→Langfuse→replay triple, LiteLLM proxy, runbook catalog, capability tokens, groundedness gate) | RFC-001 §14 wks 0.5–4 |
 | [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, SRE approval persistence (token usage + LLM cost delivered in PR #18) | 4, 6 |
 | [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | 4, 7 |
 | [llm-settings-to-config](llm-settings-to-config.md) | Move LLM model config into CommonConfiguration | Internal |

@@ -10,6 +10,7 @@ from sentinel import bootstrap, bootstrap_otel
 from sentinel import config as config_mod
 from sentinel.data import database
 from sentinel.data import db as async_db
+from sentinel.interfaces.api import middleware as api_middleware
 from sentinel.interfaces.api.routers.automations.router import router as automations_router
 from sentinel.interfaces.api.routers.jobs.router import router as jobs_router
 from sentinel.interfaces.api.routers.sre.router import router as sre_router
@@ -48,6 +49,8 @@ app = fastapi.FastAPI(
 )
 
 bootstrap_otel.instrument_fastapi(app=app)
+
+app.add_middleware(api_middleware.RequestIdMiddleware)
 
 app.mount("/metrics", make_asgi_app())
 

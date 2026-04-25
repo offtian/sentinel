@@ -130,6 +130,11 @@ class Settings(LLMSettings, SRESettings, K8sChartSettings, SupportSettings):
     environment: str = "production"
     database_url: str = ""
 
+    # Cloud / cluster identity context (RFC §3.1) — populated onto the
+    # Envelope so every span and DB row carries cluster + region scope.
+    # Empty values fall back to the "unknown" sentinel at envelope time.
+    region: str = ""
+
     team_profile: Literal["sre", "devops", "ace"] = "sre"
 
     # Unset = in-process LiteLLM SDK fallback.

@@ -54,6 +54,7 @@ class TestSreInvestigationPipeline:
         # When running the full investigation pipeline
         reply = await sre_investigation.investigate_alert(
             alert=sample_alert,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
@@ -75,6 +76,7 @@ class TestSreInvestigationPipeline:
         # When running the pipeline end-to-end
         reply = await sre_investigation.investigate_alert(
             alert=sample_alert,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
@@ -92,6 +94,7 @@ class TestSreInvestigationPipeline:
         with patch("sentinel.vendors.slack.post_investigation_summary", tracker):
             await sre_investigation.investigate_alert(
                 alert=sample_alert,
+                envelope=factories.make_envelope(),
                 agent_for=self._config.agent_for,
                 holmes=mock_holmes,
                 post_to_slack=True,
@@ -110,6 +113,7 @@ class TestSreInvestigationPipeline:
         with patch("sentinel.vendors.slack.post_investigation_summary", tracker):
             await sre_investigation.investigate_alert(
                 alert=sample_alert,
+                envelope=factories.make_envelope(),
                 agent_for=self._config.agent_for,
                 holmes=mock_holmes,
                 post_to_slack=False,
@@ -125,6 +129,7 @@ class TestSreInvestigationPipeline:
         # When running the pipeline
         await sre_investigation.investigate_alert(
             alert=sample_alert,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
@@ -149,6 +154,7 @@ class TestSreInvestigationPipeline:
         # When running the pipeline
         await sre_investigation.investigate_alert(
             alert=alert,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
@@ -164,6 +170,7 @@ class TestSreInvestigationPipeline:
         # When running the full investigation
         reply = await sre_investigation.investigate_alert(
             alert=critical_alert,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
@@ -214,6 +221,7 @@ class TestSrePipelineWithLowConfidence:
         # When running the pipeline
         reply = await sre_investigation.investigate_alert(
             alert=sample_alert,
+            envelope=factories.make_envelope(),
             agent_for=config.agent_for,
             holmes=sparse_holmes,
             post_to_slack=False,
@@ -245,6 +253,7 @@ class TestSrePipelineComparisonMode:
         # When running the pipeline with a challenger adapter
         reply = await sre_investigation.investigate_alert(
             alert=sample_alert,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
@@ -278,6 +287,7 @@ class TestSrePipelineComparisonMode:
         # When running the pipeline with the failing challenger
         reply = await sre_investigation.investigate_alert(
             alert=sample_alert,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
@@ -314,6 +324,7 @@ class TestSrePipelineK8sIntegration:
         # When running the pipeline with a K8s adapter
         reply = await sre_investigation.investigate_alert(
             alert=sample_alert,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
@@ -348,6 +359,7 @@ class TestSrePipelineK8sIntegration:
         # When running the pipeline with the failing K8s adapter
         reply = await sre_investigation.investigate_alert(
             alert=sample_alert,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
@@ -380,6 +392,7 @@ class TestSrePipelineK8sIntegration:
         # When running the pipeline with the unconfigured adapter
         reply = await sre_investigation.investigate_alert(
             alert=sample_alert,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,

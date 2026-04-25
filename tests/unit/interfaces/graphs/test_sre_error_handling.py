@@ -33,6 +33,7 @@ class TestClassifyAlertErrorHandling:
         # When the full pipeline is run
         result = await sre_investigation.investigate_alert(
             alert=alert,
+            envelope=factories.make_envelope(),
             agent_for=config.agent_for,
             holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
@@ -94,6 +95,7 @@ class TestInvestigateWithHolmesErrorHandling:
         # When the pipeline runs with a failing Holmes adapter
         result = await sre_investigation.investigate_alert(
             alert=alert,
+            envelope=factories.make_envelope(),
             agent_for=config.agent_for,
             holmes=FailingHolmes(),
             post_to_slack=False,
@@ -134,6 +136,7 @@ class TestAnalyseRootCauseErrorHandling:
         # When the pipeline runs
         result = await sre_investigation.investigate_alert(
             alert=alert,
+            envelope=factories.make_envelope(),
             agent_for=config.agent_for,
             holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
@@ -200,6 +203,7 @@ class TestPublishFindingsErrorHandling:
         # When the pipeline runs with Slack failing
         result = await sre_investigation.investigate_alert(
             alert=alert,
+            envelope=factories.make_envelope(),
             agent_for=config.agent_for,
             holmes=factories.MockHolmesAdapter(),
             post_to_slack=True,

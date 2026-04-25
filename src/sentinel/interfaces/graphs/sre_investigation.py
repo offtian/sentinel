@@ -10,13 +10,13 @@ from typing import Any
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
+from sentinel.data import envelope as envelope_mod
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.evaluation import comparison
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre import holmes_adapter, investigation
 from sentinel.domain.vendor_adapters.pagerduty import PagerDutyClient
-from sentinel.interfaces.graphs import common
-from sentinel.interfaces.graphs._node_helpers import instrumented_node_run
+from sentinel.interfaces.graphs import _node_helpers, common
 from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser
 from sentinel.interfaces.graphs.agents import utils as agent_utils
 from sentinel.utils import logs, metrics
@@ -47,6 +47,10 @@ class Dependencies:
 
 @dataclasses.dataclass
 class State:
+    # Identity envelope minted at ingress and threaded through every node.
+    # Required (no default) so a misconfigured caller fails closed at
+    # State construction rather than silently losing tenant context.
+    envelope: envelope_mod.Envelope
     alert: sre_entities.Alert
     investigation: sre_entities.Investigation | None = None
     comparison_result: comparison.ComparisonResult | None = None
@@ -138,11 +142,12 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
 
             return InvestigateWithHolmes()
 
-        return await instrumented_node_run(
+        return await _node_helpers.run_node_with_envelope(
             pipeline="sre",
             node="classify_alert",
+            envelope=ctx.state.envelope,
             fn=_impl,
-        )()
+        )
 
 
 @dataclasses.dataclass
@@ -257,11 +262,12 @@ class InvestigateWithHolmes(BaseNode[State, Dependencies, common.InvestigationRe
                 holmes_sources=holmes_result.sources_queried,
             )
 
-        return await instrumented_node_run(
+        return await _node_helpers.run_node_with_envelope(
             pipeline="sre",
             node="investigate_with_holmes",
+            envelope=ctx.state.envelope,
             fn=_impl,
-        )()
+        )
 
 
 @dataclasses.dataclass
@@ -359,11 +365,12 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
 
             return DetermineConfidence(raw_confidence=result.output.confidence)
 
-        return await instrumented_node_run(
+        return await _node_helpers.run_node_with_envelope(
             pipeline="sre",
             node="analyse_root_cause",
+            envelope=ctx.state.envelope,
             fn=_impl,
-        )()
+        )
 
 
 @dataclasses.dataclass
@@ -462,11 +469,12 @@ class DetermineConfidence(BaseNode[State, Dependencies, common.InvestigationRepl
 
             return PublishFindings(confidence=confidence)
 
-        return await instrumented_node_run(
+        return await _node_helpers.run_node_with_envelope(
             pipeline="sre",
             node="determine_confidence",
+            envelope=ctx.state.envelope,
             fn=_impl,
-        )()
+        )
 
 
 @dataclasses.dataclass
@@ -572,16 +580,18 @@ class PublishFindings(BaseNode[State, Dependencies, common.InvestigationReply]):
 
             return End(reply)
 
-        return await instrumented_node_run(
+        return await _node_helpers.run_node_with_envelope(
             pipeline="sre",
             node="publish_findings",
+            envelope=ctx.state.envelope,
             fn=_impl,
-        )()
+        )
 
 
 async def investigate_alert(
     alert: sre_entities.Alert,
     *,
+    envelope: envelope_mod.Envelope,
     agent_for: Callable[[str], Any],
     holmes: holmes_adapter.BaseHolmesAdapter,
     status_update_client: common.StatusUpdateClient | None = None,
@@ -600,8 +610,13 @@ async def investigate_alert(
     Run the full SRE investigation pipeline for an alert.
 
     This is the main entry point for the investigation graph.
+
+    :param alert: The alert to investigate.
+    :param envelope: Identity envelope minted at ingress (RFC §3.1). Required;
+        carries ``request_id``, ``tenant_id``, ``cluster_id``, ``region``,
+        ``pii_class``, and ``received_at`` to every span and log line.
     """
-    state = State(alert=alert)
+    state = State(envelope=envelope, alert=alert)
     dependencies = Dependencies(
         status_update_client=status_update_client or common.NoOpStatusUpdateClient(),
         agent_for=agent_for,

@@ -18,6 +18,7 @@ import pytest
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.graphs import support_review
 from sentinel.settings import PROMPTS_DIR
+from tests import factories
 from tests.functional.conftest import StubDocumentSearcher, StubPastTicketSearcher
 
 
@@ -52,6 +53,7 @@ class TestSupportGoldenCases:
         # When running the support review pipeline
         reply = await support_review.review_ticket(
             ticket=ticket,
+            envelope=factories.make_envelope(),
             agent_for=fake_support_config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),

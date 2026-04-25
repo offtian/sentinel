@@ -347,6 +347,40 @@ Key env-var groups (see `.env.default` for the full list):
   PydanticAI's `litellm:` prefix.
 - **SRE / Support / K8s / MCP / Slack / approval** — see
   `.env.default`.
+- **Identity envelope** — `REGION`, `ENVELOPE_STRICT_MODE` (see Identity & Envelope below).
+
+## Identity & Envelope
+
+`Envelope` is the single value that carries request identity through every layer of the stack. RFC §3.1, R-IN-3.
+
+```
+Webhook POST ──┬─→ RequestIdMiddleware mints/echoes X-Request-Id (UUID)
+               │
+               ├─→ envelope_factory.envelope_from_<source>() composes Envelope
+               │   from request payload + settings (cluster_id, region)
+               │
+               ├─→ Envelope.tenant_id derivation: namespace label > service
+               │   tag > "unknown" + structured warning (or 422 in strict mode)
+               │
+               ├─→ Router serialises envelope identity onto queued payload
+               │   and passes envelope= into investigate_alert/review_ticket
+               │
+               ├─→ State.envelope flows through every pipeline node
+               │
+               ├─→ run_node_with_envelope() (in _node_helpers.py) sets the six
+               │   envelope-owned mandatory OTel attributes on the node span
+               │   (request_id, tenant_id, cluster_id, region, pii_class,
+               │   received_at) AND binds Envelope.to_log_context() onto
+               │   structlog.contextvars (auto-cleans on exception)
+               │
+               └─→ Response header X-Request-Id echoes the minted/supplied id
+```
+
+`Envelope` lives at `src/sentinel/data/envelope.py` as an `attrs.frozen(kw_only=True, slots=True)` class. Construction enforces tz-aware UTC `received_at`. PII redaction is applied at the log boundary: when `pii_class` is `confidential` or `mnpi`, `to_log_context()` swaps `tenant_id` for a 12-char sha256 `tenant_hash`. Span attributes deliberately keep the raw `tenant_id` because spans are not the redaction boundary; downstream exporters apply policy. The public `is_redacted_pii_class()` predicate exposes the rule for redactor / exporter implementations.
+
+`envelope_factory` (`src/sentinel/interfaces/webhooks/envelope_factory.py`) exposes one builder per ingress source — `envelope_from_pagerduty`, `envelope_from_datadog`, `envelope_from_jira`, plus `envelope_for_manual` for the body-driven `/investigate` and `/review` endpoints. Tenant slugs are sanitised and capped at the k8s namespace limit (63 chars). `BaseConfiguration.envelope_strict_mode` (env: `ENVELOPE_STRICT_MODE`, default `False`) flips soft-fail (warn + fall back to `"unknown"`) to hard-fail (raise `EnvelopeIngressError`, which routers surface as a 422 with a stable JSON shape: `{"error": "envelope_ingress_missing_tenant_id", "source": ..., "request_id": ...}`).
+
+The worker (`worker.py`) rehydrates the envelope from the queued payload's `ingress_request_id` / `pii_class` / `tenant_id` / `cluster_id` / `region` fields so the worker leg keeps the same correlation id and PII classification as the ingress leg. Replay, chat, and Slack callers mint per-invocation placeholder envelopes today; F4.5 retires the replay placeholder and chat/Slack stay until those surfaces gain real tenant resolution.
 
 ## Database
 

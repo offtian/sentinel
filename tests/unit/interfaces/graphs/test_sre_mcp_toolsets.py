@@ -65,6 +65,7 @@ class TestClassifyAlertToolsets:
         # When the pipeline runs with classifier_toolsets
         await sre_investigation.investigate_alert(
             alert=alert,
+            envelope=factories.make_envelope(),
             agent_for=config.agent_for,
             holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
@@ -119,6 +120,7 @@ class TestAnalyseRootCauseToolsetOrdering:
         # When the pipeline runs with per-agent first, shared MCP second
         await sre_investigation.investigate_alert(
             alert=alert,
+            envelope=factories.make_envelope(),
             agent_for=config.agent_for,
             holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,

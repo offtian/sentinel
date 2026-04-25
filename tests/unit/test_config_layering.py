@@ -195,6 +195,27 @@ class TestBaseConfigurationLayeredFields:
         assert config.skills_paths == ()
         assert config.tool_modules == ()
 
+    def test_envelope_strict_mode_default_is_false(self) -> None:
+        # Given default Settings
+        # When BaseConfiguration is constructed
+        config = config_mod.BaseConfiguration(settings=settings_mod.Settings())
+
+        # Then envelope_strict_mode defaults to False (soft-fail)
+        # so dev/foundation deployments warn-and-continue while
+        # production deployments can flip the flag for R-IN-3.
+        assert config.envelope_strict_mode is False
+
+    def test_envelope_strict_mode_can_be_overridden_at_construction(self) -> None:
+        # Given a caller that wants strict ingress validation
+        # When BaseConfiguration is constructed with envelope_strict_mode=True
+        config = config_mod.BaseConfiguration(
+            settings=settings_mod.Settings(),
+            envelope_strict_mode=True,
+        )
+
+        # Then the override is honoured
+        assert config.envelope_strict_mode is True
+
     def test_caller_can_override_field_at_construction(self) -> None:
         # Given a custom runbooks-path override
         custom_paths = (Path("custom-runbooks"),)

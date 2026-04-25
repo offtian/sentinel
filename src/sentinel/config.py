@@ -159,6 +159,11 @@ class BaseConfiguration(BaseModel):
     model_id_primary: str = ""
     model_id_judge: str = ""
 
+    envelope_strict_mode: bool = Field(
+        default=False,
+        description=("When True, hard-fail on missing tenant_id at webhook ingress (R-IN-3)."),
+    )
+
     @property
     def team_id(self) -> TeamId:
         """

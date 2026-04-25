@@ -1,14 +1,42 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from sentinel.data import envelope as envelope_mod
 from sentinel.domain.charts import entities as chart_entities
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre import holmes_adapter, investigation
 from sentinel.domain.support import entities as support_entities
+
+
+_FIXED_ENVELOPE_REQUEST_ID = uuid.UUID("00000000-0000-4000-8000-000000000001")
+
+
+def make_envelope(
+    *,
+    request_id: uuid.UUID | None = None,
+    tenant_id: str = "pm-default",
+    cluster_id: str = "dev-eu-west-1",
+    region: str = "eu-west-1",
+    pii_class: envelope_mod.PIIClass = "internal",
+    received_at: datetime | None = None,
+) -> envelope_mod.Envelope:
+    if request_id is None:
+        request_id = _FIXED_ENVELOPE_REQUEST_ID
+    if received_at is None:
+        received_at = datetime(2026, 4, 25, 12, 0, tzinfo=UTC)
+    return envelope_mod.Envelope(
+        request_id=request_id,
+        tenant_id=tenant_id,
+        cluster_id=cluster_id,
+        region=region,
+        pii_class=pii_class,
+        received_at=received_at,
+    )
 
 
 def make_alert(

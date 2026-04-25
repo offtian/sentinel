@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import re
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 from slack_bolt.context.ack.async_ack import AsyncAck
 
 from sentinel import config as config_mod
+from sentinel.data import envelope as envelope_mod
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre.holmes_adapter import HolmesAdapter
 from sentinel.domain.support import entities as support_entities
@@ -16,6 +18,24 @@ from sentinel.interfaces.slack.app import app
 from sentinel.interfaces.slack.status_update import SlackStatusUpdateClient
 from sentinel.settings import get_settings
 from sentinel.utils import logs
+
+
+def _envelope_for_slack(*, channel: str, user_id: str) -> envelope_mod.Envelope:
+    """
+    Mint an Envelope for a Slack-driven pipeline run.
+
+    Slack mentions are an interactive surface, not a webhook with upstream
+    correlation IDs, so we mint a fresh envelope per invocation. ``tenant_id``
+    encodes the Slack channel so multi-team workspaces can audit by channel.
+    """
+    return envelope_mod.Envelope(
+        request_id=uuid.uuid4(),
+        tenant_id=f"slack:{channel}",
+        cluster_id="slack",
+        region="slack",
+        pii_class="internal",
+        received_at=datetime.now(tz=UTC),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +194,7 @@ async def _run_sre(
     cfg = config_mod.get_config()
     reply = await sre_investigation.investigate_alert(
         alert=alert,
+        envelope=_envelope_for_slack(channel=channel, user_id="slack-thread"),
         agent_for=cfg.agent_for,
         holmes=HolmesAdapter(enabled=get_settings().holmesgpt_enabled),
         status_update_client=status,
@@ -221,6 +242,7 @@ async def _run_support(
     cfg = config_mod.get_config()
     reply = await support_review.review_ticket(
         ticket=ticket,
+        envelope=_envelope_for_slack(channel=channel, user_id=user_id),
         agent_for=cfg.agent_for,
         document_searcher=cfg.build_document_searcher(),
         ticket_searcher=cfg.build_ticket_searcher(),

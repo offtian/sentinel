@@ -30,6 +30,7 @@ class TestSuperviseSreInvestigation:
         investigate = partial(
             sre_investigation.investigate_alert,
             alert,
+            envelope=factories.make_envelope(),
             agent_for=fake_sre_config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
@@ -68,6 +69,7 @@ class TestSuperviseSreInvestigation:
         investigate = partial(
             sre_investigation.investigate_alert,
             alert,
+            envelope=factories.make_envelope(),
             agent_for=config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
@@ -107,6 +109,7 @@ class TestSuperviseSreInvestigation:
         investigate = partial(
             sre_investigation.investigate_alert,
             alert,
+            envelope=factories.make_envelope(),
             agent_for=config.agent_for,
             holmes=mock_holmes,
             post_to_slack=False,
@@ -135,6 +138,7 @@ class TestSuperviseSupportReview:
         review = partial(
             support_review.review_ticket,
             ticket,
+            envelope=factories.make_envelope(),
             agent_for=fake_support_config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
@@ -171,6 +175,7 @@ class TestSuperviseSupportReview:
         review = partial(
             support_review.review_ticket,
             ticket,
+            envelope=factories.make_envelope(),
             agent_for=config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
@@ -201,6 +206,7 @@ class TestSuperviseSupportReview:
         review = partial(
             support_review.review_ticket,
             ticket,
+            envelope=factories.make_envelope(),
             agent_for=fake_support_config.agent_for,
             document_searcher=EmptyDocumentSearcher(),
             ticket_searcher=EmptyPastTicketSearcher(),
