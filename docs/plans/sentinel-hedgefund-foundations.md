@@ -263,17 +263,39 @@ What landed:
 
 Maps to RFC §3.1, R-IN-3, R-IN-4. Mint `request_id` at FastAPI ingress; carry `tenant_id` / `region` / `pii_class` through every span and DB row.
 
-- [ ] **F2.1** Define `src/sentinel/domain/envelope.py` with `Envelope` `attrs.frozen` per RFC §3.1: `request_id: UUID`, `tenant_id: str`, `cluster_id: str`, `region: str`, `pii_class: Literal["public", "internal", "confidential", "mnpi"]`, `received_at: datetime` (UTC, tz-aware). Plus `to_log_context()` returning `dict[str, str]` for structlog binding and `to_span_attributes()` returning `dict[str, AttributeValue]` for OTel
-- [ ] **F2.2** Create `src/sentinel/interfaces/api/middleware.py` with `RequestIdMiddleware`: read `X-Request-Id` header → mint UUID4 if absent → set on `request.state.request_id` → bind to `structlog.contextvars` → set OTel current span attribute `request_id` → propagate as response header. ASGI middleware (matches FastAPI 0.110+ pattern)
-- [ ] **F2.3** Wire middleware in `src/sentinel/interfaces/api/__init__.py` (or wherever the FastAPI app is constructed — find via `grep -r "FastAPI("` if uncertain). Integration test: `curl -H "X-Request-Id: abc" /health` returns same id in response header
-- [ ] **F2.4** Update webhook handlers in `src/sentinel/interfaces/webhooks/` (PagerDuty, Datadog, AlertManager when added) to construct `Envelope` from request payload. `tenant_id` derivation: from k8s namespace label if present, else from PagerDuty service tag, else fallback to `"unknown"` and emit warning log (RFC §10.1 R-IN-3 makes this hard-fail in production; for foundations we warn-and-continue with tenant_id="unknown" to keep dev velocity, hard-fail flag added in `SRETeamConfig.envelope_strict_mode = False` for now)
-- [ ] **F2.5** Update pipeline `State` in `src/sentinel/interfaces/graphs/sre_investigation.py` to carry `envelope: Envelope`. Every node has access. Update existing nodes' first-line — no business-logic changes, just propagation
-- [ ] **F2.6** Update `instrumented_node_run()` in `src/sentinel/interfaces/graphs/_node_helpers.py` to set OTel span attributes from `state.envelope.to_span_attributes()`. Verify in F4.1 that all 6 mandatory attributes per RFC §13.2 land on every span
-- [ ] **F2.7** Update logger contexts to bind envelope. Replace ad-hoc `logger.bind(alert_id=...)` with `logger.bind(**envelope.to_log_context())` in every node. Search-and-replace candidates: `grep -rn "logger.bind" src/sentinel/interfaces/graphs/`
-- [ ] **F2.8** PII redaction at the envelope/log boundary. In `domain/envelope.py.to_log_context()`, when `pii_class in ("confidential", "mnpi")`, redact raw `tenant_id` to `tenant_hash = sha256(tenant_id)[:12]`. Tests asserting redaction behaviour
-- [ ] **F2.9** Unit tests `tests/unit/test_envelope.py`: construction, `to_span_attributes` shape, `to_log_context` redaction by pii_class. Integration test `tests/integration/test_request_id_propagation.py`: webhook → request_id in response → request_id in DB row (after F3) → request_id in spans (after F4)
+**Status: complete.** Detailed step-level breakdown lives in the F2 sub-plan: [`sentinel-foundations-f2-envelope.md`](sentinel-foundations-f2-envelope.md).
 
-**Acceptance:** Webhook POST generates UUID `request_id` echoed in response header, OTel spans, and DB rows. `pii_class` controls log redaction. R-IN-3 met (envelope minted before downstream stage; in foundations, soft-fail warns instead of hard-fails — see F2.4 note for production-hardening followup).
+What landed:
+
+- [x] **F2.1** `Envelope` `attrs.frozen(kw_only=True, slots=True)` in `src/sentinel/data/envelope.py` (not `domain/envelope.py` per the parent filemap — placed in `data/` so `config` and `interfaces` compose it without a layer violation, matching the F1 primitives pattern). Six fields per RFC §3.1: `request_id`, `tenant_id`, `cluster_id`, `region`, `pii_class`, `received_at`. `to_span_attributes()` returns the six envelope-owned mandatory OTel attributes; `to_log_context()` returns the structlog binding. Construction enforces tz-aware UTC `received_at`.
+- [x] **F2.2** `RequestIdMiddleware` (`BaseHTTPMiddleware` subclass) in `src/sentinel/interfaces/api/middleware.py`. Reuses caller-supplied `X-Request-Id` UUID, mints UUID4 when absent, re-mints on malformed value (with structured warning), sets `request.state.request_id` (UUID object), binds `structlog.contextvars`, attaches `request_id` to the current OTel span, echoes the id back in the response. `try/finally` cleanup unbinds contextvars on exception.
+- [x] **F2.3** Middleware wired in `src/sentinel/interfaces/api/app.py` between `bootstrap_otel.instrument_fastapi(app=app)` and the metrics mount, before any `app.include_router(...)`.
+- [x] **F2.4** `envelope_factory` module (`src/sentinel/interfaces/webhooks/envelope_factory.py`) composes `Envelope` from PagerDuty / Datadog / Jira / manual payloads. tenant_id precedence: k8s namespace label → service tag → `"unknown"` with structured warning. Tenant slugs sanitised and capped at the k8s namespace limit (63 chars). `BaseConfiguration.envelope_strict_mode: bool = False` (default soft-fail) flips strict-mode to raise `EnvelopeIngressError`, which both routers surface as a 422 with a stable JSON shape (`{"error": "envelope_ingress_missing_tenant_id", "source": ..., "request_id": ...}`). The error carries `source`, `request_id`, and a `missing_tenant_id` flag for machine-readable handling.
+- [x] **F2.5** SRE and support pipelines' `State` now require `envelope: Envelope`. Pipeline entry points (`investigate_alert`, `review_ticket`) require `envelope=` kwarg.
+- [x] **F2.6** New `run_node_with_envelope` helper in `src/sentinel/interfaces/graphs/_node_helpers.py` sets the six envelope-owned mandatory OTel attributes on every node span (RFC §13.2). The other three mandatory attrs (`prompt_version_sha`, `model_id`, `team_profile`) come from agent invocation context and remain F4 work.
+- [x] **F2.7** Same helper binds `envelope.to_log_context()` onto `structlog.contextvars` via `bound_contextvars` (auto-cleans on exception). Every SRE and support node runs through the helper.
+- [x] **F2.8** PII redaction in `to_log_context()` swaps `tenant_id` for a 12-char sha256 `tenant_hash` when `pii_class in ("confidential", "mnpi")`. Public predicate `is_redacted_pii_class()` exposes the rule for downstream consumers (redactors, exporters).
+- [x] **F2.9** 22 unit tests in `tests/unit/test_envelope.py` (construction, immutability, span-attribute shape, redaction by pii_class, predicate). 9 integration tests in `tests/integration/interfaces/api/test_request_id_propagation.py` covering webhook→response echo, span-attribute landing, structlog contextvars binding, Datadog/Jira variants, strict-mode rejection (422 with no pipeline span), and soft-mode fallback (`tenant_id="unknown"` + warning log). DB-row request_id (F3) and Langfuse span export (F4) deferred per phase scope.
+
+**Auxiliary work delivered alongside F2:**
+
+- Worker (`worker.py`) rehydrates the ingress envelope from queued payload fields (`ingress_request_id`, `pii_class`, `tenant_id`, `cluster_id`, `region`) so the worker leg of the pipeline keeps the same correlation id and PII classification as the ingress leg.
+- Replay (`replay.py`), chat (`interfaces/chat/app.py`), and Slack (`interfaces/slack/event_handlers.py`) callers mint per-invocation placeholder envelopes today; F4.5 retires the replay placeholder, chat/Slack stay until those surfaces gain real tenant resolution.
+- 13 existing pipeline / functional / eval tests updated to pass the `envelope` kwarg.
+
+**Tech debt captured (post-F2 follow-ups):**
+
+- Hoist `_envelope_ingress_failure_response` from both routers into `envelope_factory` as a public helper (verbatim duplicate today).
+- Add `Envelope.to_job_payload()` / `Envelope.from_job_payload()` to centralise queue serialisation; routers and worker currently maintain parallel hand-rolled dicts.
+- Add `envelope_factory.envelope_placeholder(*, source, ...)` so chat / Slack / replay placeholder helpers shrink to a one-liner.
+- Promote `_UNKNOWN_TENANT` (and a future `_MANUAL_TENANT`) onto `data/envelope.py` as public constants; today the `"unknown"` literal is re-declared in worker, replay, chat, and Slack.
+- Drop the now-dead `envelope` kwarg from `instrumented_node_run` (production goes through `run_node_with_envelope` exclusively); fold the OTel-attr setting into the wrapper and rewrite the two helper-tests to drive `run_node_with_envelope` directly.
+- `_sanitize_tenant_slug`'s 63-char cap currently only applies to the PagerDuty service-summary path; lift the cap into `_finalise_tenant_id` so k8s namespace, Datadog, and Jira sources honour it too.
+- Cache `to_log_context()` / `to_span_attributes()` outputs at construction time once F4 elevates `pii_class` onto the hot path (the per-emit sha256 is dormant in F2's default `pii_class="internal"`).
+- Chart pipeline (`interfaces/graphs/chart_generation.py`) was not updated with envelope propagation. Off the F2 critical path; revisit when chart_generation gets multi-tenant traffic.
+- Hoist the `recorded_spans` test fixture into `tests/conftest.py` (duplicated between `test_middleware.py` and `test_request_id_propagation.py`).
+
+**Acceptance (met):** Webhook POST generates UUID `request_id` echoed in response header, OTel spans, and structlog contextvars. `pii_class` controls log redaction. Strict-mode flag flips soft-fail to a 422 with a stable error shape. R-IN-3 met (envelope minted at every webhook stage; foundations warn-and-continue, production deploys flip strict). DB-row propagation (F3) and Langfuse span export (F4) extend the chain in subsequent phases.
 
 ---
 
