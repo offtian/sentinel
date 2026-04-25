@@ -46,11 +46,11 @@ The strategy is **evolve in place**, not greenfield. RFC §15.14 v0.4 selects Py
 |---|---|
 | §2.4 LiteLLM SDK in-process | PR #17 LiteLLM SDK migration — needs F5 evolution to proxy network mode |
 | §3.6 confidence + approval gate | `domain/confidence/`, `domain/approval/` |
-| §3.7 publish | `domain/sre/publish.py` + Slack/PagerDuty adapters |
+| §3.7 publish | `domain/investigations/publish.py` + Slack/PagerDuty adapters |
 | §3.8 trace bundle (partial) | PR #15 prompt-versioning-and-replay |
 | §4.5 skills runtime | `domain/skills/` (runbooks layer in F6 sits above skills) |
-| §5.8 HolmesGPT | `domain/sre/holmes_adapter.py` |
-| §10.4 K8s investigation backends | `domain/sre/k8s_native_agent.py`, `kagent_adapter.py` (PR #20) |
+| §5.8 HolmesGPT | `domain/investigations/holmes_adapter.py` |
+| §10.4 K8s investigation backends | `domain/investigations/k8s_native_agent.py`, `kagent_adapter.py` (PR #20) |
 | §10.5 OTEL spans (partial) | `data/tracing_models.py`, `bootstrap_otel.py` |
 | Token usage + cost | PR #18 |
 
@@ -196,7 +196,7 @@ src/sentinel/data/tracing_models.py                         # F3: extend AgentCa
 src/sentinel/bootstrap_otel.py                              # F4: Langfuse exporter wiring
 src/sentinel/utils/replay.py                                # F4: thin shim, delegates to replay_bundle.py
 
-src/sentinel/interfaces/graphs/sre_investigation.py         # F2/F6/F7/F8: envelope propagation, MatchRunbook node, capability gate, AssessQuality node
+src/sentinel/interfaces/graphs/investigation.py         # F2/F6/F7/F8: envelope propagation, MatchRunbook node, capability gate, AssessQuality node
 src/sentinel/interfaces/graphs/_node_helpers.py             # F4: mandatory span attributes from envelope
 src/sentinel/interfaces/graphs/agents/k8s_investigator.py   # F4 + F6: runbook in deps; instrument audit
 src/sentinel/interfaces/graphs/agents/alert_classifier.py   # F4: span attributes
@@ -373,7 +373,7 @@ Maps to RFC §4 + R-RB-1, R-RB-2. New runbook envelope coexists with existing sk
   - `tools.yaml`: `k8s_describe_pod`, `k8s_get_events`, `k8s_get_pod_logs`, `prom_query_range` with `max_calls`
   - `checks.yaml`: groundedness rules (every Finding has ≥1 evidence_ref; every evidence_ref must point at a tool_call within the same investigation)
   - `tests.yaml`: 3 golden cases (matcher fixtures: this alert should match, this alert should not, this alert should also match — covers R-RB-2's "50 permutations" via parameterised tests, foundations does 10)
-- [ ] **F6.6** Add new pipeline node `MatchRunbook` in `src/sentinel/interfaces/graphs/sre_investigation.py`. Position: after `ClassifyAlert`, before `InvestigateWithHolmes` (or `K8sInvestigator` depending on backend). Reads `state.envelope` + `state.alert`; calls `matcher.match_runbook`; writes `runbook_match` row from F3.3 via existing `domain/audit/` writer pattern; sets `state.runbook = matched_runbook`
+- [ ] **F6.6** Add new pipeline node `MatchRunbook` in `src/sentinel/interfaces/graphs/investigation.py`. Position: after `ClassifyAlert`, before `InvestigateWithHolmes` (or `K8sInvestigator` depending on backend). Reads `state.envelope` + `state.alert`; calls `matcher.match_runbook`; writes `runbook_match` row from F3.3 via existing `domain/audit/` writer pattern; sets `state.runbook = matched_runbook`
 - [ ] **F6.7** Update `src/sentinel/interfaces/graphs/agents/k8s_investigator.py` (and `holmes_adapter` and `kagent_adapter` paths) to receive the matched `Runbook` as a Dependency. Agent system prompt (Jinja2 template) gains a conditional block `{% if runbook %}{{ runbook.body }}{% endif %}` rendering the matched runbook body. Other agents (alert_classifier, root_cause_analyser) unchanged
 - [ ] **F6.8** Unit tests `tests/unit/test_runbook_loader.py` (fixture directory load, version_sha stability, frontmatter required fields), `tests/unit/test_runbook_matcher.py` (10+ alert-label permutations matching expected runbook IDs, deterministic ties, no-match returns None)
 - [ ] **F6.9** Integration test: end-to-end synthetic crashloop alert webhook → `MatchRunbook` writes `runbook_match` row → `K8sInvestigator` system prompt contains the runbook body (assert via OTel span attribute capture or by recording the rendered prompt to the `replay_bundle`)
@@ -410,7 +410,7 @@ Maps to RFC §5.3 + R-TL-3, R-TL-4. Tools authorized only when active runbook li
 Maps to RFC §5.4 + R-QG-1 + R-AG-4 + R-CO-1. Closes the foundations loop.
 
 - [ ] **F8.1** Define `src/sentinel/domain/quality/groundedness.py`. Frozen attrs `GroundednessVerdict(passed: bool, missing_evidence_findings: tuple[str, ...], stale_evidence_refs: tuple[str, ...], reason: str)`. Function `assess_groundedness(*, findings: tuple[Finding, ...], tool_calls: tuple[ToolCallRecord, ...]) -> GroundednessVerdict`. Rules per RFC §5.4: every `Finding` has ≥1 entry in `evidence_refs`; every `evidence_ref` matches a recorded `tool_call.evidence_object_id` in this investigation
-- [ ] **F8.2** Add new pipeline node `AssessQuality` in `src/sentinel/interfaces/graphs/sre_investigation.py`. Position: after `AnalyseRootCause`, before `DetermineConfidence`. Reads `state.findings` + `state.tool_calls`; runs `assess_groundedness`; writes `quality_verdict` row from F3.5; sets `state.quality_verdict`
+- [ ] **F8.2** Add new pipeline node `AssessQuality` in `src/sentinel/interfaces/graphs/investigation.py`. Position: after `AnalyseRootCause`, before `DetermineConfidence`. Reads `state.findings` + `state.tool_calls`; runs `assess_groundedness`; writes `quality_verdict` row from F3.5; sets `state.quality_verdict`
 - [ ] **F8.3** Update `DetermineConfidence` to consume `state.quality_verdict`. When `groundedness_pass=False`, return `End(failure_mode="ungrounded", verdict_reason=verdict.reason)` instead of proceeding to approval gate. Existing approval-gate logic untouched for grounded paths
 - [ ] **F8.4** Wire `audit_log` writes for every state transition (R-CO-1). New file `src/sentinel/application/audit.py` (if not present — check via `find src -name audit.py`) exposes `record_transition(*, request_id, from_state, to_state, reason)`. Call from each pipeline node's exit. Transitions: `received → matched → investigated → quality_assessed → confidence_scored → published_or_blocked`. Each row links via `prev_hash` to the previous row in the same `request_id` chain
 - [ ] **F8.5** Unit tests `tests/unit/test_groundedness.py`: finding without evidence_ref → fail; finding with non-matching evidence_ref → fail; clean run (every finding linked to a recorded tool_call) → pass; empty findings list → pass with reason "no findings to ground" (so we don't fail trivially when an investigation produces nothing)

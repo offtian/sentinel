@@ -72,10 +72,11 @@ interfaces/    → FastAPI routers, Pydantic Graph pipelines, webhook handlers, 
   mcp/         → FastMCP server exposing Sentinel tools to external agents
     ↓
 application/   → Use cases and orchestration (investigate, triage, review_ticket, search_docs)
-  supervisor/  → Quality-gate orchestration (supervise_sre_investigation, supervise_support_review)
+  supervisor/  → Quality-gate orchestration (supervise_investigation, supervise_support_review)
     ↓
 domain/        → Business entities, search abstractions, vendor adapters, confidence scoring
-  sre/         → Alert, Investigation, BaseInvestigationAdapter hierarchy, K8s adapters
+  alerts/      → Alert, AlertSeverity (entry-point shape, RFC §3.2)
+  investigations/ → Investigation, Finding, BaseInvestigationAdapter hierarchy, K8s adapters (RFC §3.5)
   pipeline/    → Pipeline error types (NodeError, PipelineNodeFailed)
   approval/    → ApprovalRequest, ApprovalDecision entities
   supervisor/  → QualityVerdict, SupervisorDecision, quality gate evaluation functions
@@ -140,16 +141,16 @@ The `PublishFindings` node is wired to three output channels via the `Dependenci
 
 ### Investigation Adapter Hierarchy
 
-All investigation backends implement `BaseInvestigationAdapter` (defined in `domain/sre/investigation.py`), which provides a unified contract with typed audit trail:
+All investigation backends implement `BaseInvestigationAdapter` (defined in `domain/investigations/adapters.py`), which provides a unified contract with typed audit trail:
 
 ```
-BaseInvestigationAdapter (ABC)           domain/sre/investigation.py
-├── BaseHolmesAdapter                    domain/sre/holmes_adapter.py
+BaseInvestigationAdapter (ABC)           domain/investigations/adapters.py
+├── BaseHolmesAdapter                    domain/investigations/holmes_adapter.py
 │   ├── HolmesAdapter (stub)
 │   └── DirectToolsetAdapter             Queries Datadog/Grafana directly
-└── K8sInvestigationAdapter (ABC)        domain/sre/investigation.py
-    ├── NativeK8sAgent                   domain/sre/k8s_native_agent.py
-    └── KagentAdapter                    domain/sre/kagent_adapter.py
+└── K8sInvestigationAdapter (ABC)        domain/investigations/adapters.py
+    ├── NativeK8sAgent                   domain/investigations/k8s_native_agent.py
+    └── KagentAdapter                    domain/investigations/kagent_adapter.py
 ```
 
 - **DirectToolsetAdapter** — queries observability backends directly (resolves HolmesGPT pydantic-ai dependency conflict)
@@ -416,7 +417,7 @@ Persistence functions live in the **domain layer**, organised by category:
 
 | Domain | Reads | Writes |
 |--------|-------|--------|
-| SRE | `domain/sre/queries.py` | `domain/sre/operations.py` |
+| Investigations | `domain/investigations/queries.py` | `domain/investigations/operations.py` |
 | Support | `domain/support/queries.py` | `domain/support/operations.py` |
 | Audit | — | `domain/audit/operations.py` |
 | Jobs | `domain/jobs/queries.py` | `domain/jobs/operations.py` |
@@ -500,7 +501,7 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 
 | Pattern | Source File |
 |---------|-----------|
-| Pydantic Graph pipeline | `src/sentinel/interfaces/graphs/sre_investigation.py` |
+| Pydantic Graph pipeline | `src/sentinel/interfaces/graphs/investigation.py` |
 | Search abstraction | `src/sentinel/domain/search/searcher.py` |
 | PydanticAI agents | `src/sentinel/interfaces/graphs/agents/alert_classifier.py` |
 | Model routing helper | `src/sentinel/interfaces/graphs/agents/utils.py` |
@@ -511,9 +512,9 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 | Quality gate | `src/sentinel/domain/supervisor/quality_gate.py` |
 | Supervisor orchestrator | `src/sentinel/application/supervisor/orchestrator.py` |
 | Approval entities | `src/sentinel/domain/approval/entities.py` |
-| Investigation adapter hierarchy | `src/sentinel/domain/sre/investigation.py` |
-| K8s native agent | `src/sentinel/domain/sre/k8s_native_agent.py` |
-| Kagent adapter | `src/sentinel/domain/sre/kagent_adapter.py` |
+| Investigation adapter hierarchy | `src/sentinel/domain/investigations/adapters.py` |
+| K8s native agent | `src/sentinel/domain/investigations/k8s_native_agent.py` |
+| Kagent adapter | `src/sentinel/domain/investigations/kagent_adapter.py` |
 | K8s tools | `src/sentinel/domain/tools/kubernetes.py` |
 | MCP server | `src/sentinel/interfaces/mcp/server.py` |
 | MCP client builder | `src/sentinel/plugins/toolsets/mcp.py` |

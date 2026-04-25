@@ -122,10 +122,10 @@ curl -X POST http://localhost:8000/api/support/review \
 just test
 
 # Single test file
-uv run pytest tests/unit/domain/sre/test_entities.py -vv
+uv run pytest tests/unit/domain/alerts/test_entities.py -vv
 
 # Single test
-uv run pytest tests/unit/domain/sre/test_entities.py::TestAlert::test_create_alert -vv
+uv run pytest tests/unit/domain/alerts/test_entities.py::TestAlert::test_create_alert -vv
 ```
 
 ## Code Quality
