@@ -6,13 +6,16 @@ from typing import Any
 
 import fastapi
 
+from sentinel.config import get_config
 from sentinel.data import db as async_db
+from sentinel.data import envelope as envelope_mod
 from sentinel.domain.jobs import operations as job_ops
 from sentinel.domain.support import entities
 from sentinel.domain.support import operations as support_ops
 from sentinel.domain.support import queries as support_queries
 from sentinel.domain.support.entities import ReviewStatus
 from sentinel.interfaces.api.dependencies import require_database
+from sentinel.interfaces.webhooks import envelope_factory
 from sentinel.settings import get_settings
 from sentinel.utils import logs
 
@@ -20,17 +23,39 @@ from sentinel.utils import logs
 router = fastapi.APIRouter(prefix="/support", tags=["support"])
 
 
+def _envelope_payload(envelope: envelope_mod.Envelope) -> dict[str, Any]:
+    """
+    Return the envelope identity fields as a sub-dict for the queued payload.
+
+    Mirror of the SRE router helper. The worker's ``_envelope_for_job``
+    rehydrates the same keys so the support pipeline run inherits the
+    ingress-time tenant context.
+    """
+    return {
+        "tenant_id": envelope.tenant_id,
+        "cluster_id": envelope.cluster_id,
+        "region": envelope.region,
+        "pii_class": envelope.pii_class,
+        "ingress_request_id": str(envelope.request_id),
+        "received_at": envelope.received_at.isoformat(),
+    }
+
+
 async def _enqueue_ticket(
     ticket: entities.Ticket,
     *,
     requested_by: str,
     priority: int = 2,
+    envelope: envelope_mod.Envelope | None = None,
 ) -> fastapi.responses.JSONResponse:
     """Enqueue a ticket for async review and return 202 Accepted."""
     db = async_db.get_db()
+    ticket_payload: dict[str, Any] = ticket.model_dump(mode="json")
+    if envelope is not None:
+        ticket_payload = {**ticket_payload, **_envelope_payload(envelope)}
     job_id = await job_ops.enqueue_review(
         db=db,
-        ticket_payload=ticket.model_dump(mode="json"),
+        ticket_payload=ticket_payload,
         requested_by=requested_by,
         ticket_id=ticket.id,
         priority=priority,
@@ -46,8 +71,23 @@ async def _enqueue_ticket(
     )
 
 
+def _envelope_ingress_failure_response(
+    error: envelope_factory.EnvelopeIngressError,
+) -> fastapi.responses.JSONResponse:
+    """Return a 422 response describing why envelope ingress failed."""
+    return fastapi.responses.JSONResponse(
+        status_code=422,
+        content={
+            "error": "envelope_ingress_missing_tenant_id",
+            "source": error.source,
+            "request_id": str(error.request_id),
+        },
+    )
+
+
 @router.post("/webhooks/jira")
 async def handle_jira_webhook(
+    request: fastapi.Request,
     payload: dict[str, Any],
 ) -> fastapi.responses.JSONResponse:
     """
@@ -83,17 +123,28 @@ async def handle_jira_webhook(
         params={"ticket_key": ticket.key, "summary": ticket.summary},
     )
 
+    try:
+        envelope = envelope_factory.envelope_from_jira(
+            payload=payload,
+            request_id=request.state.request_id,
+            settings=get_settings(),
+            strict=get_config().envelope_strict_mode,
+        )
+    except envelope_factory.EnvelopeIngressError as exc:
+        return _envelope_ingress_failure_response(exc)
+
     if not get_settings().support_auto_draft:
         return fastapi.responses.JSONResponse(
             status_code=200,
             content={"status": "received", "ticket_key": ticket.key, "auto_draft": False},
         )
 
-    return await _enqueue_ticket(ticket, requested_by="webhook:jira")
+    return await _enqueue_ticket(ticket, requested_by="webhook:jira", envelope=envelope)
 
 
 @router.post("/review")
 async def trigger_review(
+    request: fastapi.Request,
     payload: dict[str, Any],
 ) -> fastapi.responses.JSONResponse:
     """
@@ -108,6 +159,9 @@ async def trigger_review(
         "reporter": "John Doe",
         "priority": "High"
     }
+
+    The envelope minted here uses the ``"manual"`` tenant sentinel so ops
+    queries can distinguish API-driven runs from real ingress.
     """
     ticket = entities.Ticket(
         id=payload.get("id", "manual"),
@@ -121,7 +175,11 @@ async def trigger_review(
         raw_payload=payload,
     )
 
-    return await _enqueue_ticket(ticket, requested_by="api:manual")
+    envelope = envelope_factory.envelope_for_manual(
+        request_id=request.state.request_id,
+        settings=get_settings(),
+    )
+    return await _enqueue_ticket(ticket, requested_by="api:manual", envelope=envelope)
 
 
 @router.get("/reviews/{review_id}", dependencies=[fastapi.Depends(require_database)])

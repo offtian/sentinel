@@ -8,12 +8,14 @@ from typing import Any
 import fastapi
 from pydantic import BaseModel
 
+from sentinel.config import get_config
 from sentinel.data import db as async_db
+from sentinel.data import envelope as envelope_mod
 from sentinel.domain.jobs import operations as job_ops
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre import queries as sre_queries
 from sentinel.interfaces.api.dependencies import require_database
-from sentinel.interfaces.webhooks import pagerduty
+from sentinel.interfaces.webhooks import envelope_factory, pagerduty
 from sentinel.settings import get_settings
 from sentinel.utils import logs
 
@@ -21,17 +23,40 @@ from sentinel.utils import logs
 router = fastapi.APIRouter(prefix="/sre", tags=["sre"])
 
 
+def _envelope_payload(envelope: envelope_mod.Envelope) -> dict[str, Any]:
+    """
+    Return the envelope identity fields as a sub-dict for the queued payload.
+
+    The worker's ``_envelope_for_job`` reads the same keys back at the top
+    level of the payload, so this dict is merged into the alert payload
+    before it is enqueued. Pydantic's default ``extra="ignore"`` means the
+    Alert model rehydrates cleanly from the same payload.
+    """
+    return {
+        "tenant_id": envelope.tenant_id,
+        "cluster_id": envelope.cluster_id,
+        "region": envelope.region,
+        "pii_class": envelope.pii_class,
+        "ingress_request_id": str(envelope.request_id),
+        "received_at": envelope.received_at.isoformat(),
+    }
+
+
 async def _enqueue_alert(
     alert: sre_entities.Alert,
     *,
     requested_by: str,
     priority: int = 1,
+    envelope: envelope_mod.Envelope | None = None,
 ) -> fastapi.responses.JSONResponse:
     """Enqueue an alert for async investigation and return 202 Accepted."""
     db = async_db.get_db()
+    alert_payload: dict[str, Any] = alert.model_dump(mode="json")
+    if envelope is not None:
+        alert_payload = {**alert_payload, **_envelope_payload(envelope)}
     job_id = await job_ops.enqueue_investigation(
         db=db,
-        alert_payload=alert.model_dump(mode="json"),
+        alert_payload=alert_payload,
         requested_by=requested_by,
         alert_id=alert.id,
         priority=priority,
@@ -47,8 +72,57 @@ async def _enqueue_alert(
     )
 
 
+def _build_webhook_envelope(
+    *,
+    source: str,
+    payload: dict[str, Any],
+    request: fastapi.Request,
+) -> envelope_mod.Envelope:
+    """
+    Construct an ingress envelope for the given webhook source.
+
+    Reads ``request.state.request_id`` (UUID minted by ``RequestIdMiddleware``)
+    and the active settings + config. Honours ``envelope_strict_mode`` —
+    raises ``EnvelopeIngressError`` when on and tenant_id cannot be derived.
+    """
+    request_id = request.state.request_id
+    settings = get_settings()
+    config = get_config()
+    builder = _SOURCE_TO_ENVELOPE_BUILDER[source]
+    return builder(
+        payload=payload,
+        request_id=request_id,
+        settings=settings,
+        strict=config.envelope_strict_mode,
+    )
+
+
+_SOURCE_TO_ENVELOPE_BUILDER: dict[
+    str,
+    Callable[..., envelope_mod.Envelope],
+] = {
+    "pagerduty": envelope_factory.envelope_from_pagerduty,
+    "datadog": envelope_factory.envelope_from_datadog,
+}
+
+
+def _envelope_ingress_failure_response(
+    error: envelope_factory.EnvelopeIngressError,
+) -> fastapi.responses.JSONResponse:
+    """Return a 422 response describing why envelope ingress failed."""
+    return fastapi.responses.JSONResponse(
+        status_code=422,
+        content={
+            "error": "envelope_ingress_missing_tenant_id",
+            "source": error.source,
+            "request_id": str(error.request_id),
+        },
+    )
+
+
 async def _handle_webhook(
     *,
+    request: fastapi.Request,
     payload: dict[str, Any],
     parse_fn: Callable[[dict[str, Any]], sre_entities.Alert | None],
     source: str,
@@ -66,21 +140,28 @@ async def _handle_webhook(
         params={"alert_id": alert.id, "title": alert.title},
     )
 
+    try:
+        envelope = _build_webhook_envelope(source=source, payload=payload, request=request)
+    except envelope_factory.EnvelopeIngressError as exc:
+        return _envelope_ingress_failure_response(exc)
+
     if not get_settings().sre_auto_investigate:
         return fastapi.responses.JSONResponse(
             status_code=200,
             content={"status": "received", "alert_id": alert.id, "auto_investigate": False},
         )
 
-    return await _enqueue_alert(alert, requested_by=f"webhook:{source}")
+    return await _enqueue_alert(alert, requested_by=f"webhook:{source}", envelope=envelope)
 
 
 @router.post("/webhooks/pagerduty")
 async def handle_pagerduty_webhook(
+    request: fastapi.Request,
     payload: dict[str, Any],
 ) -> fastapi.responses.JSONResponse:
     """Receive PagerDuty V3 webhook events and enqueue for async investigation."""
     return await _handle_webhook(
+        request=request,
         payload=payload,
         parse_fn=pagerduty.parse_pagerduty_webhook,
         source="pagerduty",
@@ -89,10 +170,12 @@ async def handle_pagerduty_webhook(
 
 @router.post("/webhooks/datadog")
 async def handle_datadog_webhook(
+    request: fastapi.Request,
     payload: dict[str, Any],
 ) -> fastapi.responses.JSONResponse:
     """Receive Datadog webhook events and enqueue for async investigation."""
     return await _handle_webhook(
+        request=request,
         payload=payload,
         parse_fn=pagerduty.parse_datadog_webhook,
         source="datadog",
@@ -101,6 +184,7 @@ async def handle_datadog_webhook(
 
 @router.post("/investigate")
 async def trigger_investigation(
+    request: fastapi.Request,
     payload: dict[str, Any],
 ) -> fastapi.responses.JSONResponse:
     """
@@ -115,6 +199,9 @@ async def trigger_investigation(
         "service": "api-service",
         "source": "manual"
     }
+
+    The envelope minted here uses the ``"manual"`` tenant sentinel so ops
+    queries can distinguish API-driven runs from real ingress.
     """
     alert = sre_entities.Alert(
         id=payload.get("id", "manual-alert"),
@@ -127,7 +214,11 @@ async def trigger_investigation(
         raw_payload=payload,
     )
 
-    return await _enqueue_alert(alert, requested_by="api:manual")
+    envelope = envelope_factory.envelope_for_manual(
+        request_id=request.state.request_id,
+        settings=get_settings(),
+    )
+    return await _enqueue_alert(alert, requested_by="api:manual", envelope=envelope)
 
 
 @router.get(
