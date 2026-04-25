@@ -16,7 +16,7 @@ The strategy is **evolve in place**, not greenfield. RFC §15.14 v0.4 selects Py
 ### In scope
 
 - Validation sprint for tentative decisions D-11..D-16 + O-10 (each gets a one-page ADR with named-owner sign-off)
-- Config layering refactor: `Settings` → `BaseConfig` → `CommonConfig` → `SRETeamConfig`
+- Config layering refactor: two-layer chain `Settings` → `BaseConfiguration` (Pydantic, layered fields + firm-wide defaults) → `CommonConfiguration` (concrete vendor wiring in `plugins/common/`). Multi-tenant via `Settings.team_profile` discriminator + `TEAM_CONFIG_REFS` registry. Team-specific subclasses (`SRETeamConfig`, etc.) deferred until profiles diverge.
 - DB schema gap-fill for the 8 RFC-canonical tables: `alert_request`, `runbook_match`, `investigation`, `finding`, `tool_call`, `investigation_task`, `quality_verdict`, `audit_log`
 - Identity propagation: `request_id` UUID minted at FastAPI ingress, `tenant_id` / `region` / `pii_class` carried through every span and DB row
 - OTEL → Langfuse triple: mandatory span attribute set, Langfuse OTLP exporter, replay-bundle determinism (the §14.7 failure mode)
@@ -62,7 +62,7 @@ The strategy is **evolve in place**, not greenfield. RFC §15.14 v0.4 selects Py
 | Agent framework | PydanticAI (no change) | RFC D-01 v0.4 confirms; `instrument=True` already wired across agents |
 | Orchestration framework | Stay on Pydantic Graph for foundations; revisit LangGraph at month 3 (ADR 0007) | LangGraph's checkpoint replay is attractive but framework swap mid-foundations would block F4–F8; PR #15 already covers replay determinism via the bundle approach |
 | Strangler vs big-bang | Strangler everywhere | Existing pipelines must keep working at every phase boundary; LiteLLM proxy + runbook catalog + capability tokens coexist with current code until F8 |
-| Config layering | Refactor existing `BaseConfiguration` (`config.py`) into 4-layer chain (`Settings` → `BaseConfig` → `CommonConfig` → `SRETeamConfig`) per RFC §15.4 | One file per layer, inheritance not composition, single `team_id` abstract method |
+| Config layering | Two-layer chain on the existing Pydantic `BaseConfiguration`: layered fields + firm-wide defaults on `BaseConfiguration`, vendor wiring on `CommonConfiguration` in `plugins/common/`. Multi-tenant via `Settings.team_profile` + `TEAM_CONFIG_REFS` registry. Team subclasses (`SRETeamConfig`) earn their keep when behaviour diverges. | Pivoted from the original 4-layer attrs chain — Pydantic stays the single config contract, `team_id` is a property reading `settings.team_profile`, dispatch happens via `importlib` so `config` never depends on `plugins`. |
 | Identity propagation | `request_id` minted by FastAPI middleware; `tenant_id`/`region`/`pii_class` carried in `Envelope` frozen attrs from ingress | Matches RFC §3.1 + R-IN-3; `Envelope` is the single object every node reads tenant identity from |
 | DB schema | Add 4 missing canonical tables; migrate 4 existing tables (column adds, no data loss) | Existing `InvestigationRecord` ≈ `investigation`, `AuditLogRecord` ≈ `audit_log`, `AgentCallRecord` ≈ `tool_call` — rename + extend rather than duplicate |
 | Replay determinism | Extend PR #15 bundle with tool I/O snapshots; CI runs 30-iteration determinism test | Bit-for-bit reproducibility (R-AG-4); 30 runs balances coverage vs CI time |
@@ -79,7 +79,7 @@ The strategy is **evolve in place**, not greenfield. RFC §15.14 v0.4 selects Py
 ```
 Phase F0 — Validation sprint (D-11..D-16, O-10)              wk 0.5
               ↓
-Phase F1 — Config layering: Settings → BaseConfig → CommonConfig → SRETeamConfig    wk 1
+Phase F1 — Config layering: Settings → BaseConfiguration → CommonConfiguration      wk 1
               ↓
 Phase F2 — Identity & envelope propagation (request_id, tenant_id, pii_class)       wk 1
               ↓
@@ -102,7 +102,7 @@ F0 gates everything (decisions can flip downstream phases). F1 unblocks F4 (conf
 
 | RFC reference | Gap |
 |---|---|
-| §1.4 multi-team profiles | Single `BaseConfiguration` class — needs 4-layer chain so DevOps/ACE can plug in later |
+| §1.4 multi-team profiles | Layered fields + firm-wide defaults must live on `BaseConfiguration`, with `Settings.team_profile` + `TEAM_CONFIG_REFS` dispatch so DevOps/ACE can plug in via a registry entry. Team subclasses arrive when behaviour diverges. |
 | §3.1 envelope | `request_id` not propagated to spans/DB; `tenant_id` and `pii_class` absent from existing models |
 | §3.2 alert_request | Stage 1 has no canonical row — webhook handler writes nothing until pipeline starts |
 | §3.3 runbook_match | No runbook table; skills are the closest analog but don't carry match_method/match_confidence |
@@ -129,13 +129,11 @@ docs/adrs/0005-D16-postgres-pgvector.md
 docs/adrs/0006-O10-pydanticai-langgraph.md
 docs/adrs/0007-orchestration-framework.md                   # F5 outcome
 
-src/sentinel/plugins/teams/__init__.py                      # F1: TypeAlias union of TeamConfig
-src/sentinel/plugins/teams/sre/__init__.py                  # F1: SRETeamConfig
-src/sentinel/plugins/common/__init__.py                     # F1: substrate handles
-src/sentinel/plugins/common/common.py                       # F1: CommonConfig
-src/sentinel/plugins/common/approval.py                     # F1: ApprovalPolicy primitive
-src/sentinel/plugins/common/output.py                       # F1: OutputChannel primitive
-src/sentinel/plugins/common/redaction.py                    # F1: RedactionPolicy primitive
+src/sentinel/plugins/common/__init__.py                     # F1: substrate package marker
+src/sentinel/data/policies.py                               # F1: ApprovalPolicy + OutputChannel + RedactionPolicy frozen primitives
+                                                            # (Team subclasses src/sentinel/plugins/teams/<name>/config.py
+                                                            #  deferred to a later plan — they earn their keep when team
+                                                            #  behaviour actually diverges.)
 
 src/sentinel/domain/envelope.py                             # F2: Envelope frozen attrs
 src/sentinel/interfaces/api/middleware.py                   # F2: RequestIdMiddleware
@@ -188,9 +186,9 @@ tests/unit/test_groundedness.py                             # F8
 #### Modified
 
 ```
-src/sentinel/settings.py                                    # F1: env-only fields, drop logic
-src/sentinel/config.py                                      # F1: BaseConfig (shape) + get_config() entry point
-src/sentinel/plugins/config.py                              # F1: legacy CommonConfiguration → wrapper, then deprecate
+src/sentinel/settings.py                                    # F1: env-only additions (team_profile, litellm_*, langfuse_*, otel_collector_endpoint, runbooks_root)
+src/sentinel/config.py                                      # F1: layered fields + firm-wide defaults on BaseConfiguration, TEAM_CONFIG_REFS dispatch via importlib
+src/sentinel/plugins/config.py → src/sentinel/plugins/common/config.py    # F1: rename in-place; concrete CommonConfiguration moves alongside the future shared substrate
 
 src/sentinel/data/audit_models.py                           # F3: WORM constraints + request_id
 src/sentinel/data/models.py                                 # F3: extend InvestigationRecord toward `investigation` shape
@@ -236,22 +234,28 @@ Maps to RFC §14 week 0.5. No code change; produces ADRs that may amend the RFC.
 
 ### Phase F1: Config layering refactor
 
-Maps to RFC §15. Refactor existing `BaseConfiguration` into the 4-layer chain. Strangler — every existing call to `get_config()` keeps returning a working object.
+Maps to RFC §15. Two-layer chain: `Settings` → `BaseConfiguration` (Pydantic, layered fields + firm-wide defaults) → `CommonConfiguration` (concrete vendor wiring in `plugins/common/`). Strangler — every existing call to `get_config()` keeps returning a working object.
 
-- [ ] **F1.1** Define `BaseConfig` skeleton in `src/sentinel/config.py` per RFC §15.4. `attrs.frozen(slots=True, kw_only=True)` with placeholder defaults: `investigation_loop_cap: int = 0`, `investigation_timeout_seconds: int = 0`, `confidence_publish_min: float = 0.0`, `redaction_policy: RedactionPolicy = empty`, `allowed_tools: frozenset[str] = frozenset()`, `output_channels: tuple[OutputChannel, ...] = ()`, `system_prompts: Mapping[str, str] = MappingProxyType({})`, `approval_policy: ApprovalPolicy = empty`, `model_id_primary: str = ""`, `model_id_judge: str = ""`, `runbooks_paths: tuple[Path, ...] = ()`. Plus `team_id` abstract method (single discriminator)
-- [ ] **F1.2** Move env-var ingestion into `src/sentinel/settings.py` only — drop logic. Add fields per RFC §15.3: `team_profile: Literal["sre", "devops", "ace"]`, `litellm_base_url: HttpUrl | None`, `litellm_virtual_key: SecretStr | None`, `langfuse_host: HttpUrl | None`, `langfuse_public_key: SecretStr | None`, `langfuse_secret_key: SecretStr | None`, `otel_collector_endpoint: HttpUrl | None`, `runbooks_root: Path`. Keep existing fields (`alert_classifier_llm`, etc.) for backwards compatibility
-- [ ] **F1.3** Create `src/sentinel/plugins/common/common.py` with `CommonConfig(BaseConfig)` filling shared defaults per RFC §15.5: `investigation_loop_cap = 8`, `investigation_timeout_seconds = 300`, `confidence_publish_min = 0.7`, `confidence_human_review_min = 0.4`, `case_retrieval_top_k = 5`, `enable_replay_bundle = True`. Move infra-client factories (`build_litellm_client`, `build_langfuse_client`, `build_db_session_factory`) from existing `plugins/config.CommonConfiguration` into this class as `@property`/`functools.cached_property`
-- [ ] **F1.4** Create primitives: `src/sentinel/plugins/common/approval.py` (`ApprovalPolicy`), `output.py` (`OutputChannel`), `redaction.py` (`RedactionPolicy`). All `attrs.frozen` per RFC §15.9
-- [ ] **F1.5** Create `src/sentinel/plugins/teams/__init__.py` defining `TeamConfig: TypeAlias = "SRETeamConfig"` (string forward-ref to dodge circular import). Add `# devops/ace land in later plans` comment
-- [ ] **F1.6** Create `src/sentinel/plugins/teams/sre/__init__.py` with `SRETeamConfig(CommonConfig)` per RFC §15.7. Concrete values: `team_id = "sre"`, allowed tools (k8s_, prom_, harness_ prefixes — start with current toolset names), output channels (Slack `#sre-oncall`, PagerDuty), `model_id_primary` from `settings.root_cause_llm`, `runbooks_paths = (settings.runbooks_root / "sre", settings.runbooks_root / "common")`
-- [ ] **F1.7** Update `get_config()` in `src/sentinel/config.py` per RFC §15.11. `lru_cache`-wrapped, dispatches on `settings.team_profile`. For now, only `"sre"` returns `SRETeamConfig`; `"devops"`/`"ace"` raise `NotImplementedError` with explicit "see plan X" pointer. Backward-compat: existing callers `get_config()` returns the SRE config object that satisfies `BaseConfig`
-- [ ] **F1.8** Update import-linter contracts in `pyproject.toml`: `plugins/teams/sre` may not import `plugins/teams/devops` or `plugins/teams/ace` (when those land); `plugins/common` may not import any `plugins/teams/*`; `domain/*` may not import any `plugins/*`
-- [ ] **F1.9** Migrate all existing callers of `BaseConfiguration` / `CommonConfiguration` to the new 4-layer types. Keep `plugins/config.CommonConfiguration` as a thin deprecated alias (`CommonConfiguration: TypeAlias = SRETeamConfig` with a `@deprecated` decorator) for one release. Fix imports per `python.md` rule (module-level only, import modules not objects)
-- [ ] **F1.10** Unit tests `tests/unit/test_config_layering.py`: assert `BaseConfig` cannot be instantiated directly (abstract `team_id`); `CommonConfig` fills loop_cap=8, redaction policy non-empty; `SRETeamConfig.team_id == "sre"`; allowed_tools is a frozenset; testing pattern via factory injection per RFC §15.13 (no `os.environ` mutation in tests)
-- [ ] **F1.11** Update `.env.default` with new env vars + comments documenting each. Update `docs/architecture.md` §Configuration with the new 4-layer diagram (mermaid classDiagram from RFC §15.1)
-- [ ] **F1.12** Run `just lint && just test` — all green. Confirm existing pipelines run unchanged via `just run-api` smoke
+**Status: complete (PR #22).** Detailed step-level breakdown lives in the F1 sub-plan: [`sentinel-foundations-f1-config-layering.md`](sentinel-foundations-f1-config-layering.md).
 
-**Acceptance:** `get_config()` returns an `SRETeamConfig` instance that satisfies `BaseConfig`. Existing call sites unchanged. R-OB-2 unblocked (configs carry `team_id` for span tagging). Import-linter contracts pass. Backward-compat alias survives one release.
+What landed:
+
+- [x] **F1.1** Layered fields with RFC §15.5 firm-wide defaults declared on the existing Pydantic `BaseConfiguration` (`config.py`): `investigation_loop_cap=8`, `investigation_timeout_seconds=300`, `confidence_publish_min=0.7`, `confidence_human_review_min=0.4`, `redaction_policy` (default factory → `RedactionPolicy.default()`), `approval_policy` (default factory → `ApprovalPolicy.empty()`), `output_channels`, `runbooks_paths`, `skills_paths`, `tool_modules`, `allowed_tools`, `allowed_skills`, `case_retrieval_*`, `eval_groundedness_min`, `enable_replay_bundle`, `model_id_primary`, `model_id_judge`. `team_id` is a `@property` reading `settings.team_profile`.
+- [x] **F1.2** Settings additions per RFC §15.3 (`settings.py`): `team_profile: Literal["sre", "devops", "ace"]`, `litellm_base_url: HttpUrl | None`, `litellm_virtual_key: SecretStr | None`, `langfuse_host: HttpUrl | None`, `langfuse_public_key: SecretStr | None`, `langfuse_secret_key: SecretStr | None`, `otel_collector_endpoint: HttpUrl | None`, `runbooks_root: Path`. Existing fields kept untouched.
+- [x] **F1.3** Policy primitives in `src/sentinel/data/policies.py`: `ApprovalPolicy`, `OutputChannel`, `RedactionPolicy` — `attrs.frozen(kw_only=True, slots=True)` with `.default()` and `.empty()` classmethod factories per RFC §15.9. Live in `data/` so `config` composes them without touching `domain`.
+- [x] **F1.4** Multi-tenant dispatch via `TEAM_CONFIG_REFS: dict[TeamId, "module:Class"]` registry in `config.py`, resolved at first `get_config()` call via `importlib.import_module`. Only `"sre"` wired; `"devops"`/`"ace"` raise `NotImplementedError` with a registry pointer.
+- [x] **F1.5** `src/sentinel/plugins/config.py` → `src/sentinel/plugins/common/config.py` rename in-place. Concrete `CommonConfiguration` lives alongside the future shared substrate (`plugins/common/runbooks/`, `plugins/common/skills/`). Six test imports updated.
+- [x] **F1.6** Unit tests in `tests/unit/test_config_layering.py` cover primitive defaults / immutability / placeholder factories, layered field defaults on `BaseConfiguration`, `team_id` derivation from settings, and Settings additions. 17 tests added; full suite (795 unit) green.
+- [x] **F1.7** `.env.default` documents the new env vars next to existing groups. `docs/architecture.md` §Configuration describes the two-layer chain and the policy primitives. F1 sub-plan + index updated.
+
+**Dropped from scope (revisit when earned):**
+
+- Separate `BaseConfig` (attrs.frozen) class — collapsed onto the existing Pydantic `BaseConfiguration`.
+- Separate `CommonConfig` class in `plugins/common/common.py` — shared defaults live on `BaseConfiguration` itself.
+- `SRETeamConfig` and the `plugins/teams/sre/` tree — `team_id` derives from settings; introduce subclasses when behaviour diverges (allowed tools, output channels, runbook paths).
+- Import-linter contracts for `plugins/teams/*` — no such tree exists yet.
+
+**Acceptance (met):** `get_config()` returns a `CommonConfiguration` (a `BaseConfiguration` subclass). Existing call sites unchanged. R-OB-2 unblocked (`team_id` available for span tagging). Import-linter contracts pass.
 
 ---
 
@@ -402,6 +406,7 @@ Maps to RFC §5.4 + R-QG-1 + R-AG-4 + R-CO-1. Closes the foundations loop.
 | Date | What changed | Why |
 |------|-------------|-----|
 | 2026-04-25 | Initial draft | RFC-001 v0.4 ratified; foundations defined per evolve-in-place strategy |
+| 2026-04-25 | F1 pivot recorded: collapsed 4-layer attrs chain (`Settings → BaseConfig → CommonConfig → SRETeamConfig`) to two-layer Pydantic chain (`Settings → BaseConfiguration → CommonConfiguration`); multi-tenant via `Settings.team_profile` + `TEAM_CONFIG_REFS` registry; `SRETeamConfig` deferred until team behaviour diverges. Phase F1 marked complete (PR #22). | Pydantic `BaseModel` is the project's existing config contract; collapsing to one type avoided parallel attrs/Pydantic types and earned the right to keep team subclasses for when divergent behaviour actually exists. |
 
 ## Outcome
 

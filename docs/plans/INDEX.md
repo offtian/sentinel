@@ -32,6 +32,7 @@
 | Plan | Goal | Progress | Notes |
 |------|------|----------|-------|
 | [grafana-metrics](grafana-metrics.md) | OTel metrics instrumentation for Grafana dashboards | 2/5 | Prometheus reader + basic metrics wired |
+| [sentinel-foundations-f1-config-layering](sentinel-foundations-f1-config-layering.md) | Land the F1 layered config substrate on `BaseConfiguration` (Pydantic) + new env-vars + policy primitives + `TEAM_CONFIG_REFS` dispatch | 6/8 | F1 of foundations plan; original 4-layer chain consolidated to two practical layers — see plan for the pivot rationale |
 
 ### Draft (Not Started)
 
