@@ -14,7 +14,7 @@ from unittest import mock
 from holmes.core import tools as holmes_tools_mod
 
 from sentinel import settings as settings_mod
-from sentinel.plugins import config as plugins_config_mod
+from sentinel.plugins.common import config as plugins_config_mod
 
 
 def _make_settings(**overrides: object) -> mock.MagicMock:

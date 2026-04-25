@@ -7,7 +7,7 @@ import pytest
 from sentinel import settings
 from sentinel import worker as worker_mod
 from sentinel.domain.sre import investigation, k8s_native_agent, kagent_adapter
-from sentinel.plugins import config as plugin_config_mod
+from sentinel.plugins.common import config as plugin_config_mod
 
 
 # ---------------------------------------------------------------------------
