@@ -16,6 +16,7 @@ import difflib
 import json
 import sys
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import attrs
@@ -23,6 +24,7 @@ import databases
 
 from sentinel import config as config_mod
 from sentinel import settings as settings_mod
+from sentinel.data import envelope as envelope_mod
 from sentinel.domain.pipeline import errors as pipeline_errors
 from sentinel.domain.pipeline import queries as pipeline_queries
 from sentinel.domain.pipeline import tracer as pipeline_tracer
@@ -31,6 +33,26 @@ from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.graphs import sre_investigation, support_review
 from sentinel.interfaces.graphs.agents import k8s_runner
+
+
+def _envelope_for_replay(bundle: pipeline_types.ReplayBundle) -> envelope_mod.Envelope:
+    """
+    Mint an Envelope for a replay re-execution.
+
+    Replay synthesises a deterministic envelope tied to the original run.
+    Until F4.5 ships full envelope persistence on ``ReplayBundle``, the
+    replay leg uses a fresh ``request_id`` so its spans are distinguishable
+    from the original run's spans, while keeping placeholders for the
+    multi-tenant fields.
+    """
+    return envelope_mod.Envelope(
+        request_id=uuid.uuid4(),
+        tenant_id="replay",
+        cluster_id="replay",
+        region="replay",
+        pii_class="internal",
+        received_at=datetime.now(tz=UTC),
+    )
 
 
 async def _fetch_and_print(*, run_id: uuid.UUID) -> None:
@@ -114,6 +136,7 @@ async def _replay_sre(
 
     result = await sre_investigation.investigate_alert(
         alert,
+        envelope=_envelope_for_replay(bundle),
         agent_for=cfg.agent_for,
         holmes=cfg.build_holmes_adapter(),
         trace_collector=et,
@@ -155,6 +178,7 @@ async def _replay_support(
 
     result = await support_review.review_ticket(
         ticket,
+        envelope=_envelope_for_replay(bundle),
         agent_for=cfg.agent_for,
         document_searcher=cfg.build_document_searcher(),
         ticket_searcher=cfg.build_ticket_searcher(),

@@ -18,6 +18,8 @@ import asyncio
 import json
 import os
 import signal
+import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import databases
@@ -27,6 +29,7 @@ from sentinel import config as config_mod
 from sentinel.application.automations import runner as automation_runner
 from sentinel.data import database
 from sentinel.data import db as async_db
+from sentinel.data import envelope as envelope_mod
 from sentinel.domain import prompts
 from sentinel.domain.jobs import entities
 from sentinel.domain.jobs import operations as job_ops
@@ -46,6 +49,51 @@ from sentinel.utils import logs
 def _collect_model_ids(settings: object, *attr_names: str) -> list[str]:
     """Return model ID strings from the settings object for the given attribute names."""
     return [str(getattr(settings, name, "")) for name in attr_names if getattr(settings, name, "")]
+
+
+_VALID_PII_CLASSES: frozenset[envelope_mod.PIIClass] = frozenset(
+    {"public", "internal", "confidential", "mnpi"},
+)
+
+
+def _request_id_from_payload(payload: dict[str, object]) -> uuid.UUID:
+    """Return the upstream ingress request_id from the payload, or mint a fresh one."""
+    raw = payload.get("ingress_request_id")
+    if isinstance(raw, str):
+        try:
+            return uuid.UUID(raw)
+        except ValueError:
+            pass
+    return uuid.uuid4()
+
+
+def _pii_class_from_payload(payload: dict[str, object]) -> envelope_mod.PIIClass:
+    """Return the upstream pii_class from the payload, defaulting to ``internal``."""
+    raw = payload.get("pii_class")
+    if isinstance(raw, str) and raw in _VALID_PII_CLASSES:
+        return raw  # type: ignore[return-value]
+    return "internal"
+
+
+def _envelope_for_job(payload: dict[str, object]) -> envelope_mod.Envelope:
+    """
+    Rehydrate the ingress Envelope from a background job payload.
+
+    Webhook handlers serialise the envelope identity (`tenant_id`,
+    `cluster_id`, `region`, `pii_class`, `ingress_request_id`) onto the
+    queued payload before enqueue. The worker rebuilds the envelope here
+    so the worker leg of the pipeline keeps the same `request_id` and
+    PII classification as the ingress leg. Falls back to ``"unknown"``
+    placeholders only when a field is missing or malformed.
+    """
+    return envelope_mod.Envelope(
+        request_id=_request_id_from_payload(payload),
+        tenant_id=str(payload.get("tenant_id", "unknown")),
+        cluster_id=str(payload.get("cluster_id", "unknown")),
+        region=str(payload.get("region", "unknown")),
+        pii_class=_pii_class_from_payload(payload),
+        received_at=datetime.now(tz=UTC),
+    )
 
 
 _shutdown_requested = False
@@ -195,6 +243,7 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     try:
         result = await sre_investigation.investigate_alert(
             alert=alert,
+            envelope=_envelope_for_job(payload),
             agent_for=cfg.agent_for,
             holmes=holmes,
             pagerduty_client=pd_client,
@@ -279,6 +328,7 @@ async def _run_support_review(payload: dict[str, object]) -> str:
     try:
         result = await support_review.review_ticket(
             ticket=ticket,
+            envelope=_envelope_for_job(payload),
             agent_for=cfg.agent_for,
             document_searcher=cfg.build_document_searcher(),
             ticket_searcher=cfg.build_ticket_searcher(),

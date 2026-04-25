@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import json
+import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -26,6 +27,7 @@ import streamlit as st
 
 from sentinel import bootstrap
 from sentinel import config as config_mod
+from sentinel.data import envelope as envelope_mod
 from sentinel.domain.charts import entities as chart_entities
 from sentinel.domain.search import factory as search_factory
 from sentinel.domain.sre import entities as sre_entities
@@ -36,6 +38,24 @@ from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.graphs import chart_generation, common, sre_investigation, support_review
 from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
 from sentinel.settings import get_settings
+
+
+def _envelope_for_chat() -> envelope_mod.Envelope:
+    """
+    Mint an Envelope for a chat-driven local pipeline run.
+
+    The Streamlit chat is a developer surface — it has no upstream
+    webhook. We mint a fresh envelope per chat invocation so spans
+    are correctly correlated within the run.
+    """
+    return envelope_mod.Envelope(
+        request_id=uuid.uuid4(),
+        tenant_id="local-chat",
+        cluster_id="local",
+        region="local",
+        pii_class="internal",
+        received_at=datetime.now(tz=UTC),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +205,7 @@ async def _run_sre(
 
     return await sre_investigation.investigate_alert(
         alert=alert,
+        envelope=_envelope_for_chat(),
         agent_for=cfg.agent_for,
         holmes=holmes_adapter.HolmesAdapter(enabled=get_settings().holmesgpt_enabled),
         status_update_client=status_client,
@@ -223,6 +244,7 @@ async def _run_support(
 
     return await support_review.review_ticket(
         ticket=ticket,
+        envelope=_envelope_for_chat(),
         agent_for=cfg.agent_for,
         document_searcher=search_factory.build_document_searcher(),
         ticket_searcher=search_factory.build_ticket_searcher(),

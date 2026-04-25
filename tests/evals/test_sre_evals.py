@@ -75,6 +75,7 @@ class TestSreGoldenCases:
         # When running the investigation pipeline
         reply = await sre_investigation.investigate_alert(
             alert=alert,
+            envelope=factories.make_envelope(),
             agent_for=fake_sre_config.agent_for,
             holmes=holmes,
             post_to_slack=False,

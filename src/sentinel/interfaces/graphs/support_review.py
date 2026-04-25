@@ -9,11 +9,11 @@ from typing import Any
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
+from sentinel.data import envelope as envelope_mod
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.search import searcher
 from sentinel.domain.support import entities as support_entities
-from sentinel.interfaces.graphs import common
-from sentinel.interfaces.graphs._node_helpers import instrumented_node_run
+from sentinel.interfaces.graphs import _node_helpers, common
 from sentinel.interfaces.graphs.agents import response_drafter, ticket_reviewer
 from sentinel.interfaces.graphs.agents import utils as agent_utils
 from sentinel.utils import logs, metrics
@@ -34,6 +34,10 @@ class Dependencies:
 
 @dataclasses.dataclass
 class State:
+    # Identity envelope minted at ingress and threaded through every node.
+    # Required (no default) so a misconfigured caller fails closed at
+    # State construction rather than silently losing tenant context.
+    envelope: envelope_mod.Envelope
     ticket: support_entities.Ticket
 
 
@@ -109,11 +113,12 @@ class ClassifyTicket(BaseNode[State, Dependencies, common.SupportReply]):
                 search_queries=result.output.search_queries,
             )
 
-        return await instrumented_node_run(
+        return await _node_helpers.run_node_with_envelope(
             pipeline="support",
             node="classify_ticket",
+            envelope=ctx.state.envelope,
             fn=_impl,
-        )()
+        )
 
 
 @dataclasses.dataclass
@@ -187,11 +192,12 @@ class SearchDocumentation(BaseNode[State, Dependencies, common.SupportReply]):
                 ticket_results=ticket_results,
             )
 
-        return await instrumented_node_run(
+        return await _node_helpers.run_node_with_envelope(
             pipeline="support",
             node="search_documentation",
+            envelope=ctx.state.envelope,
             fn=_impl,
-        )()
+        )
 
 
 @dataclasses.dataclass
@@ -274,11 +280,12 @@ class DraftResponse(BaseNode[State, Dependencies, common.SupportReply]):
                 notes=result.output.notes_for_agent,
             )
 
-        return await instrumented_node_run(
+        return await _node_helpers.run_node_with_envelope(
             pipeline="support",
             node="draft_response",
+            envelope=ctx.state.envelope,
             fn=_impl,
-        )()
+        )
 
 
 @dataclasses.dataclass
@@ -336,16 +343,18 @@ class DetermineConfidence(BaseNode[State, Dependencies, common.SupportReply]):
 
             return End(reply)
 
-        return await instrumented_node_run(
+        return await _node_helpers.run_node_with_envelope(
             pipeline="support",
             node="determine_confidence",
+            envelope=ctx.state.envelope,
             fn=_impl,
-        )()
+        )
 
 
 async def review_ticket(
     ticket: support_entities.Ticket,
     *,
+    envelope: envelope_mod.Envelope,
     agent_for: Callable[[str], Any],
     document_searcher: searcher.BaseDocumentSearcher | None = None,
     ticket_searcher: searcher.BasePastTicketSearcher | None = None,
@@ -359,8 +368,13 @@ async def review_ticket(
     Run the full support ticket review pipeline.
 
     This is the main entry point for the support review graph.
+
+    :param ticket: The support ticket to review.
+    :param envelope: Identity envelope minted at ingress (RFC §3.1). Required;
+        carries ``request_id``, ``tenant_id``, ``cluster_id``, ``region``,
+        ``pii_class``, and ``received_at`` to every span and log line.
     """
-    state = State(ticket=ticket)
+    state = State(envelope=envelope, ticket=ticket)
     dependencies = Dependencies(
         status_update_client=status_update_client or common.NoOpStatusUpdateClient(),
         agent_for=agent_for,

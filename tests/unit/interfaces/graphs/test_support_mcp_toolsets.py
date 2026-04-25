@@ -15,7 +15,7 @@ import pytest
 
 from sentinel.interfaces.graphs import support_review
 from sentinel.interfaces.graphs.agents import response_drafter, ticket_reviewer
-from tests.factories import make_ticket
+from tests.factories import make_envelope, make_ticket
 from tests.functional.conftest import (
     FakeAgentResult,
     StubDocumentSearcher,
@@ -65,6 +65,7 @@ class TestClassifyTicketToolsets:
         # When the pipeline runs with reviewer_toolsets
         await support_review.review_ticket(
             ticket=ticket,
+            envelope=make_envelope(),
             agent_for=config.agent_for,
             document_searcher=StubDocumentSearcher(),
             reviewer_toolsets=(shared_toolset,),
@@ -116,6 +117,7 @@ class TestDraftResponseToolsetOrdering:
         # When the pipeline runs with per-agent first, shared MCP second
         await support_review.review_ticket(
             ticket=ticket,
+            envelope=make_envelope(),
             agent_for=config.agent_for,
             document_searcher=StubDocumentSearcher(),
             drafter_toolsets=(per_agent_toolset, shared_mcp_toolset),

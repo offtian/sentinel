@@ -5,6 +5,7 @@ from unittest import mock
 import pytest
 
 from sentinel.interfaces.graphs import support_review
+from tests import factories
 from tests.factories import make_ticket
 from tests.functional.conftest import (
     EmptyDocumentSearcher,
@@ -24,6 +25,7 @@ class TestSupportReviewPipeline:
         # When running the full support review pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
@@ -43,6 +45,7 @@ class TestSupportReviewPipeline:
         # When running the review pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
@@ -58,6 +61,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),
@@ -71,6 +75,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             document_searcher=None,
             ticket_searcher=None,
@@ -86,6 +91,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             document_searcher=EmptyDocumentSearcher(),
             ticket_searcher=EmptyPastTicketSearcher(),
@@ -100,6 +106,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=sample_ticket,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=None,
@@ -124,6 +131,7 @@ class TestSupportReviewPipeline:
         # When running the pipeline
         reply = await support_review.review_ticket(
             ticket=billing_ticket,
+            envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
             document_searcher=StubDocumentSearcher(),
             ticket_searcher=StubPastTicketSearcher(),

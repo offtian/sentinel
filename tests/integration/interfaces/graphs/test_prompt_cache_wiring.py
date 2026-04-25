@@ -155,6 +155,7 @@ class TestSRECacheWiring:
         # When running the full SRE investigation pipeline
         await sre_investigation.investigate_alert(
             alert=factories.make_alert(),
+            envelope=factories.make_envelope(),
             agent_for=lambda name: agents.get(name, mock.MagicMock()),
             holmes=holmes,
             post_to_slack=False,
@@ -227,6 +228,7 @@ class TestSupportCacheWiring:
         # so SearchDocumentation doesn't short-circuit before DraftResponse)
         await support_review.review_ticket(
             ticket=factories.make_ticket(),
+            envelope=factories.make_envelope(),
             agent_for=lambda name: agents.get(name, mock.MagicMock()),
             document_searcher=functional_fixtures.StubDocumentSearcher(),
         )

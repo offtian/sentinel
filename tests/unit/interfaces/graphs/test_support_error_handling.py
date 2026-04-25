@@ -4,7 +4,7 @@ import pytest
 
 from sentinel.domain.search import searcher
 from sentinel.interfaces.graphs import support_review
-from tests.factories import make_ticket
+from tests.factories import make_envelope, make_ticket
 from tests.functional.conftest import (
     StubDocumentSearcher,
     _build_fake_config,
@@ -31,6 +31,7 @@ class TestClassifyTicketErrorHandling:
         # When the pipeline runs
         result = await support_review.review_ticket(
             ticket=ticket,
+            envelope=make_envelope(),
             agent_for=config.agent_for,
         )
 
@@ -64,6 +65,7 @@ class TestSearchDocumentationErrorHandling:
         # When the pipeline runs with a failing searcher
         result = await support_review.review_ticket(
             ticket=ticket,
+            envelope=make_envelope(),
             agent_for=config.agent_for,
             document_searcher=FailingSearcher(),
         )
@@ -92,6 +94,7 @@ class TestDraftResponseErrorHandling:
         # When the pipeline runs
         result = await support_review.review_ticket(
             ticket=ticket,
+            envelope=make_envelope(),
             agent_for=config.agent_for,
             document_searcher=StubDocumentSearcher(),
         )
