@@ -37,6 +37,7 @@
 
 | Plan | Goal | PRD Section |
 |------|------|-------------|
+| [sentinel-hedgefund-foundations](sentinel-hedgefund-foundations.md) | Evolve current codebase into RFC-001 v0.4 foundations (config layering, identity propagation, OTEL→Langfuse→replay triple, LiteLLM proxy, runbook catalog, capability tokens, groundedness gate) | RFC-001 §14 wks 0.5–4 |
 | [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, SRE approval persistence (token usage + LLM cost delivered in PR #18) | 4, 6 |
 | [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | 4, 7 |
 | [llm-settings-to-config](llm-settings-to-config.md) | Move LLM model config into CommonConfiguration | Internal |
