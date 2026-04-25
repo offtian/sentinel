@@ -23,7 +23,7 @@ class TestEnqueueJob:
         # When a job is enqueued
         result_id = await operations.enqueue_job(
             db=mock_db,
-            job_type="sre_investigation",
+            job_type="investigation",
             payload={"alert": "test"},
             requested_by="webhook",
             source_id="PD-123",
@@ -41,7 +41,7 @@ class TestEnqueueJob:
         # When a job is enqueued with a specific type and source_id
         await operations.enqueue_job(
             db=mock_db,
-            job_type="sre_investigation",
+            job_type="investigation",
             payload={"alert": "test"},
             requested_by="webhook",
             source_id="PD-123",
@@ -51,7 +51,7 @@ class TestEnqueueJob:
         call_args = mock_db.execute.call_args
         query = call_args[0][0] if call_args[0] else call_args[1].get("query")
         compiled = query.compile(compile_kwargs={"literal_binds": False})
-        expected_key = hashlib.sha256(b"sre_investigation:PD-123").hexdigest()
+        expected_key = hashlib.sha256(b"investigation:PD-123").hexdigest()
         assert compiled.params["idempotency_key"] == expected_key
 
     @pytest.mark.asyncio
@@ -63,7 +63,7 @@ class TestEnqueueJob:
         # When a job is enqueued with a specific payload
         await operations.enqueue_job(
             db=mock_db,
-            job_type="sre_investigation",
+            job_type="investigation",
             payload=payload,
             requested_by="webhook",
             source_id="PD-123",
@@ -84,7 +84,7 @@ class TestEnqueueJob:
         # When a job is enqueued
         await operations.enqueue_job(
             db=mock_db,
-            job_type="sre_investigation",
+            job_type="investigation",
             payload={},
             requested_by="api",
             source_id="PD-1",
@@ -104,7 +104,7 @@ class TestEnqueueJob:
         # When a job is enqueued without explicit priority or max_retries
         await operations.enqueue_job(
             db=mock_db,
-            job_type="sre_investigation",
+            job_type="investigation",
             payload={},
             requested_by="api",
             source_id="PD-1",
@@ -127,7 +127,7 @@ class TestEnqueueJob:
         # When a job is enqueued with a trace_id
         result_id = await operations.enqueue_job(
             db=mock_db,
-            job_type="sre_investigation",
+            job_type="investigation",
             payload={},
             requested_by="api",
             source_id="PD-1",
@@ -152,11 +152,11 @@ class TestEnqueueInvestigation:
             alert_id="PD-500",
         )
 
-        # Then the job_type is sre_investigation
+        # Then the job_type is investigation
         call_args = mock_db.execute.call_args
         query = call_args[0][0] if call_args[0] else call_args[1].get("query")
         compiled = query.compile(compile_kwargs={"literal_binds": False})
-        assert compiled.params["job_type"] == "sre_investigation"
+        assert compiled.params["job_type"] == "investigation"
 
     @pytest.mark.asyncio
     async def test_default_priority_is_one(self) -> None:
@@ -303,7 +303,7 @@ class TestClaimNextJob:
         mock_row = mock.MagicMock()
         mock_row._mapping = {
             "id": job_id,
-            "job_type": "sre_investigation",
+            "job_type": "investigation",
             "status": "pending",
             "priority": 1,
         }
@@ -327,7 +327,7 @@ class TestClaimNextJob:
         mock_row = mock.MagicMock()
         mock_row._mapping = {
             "id": uuid.uuid4(),
-            "job_type": "sre_investigation",
+            "job_type": "investigation",
             "status": "pending",
         }
         mock_db.fetch_one.return_value = mock_row

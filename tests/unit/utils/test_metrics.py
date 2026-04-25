@@ -70,7 +70,7 @@ class TestInitMeters:
 
         # When recording a node duration
         metrics.record_pipeline_node_duration(
-            pipeline="sre",
+            pipeline="investigation",
             node="classify_alert",
             duration_seconds=0.42,
             status="ok",

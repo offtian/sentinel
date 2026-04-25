@@ -13,7 +13,7 @@ InvestigateFn = Callable[..., Awaitable[pipeline_types.InvestigationReply]]
 ReviewFn = Callable[..., Awaitable[pipeline_types.SupportReply]]
 
 
-async def supervise_sre_investigation(
+async def supervise_investigation(
     *,
     investigate_fn: InvestigateFn,
     alert_id: str,

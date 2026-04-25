@@ -18,7 +18,7 @@ import pytest
 
 from sentinel.domain.alerts import entities as alert_entities
 from sentinel.domain.investigations import holmes_adapter
-from sentinel.interfaces.graphs import sre_investigation
+from sentinel.interfaces.graphs import investigation
 from sentinel.settings import PROMPTS_DIR
 from tests import factories
 
@@ -73,7 +73,7 @@ class TestSreGoldenCases:
         )
 
         # When running the investigation pipeline
-        reply = await sre_investigation.investigate_alert(
+        reply = await investigation.investigate_alert(
             alert=alert,
             envelope=factories.make_envelope(),
             agent_for=fake_sre_config.agent_for,

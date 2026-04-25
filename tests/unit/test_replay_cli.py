@@ -39,7 +39,7 @@ class _FakeDB:
 def _make_bundle(
     *,
     run_id: uuid.UUID | None = None,
-    pipeline_type: str = "sre_investigation",
+    pipeline_type: str = "investigation",
     final_reply: dict[str, Any] | None = None,
     input_payload: dict[str, Any] | None = None,
 ) -> pipeline_types.ReplayBundle:
@@ -84,7 +84,7 @@ class TestMain:
         # Then the bundle is printed as valid JSON with the expected pipeline_type
         captured = capsys.readouterr()
         parsed = json.loads(captured.out)
-        assert parsed["pipeline_type"] == "sre_investigation"
+        assert parsed["pipeline_type"] == "investigation"
         assert parsed["run_id"] == str(fake_run_id)
 
     def test_not_found_exits_with_code_1(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -219,7 +219,7 @@ class TestReplaySre:
         )
 
         fake_bundle = _make_bundle(
-            pipeline_type="sre_investigation",
+            pipeline_type="investigation",
             input_payload={
                 "id": "alert-123",
                 "source": "pagerduty",
@@ -237,7 +237,7 @@ class TestReplaySre:
             return fake_reply
 
         monkeypatch.setattr(
-            "sentinel.replay.sre_investigation.investigate_alert",
+            "sentinel.replay.investigation.investigate_alert",
             _fake_investigate,
         )
 

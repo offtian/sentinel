@@ -36,7 +36,7 @@ async def enqueue_job(
     Insert a job request into the queue.
 
     :param db: The async database connection.
-    :param job_type: Type of job (e.g. "sre_investigation").
+    :param job_type: Type of job (e.g. "investigation").
     :param payload: Arbitrary job payload dict.
     :param requested_by: Identifier for who/what requested the job.
     :param source_id: Source identifier used for idempotency.
@@ -89,7 +89,7 @@ async def enqueue_investigation(
     """
     Enqueue an SRE investigation job.
 
-    Convenience wrapper around ``enqueue_job`` with job_type="sre_investigation".
+    Convenience wrapper around ``enqueue_job`` with job_type="investigation".
 
     :param db: The async database connection.
     :param alert_payload: Alert data payload.
@@ -101,7 +101,7 @@ async def enqueue_investigation(
     """
     return await enqueue_job(
         db=db,
-        job_type="sre_investigation",
+        job_type="investigation",
         payload=alert_payload,
         requested_by=requested_by,
         source_id=alert_id,
@@ -181,7 +181,7 @@ async def claim_next_job(
     *,
     db: databases.Database,
     worker_id: str,
-    job_types: tuple[str, ...] = ("sre_investigation", "support_review"),
+    job_types: tuple[str, ...] = ("investigation", "support_review"),
 ) -> dict[str, Any] | None:
     """
     Claim the next available job using ``SELECT ... FOR UPDATE SKIP LOCKED``.

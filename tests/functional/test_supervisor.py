@@ -6,7 +6,7 @@ import pytest
 
 from sentinel.application.supervisor import orchestrator
 from sentinel.domain.supervisor import entities as supervisor_entities
-from sentinel.interfaces.graphs import sre_investigation, support_review
+from sentinel.interfaces.graphs import investigation, support_review
 from tests import factories
 from tests.functional.conftest import (
     StubDocumentSearcher,
@@ -28,7 +28,7 @@ class TestSuperviseSreInvestigation:
         # Given a standard alert with mocked agents that produce good output
         alert = factories.make_alert()
         investigate = partial(
-            sre_investigation.investigate_alert,
+            investigation.investigate_alert,
             alert,
             envelope=factories.make_envelope(),
             agent_for=fake_sre_config.agent_for,
@@ -37,7 +37,7 @@ class TestSuperviseSreInvestigation:
         )
 
         # When the supervised investigation runs
-        result = await orchestrator.supervise_sre_investigation(
+        result = await orchestrator.supervise_investigation(
             investigate_fn=investigate,
             alert_id=alert.id,
             max_retries=1,
@@ -67,7 +67,7 @@ class TestSuperviseSreInvestigation:
 
         alert = factories.make_alert()
         investigate = partial(
-            sre_investigation.investigate_alert,
+            investigation.investigate_alert,
             alert,
             envelope=factories.make_envelope(),
             agent_for=config.agent_for,
@@ -76,7 +76,7 @@ class TestSuperviseSreInvestigation:
         )
 
         # When the supervised investigation runs with 1 retry
-        result = await orchestrator.supervise_sre_investigation(
+        result = await orchestrator.supervise_investigation(
             investigate_fn=investigate,
             alert_id=alert.id,
             max_retries=1,
@@ -107,7 +107,7 @@ class TestSuperviseSreInvestigation:
 
         alert = factories.make_alert()
         investigate = partial(
-            sre_investigation.investigate_alert,
+            investigation.investigate_alert,
             alert,
             envelope=factories.make_envelope(),
             agent_for=config.agent_for,
@@ -116,7 +116,7 @@ class TestSuperviseSreInvestigation:
         )
 
         # When the supervised investigation runs with zero retries
-        result = await orchestrator.supervise_sre_investigation(
+        result = await orchestrator.supervise_investigation(
             investigate_fn=investigate,
             alert_id=alert.id,
             max_retries=0,

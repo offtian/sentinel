@@ -17,7 +17,7 @@ import pytest
 import structlog
 from opentelemetry import trace as otel_trace
 
-from sentinel.interfaces.graphs import _node_helpers, sre_investigation
+from sentinel.interfaces.graphs import _node_helpers, investigation
 from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser
 from tests import factories
 from tests.functional.conftest import (
@@ -44,7 +44,7 @@ class TestStateRequiresEnvelope:
         # When State is constructed without envelope kwarg
         # Then a TypeError is raised
         with pytest.raises(TypeError):
-            sre_investigation.State(alert=alert)  # type: ignore[call-arg]
+            investigation.State(alert=alert)  # type: ignore[call-arg]
 
     def test_state_construction_with_envelope_succeeds(self) -> None:
         # Given an alert and an envelope
@@ -52,7 +52,7 @@ class TestStateRequiresEnvelope:
         envelope = factories.make_envelope()
 
         # When State is constructed with both
-        state = sre_investigation.State(envelope=envelope, alert=alert)
+        state = investigation.State(envelope=envelope, alert=alert)
 
         # Then the envelope is exposed on state
         assert state.envelope is envelope
@@ -82,7 +82,7 @@ class TestInvestigateAlertRequiresEnvelope:
         # When investigate_alert is called without an envelope kwarg
         # Then a TypeError is raised at the boundary
         with pytest.raises(TypeError):
-            await sre_investigation.investigate_alert(
+            await investigation.investigate_alert(
                 alert=alert,
                 agent_for=config.agent_for,
                 holmes=factories.MockHolmesAdapter(),
@@ -134,7 +134,7 @@ class TestNodeBindsEnvelopeToStructlogContext:
         )
 
         # When the pipeline runs with an envelope
-        await sre_investigation.investigate_alert(
+        await investigation.investigate_alert(
             alert=factories.make_alert(),
             envelope=envelope,
             agent_for=config.agent_for,
@@ -183,7 +183,7 @@ class TestNodeBindsEnvelopeToStructlogContext:
         )
 
         # When the pipeline runs and completes
-        await sre_investigation.investigate_alert(
+        await investigation.investigate_alert(
             alert=factories.make_alert(),
             envelope=envelope,
             agent_for=config.agent_for,
@@ -251,7 +251,7 @@ class TestInvestigateAlertSetsSpanAttributesOnEveryNode:
             "get_current_span",
             return_value=spying_span,
         ):
-            await sre_investigation.investigate_alert(
+            await investigation.investigate_alert(
                 alert=factories.make_alert(),
                 envelope=envelope,
                 agent_for=config.agent_for,

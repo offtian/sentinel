@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from sentinel.domain.investigations import holmes_adapter
-from sentinel.interfaces.graphs import sre_investigation
+from sentinel.interfaces.graphs import investigation
 from sentinel.interfaces.graphs.agents import root_cause_analyser
 from tests import factories
 from tests.functional.conftest import (
@@ -52,7 +52,7 @@ class TestSreInvestigationPipeline:
     async def test_full_pipeline_returns_populated_reply(self, mock_holmes, sample_alert):
         # Given a triggered alert with a Holmes adapter that returns findings
         # When running the full investigation pipeline
-        reply = await sre_investigation.investigate_alert(
+        reply = await investigation.investigate_alert(
             alert=sample_alert,
             envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
@@ -74,7 +74,7 @@ class TestSreInvestigationPipeline:
     async def test_pipeline_populates_findings_summary(self, mock_holmes, sample_alert):
         # Given a normal alert investigation
         # When running the pipeline end-to-end
-        reply = await sre_investigation.investigate_alert(
+        reply = await investigation.investigate_alert(
             alert=sample_alert,
             envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
@@ -92,7 +92,7 @@ class TestSreInvestigationPipeline:
 
         # When running the investigation pipeline
         with patch("sentinel.vendors.slack.post_investigation_summary", tracker):
-            await sre_investigation.investigate_alert(
+            await investigation.investigate_alert(
                 alert=sample_alert,
                 envelope=factories.make_envelope(),
                 agent_for=self._config.agent_for,
@@ -111,7 +111,7 @@ class TestSreInvestigationPipeline:
 
         # When running the investigation pipeline
         with patch("sentinel.vendors.slack.post_investigation_summary", tracker):
-            await sre_investigation.investigate_alert(
+            await investigation.investigate_alert(
                 alert=sample_alert,
                 envelope=factories.make_envelope(),
                 agent_for=self._config.agent_for,
@@ -127,7 +127,7 @@ class TestSreInvestigationPipeline:
         tracker = CallTracker()
 
         # When running the pipeline
-        await sre_investigation.investigate_alert(
+        await investigation.investigate_alert(
             alert=sample_alert,
             envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
@@ -152,7 +152,7 @@ class TestSreInvestigationPipeline:
                 pd_notes.append(kwargs)
 
         # When running the pipeline
-        await sre_investigation.investigate_alert(
+        await investigation.investigate_alert(
             alert=alert,
             envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
@@ -168,7 +168,7 @@ class TestSreInvestigationPipeline:
     async def test_critical_alert_flows_through_pipeline(self, mock_holmes, critical_alert):
         # Given a critical-severity alert
         # When running the full investigation
-        reply = await sre_investigation.investigate_alert(
+        reply = await investigation.investigate_alert(
             alert=critical_alert,
             envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
@@ -219,7 +219,7 @@ class TestSrePipelineWithLowConfidence:
         )
 
         # When running the pipeline
-        reply = await sre_investigation.investigate_alert(
+        reply = await investigation.investigate_alert(
             alert=sample_alert,
             envelope=factories.make_envelope(),
             agent_for=config.agent_for,
@@ -251,7 +251,7 @@ class TestSrePipelineComparisonMode:
         )
 
         # When running the pipeline with a challenger adapter
-        reply = await sre_investigation.investigate_alert(
+        reply = await investigation.investigate_alert(
             alert=sample_alert,
             envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
@@ -285,7 +285,7 @@ class TestSrePipelineComparisonMode:
                 raise ConnectionError(msg)
 
         # When running the pipeline with the failing challenger
-        reply = await sre_investigation.investigate_alert(
+        reply = await investigation.investigate_alert(
             alert=sample_alert,
             envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
@@ -322,7 +322,7 @@ class TestSrePipelineK8sIntegration:
         )
 
         # When running the pipeline with a K8s adapter
-        reply = await sre_investigation.investigate_alert(
+        reply = await investigation.investigate_alert(
             alert=sample_alert,
             envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
@@ -357,7 +357,7 @@ class TestSrePipelineK8sIntegration:
                 raise ConnectionError(msg)
 
         # When running the pipeline with the failing K8s adapter
-        reply = await sre_investigation.investigate_alert(
+        reply = await investigation.investigate_alert(
             alert=sample_alert,
             envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,
@@ -390,7 +390,7 @@ class TestSrePipelineK8sIntegration:
                 raise AssertionError(msg)
 
         # When running the pipeline with the unconfigured adapter
-        reply = await sre_investigation.investigate_alert(
+        reply = await investigation.investigate_alert(
             alert=sample_alert,
             envelope=factories.make_envelope(),
             agent_for=self._config.agent_for,

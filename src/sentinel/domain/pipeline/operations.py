@@ -38,7 +38,7 @@ async def persist_pipeline_run(
 
     :param db: The async database connection.
     :param trace_id: Correlation UUID for the trace.
-    :param pipeline_type: Name of the pipeline (e.g. "sre_investigation").
+    :param pipeline_type: Name of the pipeline (e.g. "investigation").
     :param job_request_id: Optional job request UUID to correlate with job queue.
     :param started_at: Timestamp when the pipeline started.
     :param input_json: Optional structured input payload.

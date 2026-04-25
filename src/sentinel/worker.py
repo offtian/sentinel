@@ -40,7 +40,7 @@ from sentinel.domain.pipeline import tracer as pipeline_tracer
 from sentinel.domain.support import entities as support_entities
 from sentinel.domain.support import operations as support_ops
 from sentinel.interfaces.graphs import agents as agent_module
-from sentinel.interfaces.graphs import common, sre_investigation, support_review
+from sentinel.interfaces.graphs import common, investigation, support_review
 from sentinel.interfaces.graphs.agents import k8s_runner
 from sentinel.settings import get_settings
 from sentinel.utils import logs
@@ -128,7 +128,7 @@ def _get_optional_db() -> databases.Database | None:
 
 async def _dispatch_job(job_type: str, payload: dict[str, object]) -> str:
     """Route the job to the correct pipeline handler."""
-    if job_type == entities.JobType.SRE_INVESTIGATION.value:
+    if job_type == entities.JobType.INVESTIGATION.value:
         return await _run_sre_investigation(payload)
     if job_type == entities.JobType.SUPPORT_REVIEW.value:
         return await _run_support_review(payload)
@@ -205,7 +205,7 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     model_ids = _collect_model_ids(settings, "alert_classifier_llm", "root_cause_llm")
 
     await et.start_pipeline(
-        pipeline_type="sre_investigation",
+        pipeline_type="investigation",
         input_data=alert.model_dump(),
         input_hash=input_hash,
         model_ids_json=model_ids,
@@ -241,7 +241,7 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     )
 
     try:
-        result = await sre_investigation.investigate_alert(
+        result = await investigation.investigate_alert(
             alert=alert,
             envelope=_envelope_for_job(payload),
             agent_for=cfg.agent_for,

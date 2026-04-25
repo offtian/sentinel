@@ -4,7 +4,7 @@ import pytest
 
 from sentinel.domain.alerts import entities as alert_entities
 from sentinel.domain.investigations import holmes_adapter
-from sentinel.interfaces.graphs import common, sre_investigation
+from sentinel.interfaces.graphs import common, investigation
 from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser
 from tests import factories
 from tests.factories import make_alert
@@ -31,7 +31,7 @@ class TestClassifyAlertErrorHandling:
         alert = make_alert()
 
         # When the full pipeline is run
-        result = await sre_investigation.investigate_alert(
+        result = await investigation.investigate_alert(
             alert=alert,
             envelope=factories.make_envelope(),
             agent_for=config.agent_for,
@@ -93,7 +93,7 @@ class TestInvestigateWithHolmesErrorHandling:
         alert = make_alert()
 
         # When the pipeline runs with a failing Holmes adapter
-        result = await sre_investigation.investigate_alert(
+        result = await investigation.investigate_alert(
             alert=alert,
             envelope=factories.make_envelope(),
             agent_for=config.agent_for,
@@ -134,7 +134,7 @@ class TestAnalyseRootCauseErrorHandling:
         alert = make_alert()
 
         # When the pipeline runs
-        result = await sre_investigation.investigate_alert(
+        result = await investigation.investigate_alert(
             alert=alert,
             envelope=factories.make_envelope(),
             agent_for=config.agent_for,
@@ -201,7 +201,7 @@ class TestPublishFindingsErrorHandling:
         alert = make_alert()
 
         # When the pipeline runs with Slack failing
-        result = await sre_investigation.investigate_alert(
+        result = await investigation.investigate_alert(
             alert=alert,
             envelope=factories.make_envelope(),
             agent_for=config.agent_for,

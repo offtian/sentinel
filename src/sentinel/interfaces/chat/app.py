@@ -35,7 +35,7 @@ from sentinel.domain.search import factory as search_factory
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.chat.status_update import StreamlitStatusUpdateClient
 from sentinel.interfaces.graphs import agents as agent_module
-from sentinel.interfaces.graphs import chart_generation, common, sre_investigation, support_review
+from sentinel.interfaces.graphs import chart_generation, common, investigation, support_review
 from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
 from sentinel.settings import get_settings
 
@@ -203,7 +203,7 @@ async def _run_sre(
             ],
         }
 
-    return await sre_investigation.investigate_alert(
+    return await investigation.investigate_alert(
         alert=alert,
         envelope=_envelope_for_chat(),
         agent_for=cfg.agent_for,

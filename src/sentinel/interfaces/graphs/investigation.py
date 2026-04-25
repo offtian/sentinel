@@ -144,7 +144,7 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
             return InvestigateWithHolmes()
 
         return await _node_helpers.run_node_with_envelope(
-            pipeline="sre",
+            pipeline="investigation",
             node="classify_alert",
             envelope=ctx.state.envelope,
             fn=_impl,
@@ -264,7 +264,7 @@ class InvestigateWithHolmes(BaseNode[State, Dependencies, common.InvestigationRe
             )
 
         return await _node_helpers.run_node_with_envelope(
-            pipeline="sre",
+            pipeline="investigation",
             node="investigate_with_holmes",
             envelope=ctx.state.envelope,
             fn=_impl,
@@ -367,7 +367,7 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
             return DetermineConfidence(raw_confidence=result.output.confidence)
 
         return await _node_helpers.run_node_with_envelope(
-            pipeline="sre",
+            pipeline="investigation",
             node="analyse_root_cause",
             envelope=ctx.state.envelope,
             fn=_impl,
@@ -407,7 +407,7 @@ class DetermineConfidence(BaseNode[State, Dependencies, common.InvestigationRepl
                 )
 
             metrics.record_confidence_score(
-                pipeline="sre",
+                pipeline="investigation",
                 score=confidence.total,
             )
 
@@ -471,7 +471,7 @@ class DetermineConfidence(BaseNode[State, Dependencies, common.InvestigationRepl
             return PublishFindings(confidence=confidence)
 
         return await _node_helpers.run_node_with_envelope(
-            pipeline="sre",
+            pipeline="investigation",
             node="determine_confidence",
             envelope=ctx.state.envelope,
             fn=_impl,
@@ -582,7 +582,7 @@ class PublishFindings(BaseNode[State, Dependencies, common.InvestigationReply]):
             return End(reply)
 
         return await _node_helpers.run_node_with_envelope(
-            pipeline="sre",
+            pipeline="investigation",
             node="publish_findings",
             envelope=ctx.state.envelope,
             fn=_impl,

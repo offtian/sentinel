@@ -12,7 +12,7 @@ from unittest import mock
 
 import pytest
 
-from sentinel.interfaces.graphs import sre_investigation, support_review
+from sentinel.interfaces.graphs import investigation, support_review
 from sentinel.interfaces.graphs.agents import (
     alert_classifier,
     response_drafter,
@@ -153,7 +153,7 @@ class TestSRECacheWiring:
         holmes = factories.MockHolmesAdapter()
 
         # When running the full SRE investigation pipeline
-        await sre_investigation.investigate_alert(
+        await investigation.investigate_alert(
             alert=factories.make_alert(),
             envelope=factories.make_envelope(),
             agent_for=lambda name: agents.get(name, mock.MagicMock()),

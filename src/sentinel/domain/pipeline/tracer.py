@@ -74,7 +74,7 @@ class ExecutionTracer(types.TraceCollector):
         """
         Record the start of a pipeline execution.
 
-        :param pipeline_type: Pipeline name (e.g. "sre_investigation").
+        :param pipeline_type: Pipeline name (e.g. "investigation").
         :param job_request_id: Associated job request UUID.
         :param input_data: Pipeline input data.
         :param input_hash: Deterministic SHA-256 of the canonical input.

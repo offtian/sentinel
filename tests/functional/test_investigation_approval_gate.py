@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sentinel.interfaces.graphs import sre_investigation
+from sentinel.interfaces.graphs import investigation
 from tests import factories
 from tests.factories import make_alert
 
@@ -22,7 +22,7 @@ class TestApprovalGate:
         alert = make_alert()
 
         # When the pipeline runs (default RCA confidence is 0.85 -> total ~0.705 which is < 0.8)
-        result = await sre_investigation.investigate_alert(
+        result = await investigation.investigate_alert(
             alert=alert,
             envelope=factories.make_envelope(),
             agent_for=fake_sre_config.agent_for,
@@ -53,7 +53,7 @@ class TestApprovalGate:
         alert = make_alert()
 
         # When the pipeline runs (confidence ~0.705 which is > 0.3)
-        result = await sre_investigation.investigate_alert(
+        result = await investigation.investigate_alert(
             alert=alert,
             envelope=factories.make_envelope(),
             agent_for=fake_sre_config.agent_for,
@@ -75,7 +75,7 @@ class TestApprovalGate:
         alert = make_alert()
 
         # When the pipeline runs
-        result = await sre_investigation.investigate_alert(
+        result = await investigation.investigate_alert(
             alert=alert,
             envelope=factories.make_envelope(),
             agent_for=fake_sre_config.agent_for,
@@ -102,7 +102,7 @@ class TestApprovalGate:
         alert = make_alert()
 
         # When the pipeline runs
-        result = await sre_investigation.investigate_alert(
+        result = await investigation.investigate_alert(
             alert=alert,
             envelope=factories.make_envelope(),
             agent_for=fake_sre_config.agent_for,

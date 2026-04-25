@@ -229,7 +229,7 @@ class TestWorkerK8sAdapterWiring:
         with (
             mock.patch.object(worker_mod, "get_settings", return_value=worker_settings),
             mock.patch.object(worker_mod, "config_mod") as patched_config_mod,
-            mock.patch.object(worker_mod, "sre_investigation") as mock_sre_mod,
+            mock.patch.object(worker_mod, "investigation") as mock_sre_mod,
             mock.patch.object(worker_mod, "prompts") as mock_prompts,
             mock.patch.object(worker_mod, "pipeline_tracer") as mock_tracer_mod,
             mock.patch.object(worker_mod, "pipeline_queries"),
@@ -270,7 +270,7 @@ class TestWorkerK8sAdapterWiring:
         with (
             mock.patch.object(worker_mod, "get_settings", return_value=worker_settings),
             mock.patch.object(worker_mod, "config_mod") as patched_config_mod,
-            mock.patch.object(worker_mod, "sre_investigation") as mock_sre_mod,
+            mock.patch.object(worker_mod, "investigation") as mock_sre_mod,
             mock.patch.object(worker_mod, "prompts") as mock_prompts,
             mock.patch.object(worker_mod, "pipeline_tracer") as mock_tracer_mod,
             mock.patch.object(worker_mod, "pipeline_queries"),

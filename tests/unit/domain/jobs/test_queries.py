@@ -21,7 +21,7 @@ class TestFetchJob:
         mock_row = mock.MagicMock()
         mock_row._mapping = {
             "id": job_id,
-            "job_type": "sre_investigation",
+            "job_type": "investigation",
             "status": "pending",
         }
         mock_db.fetch_one.return_value = mock_row

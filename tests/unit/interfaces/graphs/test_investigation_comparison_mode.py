@@ -4,7 +4,7 @@ from unittest import mock
 
 import pytest
 
-from sentinel.interfaces.graphs import sre_investigation
+from sentinel.interfaces.graphs import investigation
 from tests import factories
 from tests.functional.conftest import _build_fake_config
 
@@ -16,9 +16,9 @@ class TestComparisonModeInPipeline:
         alert = factories.make_alert()
         challenger = factories.MockKagentAdapter()
 
-        state = sre_investigation.State(envelope=factories.make_envelope(), alert=alert)
+        state = investigation.State(envelope=factories.make_envelope(), alert=alert)
         state.comparison_result = None
-        deps = sre_investigation.Dependencies(
+        deps = investigation.Dependencies(
             status_update_client=mock.AsyncMock(),
             agent_for=_build_fake_config({}).agent_for,
             holmes=factories.MockHolmesAdapter(),
@@ -29,7 +29,7 @@ class TestComparisonModeInPipeline:
         ctx.state = state
         ctx.deps = deps
 
-        node = sre_investigation.InvestigateWithHolmes()
+        node = investigation.InvestigateWithHolmes()
 
         # When the node runs
         await node.run(ctx)
@@ -42,9 +42,9 @@ class TestComparisonModeInPipeline:
     async def test_no_comparison_when_challenger_is_none(self) -> None:
         # Given no challenger adapter
         alert = factories.make_alert()
-        state = sre_investigation.State(envelope=factories.make_envelope(), alert=alert)
+        state = investigation.State(envelope=factories.make_envelope(), alert=alert)
         state.comparison_result = None
-        deps = sre_investigation.Dependencies(
+        deps = investigation.Dependencies(
             status_update_client=mock.AsyncMock(),
             agent_for=_build_fake_config({}).agent_for,
             holmes=factories.MockHolmesAdapter(),
@@ -54,7 +54,7 @@ class TestComparisonModeInPipeline:
         ctx.state = state
         ctx.deps = deps
 
-        node = sre_investigation.InvestigateWithHolmes()
+        node = investigation.InvestigateWithHolmes()
 
         # When the node runs
         await node.run(ctx)
@@ -69,9 +69,9 @@ class TestComparisonModeInPipeline:
         failing_challenger = mock.AsyncMock()
         failing_challenger.investigate.side_effect = RuntimeError("kagent timeout")
 
-        state = sre_investigation.State(envelope=factories.make_envelope(), alert=alert)
+        state = investigation.State(envelope=factories.make_envelope(), alert=alert)
         state.comparison_result = None
-        deps = sre_investigation.Dependencies(
+        deps = investigation.Dependencies(
             status_update_client=mock.AsyncMock(),
             agent_for=_build_fake_config({}).agent_for,
             holmes=factories.MockHolmesAdapter(),
@@ -82,11 +82,11 @@ class TestComparisonModeInPipeline:
         ctx.state = state
         ctx.deps = deps
 
-        node = sre_investigation.InvestigateWithHolmes()
+        node = investigation.InvestigateWithHolmes()
 
         # When the node runs
         next_node = await node.run(ctx)
 
         # Then the pipeline continues without a comparison result
         assert state.comparison_result is None
-        assert isinstance(next_node, sre_investigation.AnalyseRootCause)
+        assert isinstance(next_node, investigation.AnalyseRootCause)

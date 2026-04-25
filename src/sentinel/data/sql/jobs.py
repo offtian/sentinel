@@ -22,7 +22,7 @@ class JobRequestRecord(SQLModel, table=True):
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    job_type: str  # "sre_investigation" | "support_review"
+    job_type: str  # "investigation" | "support_review"
     payload_json: str = Field(sa_column=Column(Text, nullable=False))
     payload_hash: str = Field(max_length=64)
     status: str = Field(default="pending", index=True)

@@ -12,7 +12,7 @@ from unittest import mock
 
 import pytest
 
-from sentinel.interfaces.graphs import sre_investigation
+from sentinel.interfaces.graphs import investigation
 from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser
 from tests import factories
 from tests.functional.conftest import (
@@ -63,7 +63,7 @@ class TestClassifyAlertToolsets:
         alert = factories.make_alert()
 
         # When the pipeline runs with classifier_toolsets
-        await sre_investigation.investigate_alert(
+        await investigation.investigate_alert(
             alert=alert,
             envelope=factories.make_envelope(),
             agent_for=config.agent_for,
@@ -118,7 +118,7 @@ class TestAnalyseRootCauseToolsetOrdering:
         alert = factories.make_alert()
 
         # When the pipeline runs with per-agent first, shared MCP second
-        await sre_investigation.investigate_alert(
+        await investigation.investigate_alert(
             alert=alert,
             envelope=factories.make_envelope(),
             agent_for=config.agent_for,

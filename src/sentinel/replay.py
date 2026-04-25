@@ -31,7 +31,7 @@ from sentinel.domain.pipeline import queries as pipeline_queries
 from sentinel.domain.pipeline import tracer as pipeline_tracer
 from sentinel.domain.pipeline import types as pipeline_types
 from sentinel.domain.support import entities as support_entities
-from sentinel.interfaces.graphs import sre_investigation, support_review
+from sentinel.interfaces.graphs import investigation, support_review
 from sentinel.interfaces.graphs.agents import k8s_runner
 
 
@@ -95,7 +95,7 @@ async def _replay_pipeline(*, run_id: uuid.UUID, show_diff: bool) -> None:
 
         result: pipeline_types.InvestigationReply | pipeline_types.SupportReply
 
-        if bundle.pipeline_type == "sre_investigation":
+        if bundle.pipeline_type == "investigation":
             result = await _replay_sre(bundle=bundle, cfg=cfg, db=db)
         elif bundle.pipeline_type == "support_review":
             result = await _replay_support(bundle=bundle, cfg=cfg, db=db)
@@ -134,7 +134,7 @@ async def _replay_sre(
         input_data=bundle.input_payload,
     )
 
-    result = await sre_investigation.investigate_alert(
+    result = await investigation.investigate_alert(
         alert,
         envelope=_envelope_for_replay(bundle),
         agent_for=cfg.agent_for,

@@ -23,7 +23,7 @@ class TestStartPipeline:
         with mock.patch.object(tracer, "pipeline_ops") as mock_ops:
             mock_ops.persist_pipeline_run = mock.AsyncMock(return_value=uuid.uuid4())
             await et.start_pipeline(
-                pipeline_type="sre_investigation",
+                pipeline_type="investigation",
                 job_request_id=uuid.uuid4(),
                 input_data={"alert_id": "alert-1"},
             )
@@ -43,14 +43,14 @@ class TestStartPipeline:
         with mock.patch.object(tracer, "pipeline_ops") as mock_ops:
             mock_ops.persist_pipeline_run = mock.AsyncMock(return_value=uuid.uuid4())
             await et.start_pipeline(
-                pipeline_type="sre_investigation",
+                pipeline_type="investigation",
                 job_request_id=job_id,
             )
 
         # Then persist_pipeline_run is called with correct kwargs
         mock_ops.persist_pipeline_run.assert_awaited_once()
         call_kwargs = mock_ops.persist_pipeline_run.call_args.kwargs
-        assert call_kwargs["pipeline_type"] == "sre_investigation"
+        assert call_kwargs["pipeline_type"] == "investigation"
         assert call_kwargs["job_request_id"] == job_id
 
     @pytest.mark.asyncio
@@ -59,7 +59,7 @@ class TestStartPipeline:
         et = tracer.ExecutionTracer(db=None)
 
         # When start_pipeline is called
-        await et.start_pipeline(pipeline_type="sre_investigation")
+        await et.start_pipeline(pipeline_type="investigation")
 
         # Then no error is raised and trace_id is still set
         assert et.trace_id is not None
@@ -75,7 +75,7 @@ class TestStartPipeline:
         with mock.patch.object(tracer, "pipeline_ops") as mock_ops:
             mock_ops.persist_pipeline_run = mock.AsyncMock(return_value=uuid.uuid4())
             await et.start_pipeline(
-                pipeline_type="sre_investigation",
+                pipeline_type="investigation",
                 input_data={"alert_id": "PD-1"},
                 input_hash="abc123",
                 model_ids_json=["openai/gpt-4.1-mini"],
@@ -108,7 +108,7 @@ class TestStartPipeline:
         with mock.patch.object(tracer, "pipeline_ops") as mock_ops:
             mock_ops.persist_pipeline_run = mock.AsyncMock(return_value=uuid.uuid4())
             await et.start_pipeline(
-                pipeline_type="sre_investigation",
+                pipeline_type="investigation",
                 agent_prompts_json=agent_prompts,
             )
 
