@@ -11,9 +11,9 @@ from pydantic import BaseModel
 from sentinel.config import get_config
 from sentinel.data import db as async_db
 from sentinel.data.primitives import envelope as envelope_mod
+from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.investigations import queries as sre_queries
 from sentinel.domain.jobs import operations as job_ops
-from sentinel.domain.sre import entities as sre_entities
-from sentinel.domain.sre import queries as sre_queries
 from sentinel.interfaces.api.dependencies import require_database
 from sentinel.interfaces.webhooks import envelope_factory, pagerduty
 from sentinel.settings import get_settings
@@ -43,7 +43,7 @@ def _envelope_payload(envelope: envelope_mod.Envelope) -> dict[str, Any]:
 
 
 async def _enqueue_alert(
-    alert: sre_entities.Alert,
+    alert: alert_entities.Alert,
     *,
     requested_by: str,
     priority: int = 1,
@@ -124,7 +124,7 @@ async def _handle_webhook(
     *,
     request: fastapi.Request,
     payload: dict[str, Any],
-    parse_fn: Callable[[dict[str, Any]], sre_entities.Alert | None],
+    parse_fn: Callable[[dict[str, Any]], alert_entities.Alert | None],
     source: str,
 ) -> fastapi.responses.JSONResponse:
     """Shared handler for all alert-source webhooks (PagerDuty, Datadog, etc.)."""
@@ -203,12 +203,12 @@ async def trigger_investigation(
     The envelope minted here uses the ``"manual"`` tenant sentinel so ops
     queries can distinguish API-driven runs from real ingress.
     """
-    alert = sre_entities.Alert(
+    alert = alert_entities.Alert(
         id=payload.get("id", "manual-alert"),
         source=payload.get("source", "pagerduty"),
         title=payload.get("title", "Manual investigation"),
         description=payload.get("description", ""),
-        severity=sre_entities.AlertSeverity(payload.get("severity", "medium")),
+        severity=alert_entities.AlertSeverity(payload.get("severity", "medium")),
         service=payload.get("service", "unknown"),
         triggered_at=datetime.now(tz=UTC),
         raw_payload=payload,

@@ -9,10 +9,10 @@ from collections.abc import Mapping, Sequence
 import attrs
 
 from sentinel.domain.evaluation import metrics
-from sentinel.domain.sre import investigation
+from sentinel.domain.investigations import adapters
 
 
-def _degradation_score(audit_trail: Sequence[investigation.AuditEntry]) -> float:
+def _degradation_score(audit_trail: Sequence[adapters.AuditEntry]) -> float:
     """
     Return a degradation score based on the ratio of successful entries.
 
@@ -41,7 +41,7 @@ def _evidence_diversity(sources: Sequence[str]) -> float:
     return len(set(sources)) / len(sources)
 
 
-def _metrics_from_result(result: investigation.InvestigationResult) -> metrics.EvaluationMetrics:
+def _metrics_from_result(result: adapters.InvestigationResult) -> metrics.EvaluationMetrics:
     """
     Derive EvaluationMetrics from a single InvestigationResult.
 
@@ -129,8 +129,8 @@ class ComparisonResult:
     @staticmethod
     def from_investigation_results(
         *,
-        baseline: investigation.InvestigationResult,
-        challenger: investigation.InvestigationResult,
+        baseline: adapters.InvestigationResult,
+        challenger: adapters.InvestigationResult,
         case_id: str = "",
     ) -> ComparisonResult:
         """

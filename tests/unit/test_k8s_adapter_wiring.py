@@ -6,7 +6,7 @@ import pytest
 
 from sentinel import settings
 from sentinel import worker as worker_mod
-from sentinel.domain.sre import investigation, k8s_native_agent, kagent_adapter
+from sentinel.domain.investigations import adapters, k8s_native_agent, kagent_adapter
 from sentinel.plugins.common import config as plugin_config_mod
 
 
@@ -221,7 +221,7 @@ class TestWorkerK8sAdapterWiring:
     async def test_worker_passes_k8s_adapter_when_backend_configured(self) -> None:
         # Given a worker with K8S_INVESTIGATION_BACKEND="native"
         worker_settings = self._make_worker_settings(backend="native")
-        fake_k8s_adapter = mock.MagicMock(spec=investigation.K8sInvestigationAdapter)
+        fake_k8s_adapter = mock.MagicMock(spec=adapters.K8sInvestigationAdapter)
         fake_cfg = self._make_config(k8s_adapter=fake_k8s_adapter)
         fake_investigate = self._make_fake_investigate()
         fake_tpl = self._make_fake_template()
@@ -261,8 +261,8 @@ class TestWorkerK8sAdapterWiring:
     async def test_worker_passes_challenger_adapter_when_configured(self) -> None:
         # Given a worker with K8S_INVESTIGATION_BACKEND="both" and CHALLENGER_ADAPTER="kagent"
         worker_settings = self._make_worker_settings(backend="both", challenger="kagent")
-        fake_k8s_adapter = mock.MagicMock(spec=investigation.K8sInvestigationAdapter)
-        fake_challenger = mock.MagicMock(spec=investigation.BaseInvestigationAdapter)
+        fake_k8s_adapter = mock.MagicMock(spec=adapters.K8sInvestigationAdapter)
+        fake_challenger = mock.MagicMock(spec=adapters.BaseInvestigationAdapter)
         fake_cfg = self._make_config(k8s_adapter=fake_k8s_adapter, challenger=fake_challenger)
         fake_investigate = self._make_fake_investigate()
         fake_tpl = self._make_fake_template()

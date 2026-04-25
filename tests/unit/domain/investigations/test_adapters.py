@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sentinel.domain.sre import investigation
+from sentinel.domain.investigations import adapters
 
 
 class TestAuditEntry:
@@ -11,7 +11,7 @@ class TestAuditEntry:
         now = datetime(2026, 4, 2, 12, 0, tzinfo=UTC)
 
         # When an AuditEntry is created
-        entry = investigation.AuditEntry(
+        entry = adapters.AuditEntry(
             timestamp=now,
             adapter_name="native_k8s",
             action="tool_call",
@@ -36,7 +36,7 @@ class TestAuditEntry:
         now = datetime(2026, 4, 2, 12, 0, tzinfo=UTC)
 
         # When an AuditEntry is created with an error code
-        entry = investigation.AuditEntry(
+        entry = adapters.AuditEntry(
             timestamp=now,
             adapter_name="kagent",
             action="crd_operation",
@@ -56,7 +56,7 @@ class TestInvestigationContext:
     def test_creates_context_with_defaults(self) -> None:
         # Given minimal context
         # When an InvestigationContext is created
-        ctx = investigation.InvestigationContext(
+        ctx = adapters.InvestigationContext(
             cluster_name="prod-eu-west-1",
         )
 
@@ -68,7 +68,7 @@ class TestInvestigationContext:
     def test_creates_context_with_namespace(self) -> None:
         # Given a namespace-scoped context
         # When an InvestigationContext is created with namespace
-        ctx = investigation.InvestigationContext(
+        ctx = adapters.InvestigationContext(
             cluster_name="prod-eu-west-1",
             namespace="payments",
             additional_sources=("prometheus", "alertmanager"),
@@ -86,7 +86,7 @@ class TestInvestigationResult:
 
         finding = make_finding(source="kubernetes", summary="Pod restarting")
         now = datetime(2026, 4, 2, 12, 0, tzinfo=UTC)
-        audit_entry = investigation.AuditEntry(
+        audit_entry = adapters.AuditEntry(
             timestamp=now,
             adapter_name="native_k8s",
             action="tool_call",
@@ -98,7 +98,7 @@ class TestInvestigationResult:
         )
 
         # When an InvestigationResult is created
-        result = investigation.InvestigationResult(
+        result = adapters.InvestigationResult(
             findings=(finding,),
             sources_queried=("kubernetes_pods", "kubernetes_events"),
             duration_ms=1500,

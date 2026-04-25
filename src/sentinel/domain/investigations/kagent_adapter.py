@@ -15,7 +15,9 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
-from sentinel.domain.sre import entities, investigation
+from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.investigations import adapters
+from sentinel.domain.investigations import entities as investigation_entities
 from sentinel.utils import logs
 
 
@@ -42,7 +44,7 @@ def _elapsed_ms(start: float) -> int:
 
 def _build_crd_body(
     *,
-    alert: entities.Alert,
+    alert: alert_entities.Alert,
     namespace: str,
 ) -> dict[str, Any]:
     """
@@ -69,12 +71,12 @@ def _build_crd_body(
 
 def _parse_findings(
     raw_findings: list[dict[str, Any]],
-) -> tuple[entities.Finding, ...]:
+) -> tuple[investigation_entities.Finding, ...]:
     """
     Map kagent CRD findings to Sentinel Finding entities.
     """
     return tuple(
-        entities.Finding(
+        investigation_entities.Finding(
             source=f.get("source", "unknown"),
             summary=f.get("summary", ""),
             raw_data=f.get("raw_data"),
@@ -91,9 +93,9 @@ def _make_audit_entry(
     duration_ms: int,
     payload: Mapping[str, Any],
     error_code: str | None = None,
-) -> investigation.AuditEntry:
+) -> adapters.AuditEntry:
     """Create an AuditEntry for the kagent adapter."""
-    return investigation.AuditEntry(
+    return adapters.AuditEntry(
         timestamp=datetime.now(tz=UTC),
         adapter_name=_ADAPTER_NAME,
         action=action,
@@ -105,7 +107,7 @@ def _make_audit_entry(
     )
 
 
-class KagentAdapter(investigation.K8sInvestigationAdapter):
+class KagentAdapter(adapters.K8sInvestigationAdapter):
     """
     Investigate alerts by delegating to the kagent K8s operator.
 
@@ -131,9 +133,9 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
     async def investigate(
         self,
         *,
-        alert: entities.Alert,
-        context: investigation.InvestigationContext | None = None,
-    ) -> investigation.InvestigationResult:
+        alert: alert_entities.Alert,
+        context: adapters.InvestigationContext | None = None,
+    ) -> adapters.InvestigationResult:
         start_time = time.monotonic()
         started_at = datetime.now(tz=UTC)
 
@@ -150,7 +152,7 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
             },
         )
 
-        audit_entries: list[investigation.AuditEntry] = []
+        audit_entries: list[adapters.AuditEntry] = []
 
         crd_name = await self._create_crd(
             alert=alert,
@@ -198,8 +200,8 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
     async def _create_crd(
         self,
         *,
-        alert: entities.Alert,
-        audit_entries: list[investigation.AuditEntry],
+        alert: alert_entities.Alert,
+        audit_entries: list[adapters.AuditEntry],
     ) -> str | None:
         """
         Create the kagent investigation CRD.
@@ -264,7 +266,7 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
         *,
         crd_name: str,
         start_time: float,
-        audit_entries: list[investigation.AuditEntry],
+        audit_entries: list[adapters.AuditEntry],
     ) -> dict[str, Any] | None:
         """
         Poll the CRD status with exponential backoff.
@@ -372,8 +374,8 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
         crd_response: dict[str, Any],
         crd_name: str,
         start_time: float,
-        audit_entries: list[investigation.AuditEntry],
-    ) -> investigation.InvestigationResult:
+        audit_entries: list[adapters.AuditEntry],
+    ) -> adapters.InvestigationResult:
         """
         Parse a completed CRD response into an InvestigationResult.
 
@@ -413,7 +415,7 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
             },
         )
 
-        return investigation.InvestigationResult(
+        return adapters.InvestigationResult(
             findings=findings,
             sources_queried=sources_queried,
             duration_ms=duration_ms,
@@ -425,10 +427,10 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
     def _degraded_result(
         *,
         start_time: float,
-        audit_entries: list[investigation.AuditEntry],
-    ) -> investigation.InvestigationResult:
+        audit_entries: list[adapters.AuditEntry],
+    ) -> adapters.InvestigationResult:
         """Return a degraded result with the audit trail collected so far."""
-        return investigation.InvestigationResult(
+        return adapters.InvestigationResult(
             findings=(),
             sources_queried=(),
             duration_ms=_elapsed_ms(start_time),
@@ -440,15 +442,15 @@ class KagentAdapter(investigation.K8sInvestigationAdapter):
     def _unconfigured_result(
         *,
         started_at: datetime,
-    ) -> investigation.InvestigationResult:
+    ) -> adapters.InvestigationResult:
         """Return a degraded result when the adapter is not configured."""
-        return investigation.InvestigationResult(
+        return adapters.InvestigationResult(
             findings=(),
             sources_queried=(),
             duration_ms=0,
             adapter_name=_ADAPTER_NAME,
             audit_trail=(
-                investigation.AuditEntry(
+                adapters.AuditEntry(
                     timestamp=started_at,
                     adapter_name=_ADAPTER_NAME,
                     action="configuration_check",

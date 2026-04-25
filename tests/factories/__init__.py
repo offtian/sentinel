@@ -6,10 +6,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sentinel.data.primitives import envelope as envelope_mod
+from sentinel.domain.alerts import entities as alert_entities
 from sentinel.domain.charts import entities as chart_entities
 from sentinel.domain.confidence import entities as confidence_entities
-from sentinel.domain.sre import entities as sre_entities
-from sentinel.domain.sre import holmes_adapter, investigation
+from sentinel.domain.investigations import adapters, holmes_adapter
+from sentinel.domain.investigations import entities as investigation_entities
 from sentinel.domain.support import entities as support_entities
 
 
@@ -45,12 +46,12 @@ def make_alert(
     source: str = "pagerduty",
     title: str = "High CPU usage on web-01",
     description: str = "CPU usage exceeded 90% for 5 minutes",
-    severity: sre_entities.AlertSeverity = sre_entities.AlertSeverity.HIGH,
+    severity: alert_entities.AlertSeverity = alert_entities.AlertSeverity.HIGH,
     service: str = "api-service",
     triggered_at: datetime | None = None,
     raw_payload: dict[str, Any] | None = None,
-) -> sre_entities.Alert:
-    return sre_entities.Alert(
+) -> alert_entities.Alert:
+    return alert_entities.Alert(
         id=alert_id,
         source=source,  # type: ignore[arg-type]
         title=title,
@@ -68,8 +69,8 @@ def make_finding(
     summary: str = "Error rate increased 5x in last 10 minutes",
     relevance: float = 0.9,
     raw_data: str | None = None,
-) -> sre_entities.Finding:
-    return sre_entities.Finding(
+) -> investigation_entities.Finding:
+    return investigation_entities.Finding(
         source=source,
         summary=summary,
         relevance=relevance,
@@ -79,14 +80,14 @@ def make_finding(
 
 def make_investigation(
     *,
-    alert: sre_entities.Alert | None = None,
-    status: sre_entities.InvestigationStatus = sre_entities.InvestigationStatus.PENDING,
-    findings: list[sre_entities.Finding] | None = None,
+    alert: alert_entities.Alert | None = None,
+    status: investigation_entities.InvestigationStatus = investigation_entities.InvestigationStatus.PENDING,
+    findings: list[investigation_entities.Finding] | None = None,
     root_cause: str | None = None,
     remediation: str | None = None,
     confidence_score: float | None = None,
-) -> sre_entities.Investigation:
-    return sre_entities.Investigation(
+) -> investigation_entities.Investigation:
+    return investigation_entities.Investigation(
         alert=alert or make_alert(),
         status=status,
         findings=findings or [],
@@ -182,8 +183,8 @@ class MockHolmesAdapter(holmes_adapter.BaseHolmesAdapter):
     async def investigate(
         self,
         *,
-        alert: sre_entities.Alert,
-        context: holmes_adapter.investigation.InvestigationContext | None = None,
+        alert: alert_entities.Alert,
+        context: holmes_adapter.adapters.InvestigationContext | None = None,
     ) -> holmes_adapter.HolmesInvestigationResult:
         return self._result
 
@@ -279,8 +280,8 @@ def make_audit_entry(
     error_code: str | None = None,
     payload: dict[str, Any] | None = None,
     timestamp: datetime | None = None,
-) -> investigation.AuditEntry:
-    return investigation.AuditEntry(
+) -> adapters.AuditEntry:
+    return adapters.AuditEntry(
         timestamp=timestamp or datetime(2026, 4, 3, 12, 0, tzinfo=UTC),
         adapter_name=adapter_name,
         action=action,
@@ -294,13 +295,13 @@ def make_audit_entry(
 
 def make_investigation_result(
     *,
-    findings: tuple[sre_entities.Finding, ...] | None = None,
+    findings: tuple[investigation_entities.Finding, ...] | None = None,
     sources_queried: tuple[str, ...] = ("kubernetes", "datadog_logs"),
     duration_ms: int = 350,
     adapter_name: str = "native_k8s",
-    audit_trail: tuple[investigation.AuditEntry, ...] | None = None,
-) -> investigation.InvestigationResult:
-    return investigation.InvestigationResult(
+    audit_trail: tuple[adapters.AuditEntry, ...] | None = None,
+) -> adapters.InvestigationResult:
+    return adapters.InvestigationResult(
         findings=findings
         or (make_finding(source="kubernetes", summary="Pod restarting due to OOMKilled"),),
         sources_queried=sources_queried,
@@ -310,13 +311,13 @@ def make_investigation_result(
     )
 
 
-class MockKagentAdapter(investigation.K8sInvestigationAdapter):
+class MockKagentAdapter(adapters.K8sInvestigationAdapter):
     """Mock kagent adapter for testing comparison mode."""
 
     def __init__(
         self,
         *,
-        findings: tuple[sre_entities.Finding, ...] = (),
+        findings: tuple[investigation_entities.Finding, ...] = (),
         delay_ms: int = 0,
     ) -> None:
         self._findings = findings or (
@@ -331,12 +332,12 @@ class MockKagentAdapter(investigation.K8sInvestigationAdapter):
     async def investigate(
         self,
         *,
-        alert: sre_entities.Alert,
-        context: investigation.InvestigationContext | None = None,
-    ) -> investigation.InvestigationResult:
+        alert: alert_entities.Alert,
+        context: adapters.InvestigationContext | None = None,
+    ) -> adapters.InvestigationResult:
         if self._delay_ms > 0:
             await asyncio.sleep(self._delay_ms / 1000)
-        return investigation.InvestigationResult(
+        return adapters.InvestigationResult(
             findings=self._findings,
             sources_queried=("kagent_crd",),
             duration_ms=self._delay_ms or 200,

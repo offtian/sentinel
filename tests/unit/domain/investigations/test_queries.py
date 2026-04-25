@@ -9,7 +9,7 @@ from unittest import mock
 
 import pytest
 
-from sentinel.domain.sre import queries
+from sentinel.domain.investigations import queries
 
 
 class TestFetchInvestigation:

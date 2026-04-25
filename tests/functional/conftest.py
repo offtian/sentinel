@@ -6,8 +6,8 @@ from unittest import mock
 
 import pytest
 
+from sentinel.domain.investigations import holmes_adapter
 from sentinel.domain.search import searcher
-from sentinel.domain.sre import holmes_adapter
 from sentinel.interfaces.graphs.agents import (
     alert_classifier,
     response_drafter,

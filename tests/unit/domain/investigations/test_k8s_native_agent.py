@@ -4,7 +4,7 @@ from unittest import mock
 
 import pytest
 
-from sentinel.domain.sre import investigation, k8s_native_agent
+from sentinel.domain.investigations import adapters, k8s_native_agent
 from tests import factories
 
 
@@ -83,7 +83,7 @@ class TestNativeK8sAgent:
             title="Pod CrashLoopBackOff",
             service="payments-service",
         )
-        context = investigation.InvestigationContext(
+        context = adapters.InvestigationContext(
             cluster_name="prod-eu-west-1",
             namespace="payments",
         )
@@ -166,7 +166,7 @@ class TestNativeK8sAgent:
             agent_runner=mock_runner,
         )
         alert = factories.make_alert()
-        context = investigation.InvestigationContext(
+        context = adapters.InvestigationContext(
             cluster_name="staging",
             namespace="api",
         )

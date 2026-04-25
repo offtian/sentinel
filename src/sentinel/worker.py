@@ -31,12 +31,12 @@ from sentinel.data import database
 from sentinel.data import db as async_db
 from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain import prompts
+from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.investigations import operations as sre_ops
 from sentinel.domain.jobs import entities
 from sentinel.domain.jobs import operations as job_ops
 from sentinel.domain.pipeline import queries as pipeline_queries
 from sentinel.domain.pipeline import tracer as pipeline_tracer
-from sentinel.domain.sre import entities as sre_entities
-from sentinel.domain.sre import operations as sre_ops
 from sentinel.domain.support import entities as support_entities
 from sentinel.domain.support import operations as support_ops
 from sentinel.interfaces.graphs import agents as agent_module
@@ -172,7 +172,7 @@ async def _execute_job(
 
 async def _run_sre_investigation(payload: dict[str, object]) -> str:
     """Execute the SRE investigation pipeline for a job payload."""
-    alert = sre_entities.Alert.model_validate(payload)
+    alert = alert_entities.Alert.model_validate(payload)
 
     cfg = config_mod.get_config()
     settings = get_settings()

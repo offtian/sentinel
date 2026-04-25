@@ -5,7 +5,8 @@ from unittest import mock
 
 import pytest
 
-from sentinel.domain.sre import entities, investigation, kagent_adapter
+from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.investigations import adapters, kagent_adapter
 from tests import factories
 
 
@@ -81,7 +82,7 @@ class TestKagentAdapterConfiguration:
         # Given an unconfigured adapter
         adapter = kagent_adapter.KagentAdapter(k8s_api_client=None)
         alert = factories.make_alert(title="Pod CrashLoopBackOff")
-        context = investigation.InvestigationContext(cluster_name="prod")
+        context = adapters.InvestigationContext(cluster_name="prod")
 
         # When investigating
         result = await adapter.investigate(alert=alert, context=context)
@@ -108,7 +109,7 @@ class TestKagentCrdCreation:
             alert_id="ALERT-99",
             title="Pod OOMKilled",
             service="payment-svc",
-            severity=entities.AlertSeverity.CRITICAL,
+            severity=alert_entities.AlertSeverity.CRITICAL,
             description="Container exceeded memory limit",
         )
 

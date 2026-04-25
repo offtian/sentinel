@@ -25,11 +25,11 @@ import databases
 from sentinel import config as config_mod
 from sentinel import settings as settings_mod
 from sentinel.data.primitives import envelope as envelope_mod
+from sentinel.domain.alerts import entities as alert_entities
 from sentinel.domain.pipeline import errors as pipeline_errors
 from sentinel.domain.pipeline import queries as pipeline_queries
 from sentinel.domain.pipeline import tracer as pipeline_tracer
 from sentinel.domain.pipeline import types as pipeline_types
-from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.graphs import sre_investigation, support_review
 from sentinel.interfaces.graphs.agents import k8s_runner
@@ -126,7 +126,7 @@ async def _replay_sre(
     :param cfg: Application configuration with agent registry and adapters.
     :param db: Database connection for execution tracing.
     """
-    alert = sre_entities.Alert.model_validate(bundle.input_payload)
+    alert = alert_entities.Alert.model_validate(bundle.input_payload)
 
     et = pipeline_tracer.ExecutionTracer(db=db)
     await et.start_pipeline(

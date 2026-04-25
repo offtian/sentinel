@@ -18,7 +18,9 @@ from typing import Any
 
 import attrs
 
-from sentinel.domain.sre import entities, investigation
+from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.investigations import adapters
+from sentinel.domain.investigations import entities as investigation_entities
 from sentinel.domain.tools import kubernetes as k8s_tools
 from sentinel.utils import logs
 
@@ -38,10 +40,10 @@ class AgentResult:
     remediation_steps: tuple[str, ...] | list[str]
     affected_resources: tuple[str, ...] | list[str]
     timeline: str
-    audit_entries: tuple[investigation.AuditEntry, ...] | list[investigation.AuditEntry]
+    audit_entries: tuple[adapters.AuditEntry, ...] | list[adapters.AuditEntry]
 
 
-class NativeK8sAgent(investigation.K8sInvestigationAdapter):
+class NativeK8sAgent(adapters.K8sInvestigationAdapter):
     """
     Investigate alerts using a PydanticAI agent with native K8s tools.
 
@@ -69,9 +71,9 @@ class NativeK8sAgent(investigation.K8sInvestigationAdapter):
     async def investigate(
         self,
         *,
-        alert: entities.Alert,
-        context: investigation.InvestigationContext | None = None,
-    ) -> investigation.InvestigationResult:
+        alert: alert_entities.Alert,
+        context: adapters.InvestigationContext | None = None,
+    ) -> adapters.InvestigationResult:
         start_time = time.monotonic()
         started_at = datetime.now(tz=UTC)
 
@@ -86,13 +88,13 @@ class NativeK8sAgent(investigation.K8sInvestigationAdapter):
         )
 
         if not self.is_configured:
-            return investigation.InvestigationResult(
+            return adapters.InvestigationResult(
                 findings=(),
                 sources_queried=(),
                 duration_ms=0,
                 adapter_name="native_k8s",
                 audit_trail=(
-                    investigation.AuditEntry(
+                    adapters.AuditEntry(
                         timestamp=started_at,
                         adapter_name="native_k8s",
                         action="configuration_check",
@@ -120,7 +122,7 @@ class NativeK8sAgent(investigation.K8sInvestigationAdapter):
         duration_ms = int((time.monotonic() - start_time) * 1000)
 
         findings = tuple(
-            entities.Finding(
+            investigation_entities.Finding(
                 source="kubernetes",
                 summary=evidence_item,
                 relevance=agent_result.confidence,
@@ -140,7 +142,7 @@ class NativeK8sAgent(investigation.K8sInvestigationAdapter):
             },
         )
 
-        return investigation.InvestigationResult(
+        return adapters.InvestigationResult(
             findings=findings,
             sources_queried=sources,
             duration_ms=duration_ms,

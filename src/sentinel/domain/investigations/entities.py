@@ -3,27 +3,10 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime
-from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
-class AlertSeverity(enum.Enum):
-    CRITICAL = "critical"
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
-
-
-class Alert(BaseModel):
-    id: str
-    source: Literal["pagerduty", "datadog", "manual"]
-    title: str
-    description: str
-    severity: AlertSeverity
-    service: str
-    triggered_at: datetime
-    raw_payload: dict[str, Any] = Field(default_factory=dict)
+from sentinel.domain.alerts import entities as alert_entities
 
 
 class Finding(BaseModel):
@@ -42,7 +25,7 @@ class InvestigationStatus(enum.Enum):
 
 class Investigation(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
-    alert: Alert
+    alert: alert_entities.Alert
     status: InvestigationStatus = InvestigationStatus.PENDING
     findings: list[Finding] = Field(default_factory=list)
     root_cause: str | None = None

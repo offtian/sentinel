@@ -10,7 +10,8 @@ from __future__ import annotations
 from typing import Any
 from unittest import mock
 
-from sentinel.domain.sre import entities, kagent_adapter
+from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.investigations import kagent_adapter
 from tests import factories
 
 
@@ -96,7 +97,7 @@ class TestKagentCrdLifecycleSuccess:
             alert_id="ALERT-INT-1",
             title="OOMKilled",
             service="web-api",
-            severity=entities.AlertSeverity.CRITICAL,
+            severity=alert_entities.AlertSeverity.CRITICAL,
             description="Container OOMKilled repeatedly",
         )
 

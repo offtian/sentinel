@@ -12,13 +12,13 @@ def sample_alert():
 
 @pytest.fixture
 def critical_alert():
-    from sentinel.domain.sre import entities
+    from sentinel.domain.alerts import entities as alert_entities
 
     return make_alert(
         alert_id="P999CRIT",
         title="Database completely unreachable",
         description="All DB connections failing, 100% error rate",
-        severity=entities.AlertSeverity.CRITICAL,
+        severity=alert_entities.AlertSeverity.CRITICAL,
         service="db-primary",
     )
 

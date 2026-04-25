@@ -4,18 +4,19 @@ from datetime import UTC, datetime
 
 import pytest
 
-from sentinel.domain.sre import entities, holmes_adapter
+from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.investigations import holmes_adapter
 from tests import factories
 
 
 @pytest.fixture
 def sample_alert():
-    return entities.Alert(
+    return alert_entities.Alert(
         id="P123ABC",
         source="pagerduty",
         title="High CPU usage on web-01",
         description="CPU usage exceeded 90% for 5 minutes",
-        severity=entities.AlertSeverity.HIGH,
+        severity=alert_entities.AlertSeverity.HIGH,
         service="api-service",
         triggered_at=datetime(2024, 1, 1, tzinfo=UTC),
     )

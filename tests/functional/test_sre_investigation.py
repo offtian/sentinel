@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from sentinel.domain.sre import holmes_adapter
+from sentinel.domain.investigations import holmes_adapter
 from sentinel.interfaces.graphs import sre_investigation
 from sentinel.interfaces.graphs.agents import root_cause_analyser
 from tests import factories
@@ -268,9 +268,9 @@ class TestSrePipelineComparisonMode:
         self, mock_holmes, sample_alert
     ):
         # Given a challenger adapter that raises an exception
-        from sentinel.domain.sre import investigation
+        from sentinel.domain.investigations import adapters
 
-        class FailingAdapter(investigation.BaseInvestigationAdapter):
+        class FailingAdapter(adapters.BaseInvestigationAdapter):
             @property
             def is_configured(self) -> bool:
                 return True
@@ -279,8 +279,8 @@ class TestSrePipelineComparisonMode:
                 self,
                 *,
                 alert: object,
-                context: investigation.InvestigationContext | None = None,
-            ) -> investigation.InvestigationResult:
+                context: adapters.InvestigationContext | None = None,
+            ) -> adapters.InvestigationResult:
                 msg = "Challenger backend unavailable"
                 raise ConnectionError(msg)
 
@@ -340,9 +340,9 @@ class TestSrePipelineK8sIntegration:
 
     async def test_k8s_adapter_failure_degrades_gracefully(self, mock_holmes, sample_alert):
         # Given a K8s adapter that raises an exception
-        from sentinel.domain.sre import investigation
+        from sentinel.domain.investigations import adapters
 
-        class FailingK8sAdapter(investigation.K8sInvestigationAdapter):
+        class FailingK8sAdapter(adapters.K8sInvestigationAdapter):
             @property
             def is_configured(self) -> bool:
                 return True
@@ -351,8 +351,8 @@ class TestSrePipelineK8sIntegration:
                 self,
                 *,
                 alert: object,
-                context: investigation.InvestigationContext | None = None,
-            ) -> investigation.InvestigationResult:
+                context: adapters.InvestigationContext | None = None,
+            ) -> adapters.InvestigationResult:
                 msg = "Kubernetes API unreachable"
                 raise ConnectionError(msg)
 
@@ -373,9 +373,9 @@ class TestSrePipelineK8sIntegration:
 
     async def test_k8s_adapter_skipped_when_not_configured(self, mock_holmes, sample_alert):
         # Given a K8s adapter that reports itself as not configured
-        from sentinel.domain.sre import investigation
+        from sentinel.domain.investigations import adapters
 
-        class UnconfiguredK8sAdapter(investigation.K8sInvestigationAdapter):
+        class UnconfiguredK8sAdapter(adapters.K8sInvestigationAdapter):
             @property
             def is_configured(self) -> bool:
                 return False
@@ -384,8 +384,8 @@ class TestSrePipelineK8sIntegration:
                 self,
                 *,
                 alert: object,
-                context: investigation.InvestigationContext | None = None,
-            ) -> investigation.InvestigationResult:
+                context: adapters.InvestigationContext | None = None,
+            ) -> adapters.InvestigationResult:
                 msg = "Should not be called"
                 raise AssertionError(msg)
 

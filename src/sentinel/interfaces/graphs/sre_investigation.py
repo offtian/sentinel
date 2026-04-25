@@ -11,10 +11,11 @@ from pydantic_ai.toolsets import AbstractToolset
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
 from sentinel.data.primitives import envelope as envelope_mod
+from sentinel.domain.alerts import entities as alert_entities
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.evaluation import comparison
-from sentinel.domain.sre import entities as sre_entities
-from sentinel.domain.sre import holmes_adapter, investigation
+from sentinel.domain.investigations import adapters, holmes_adapter
+from sentinel.domain.investigations import entities as investigation_entities
 from sentinel.domain.vendor_adapters.pagerduty import PagerDutyClient
 from sentinel.interfaces.graphs import _node_helpers, common
 from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser
@@ -40,9 +41,9 @@ class Dependencies:
     classifier_toolsets: Sequence[AbstractToolset[object]] = ()
     analyser_toolsets: Sequence[AbstractToolset[object]] = ()
     # Optional challenger adapter for comparison mode.
-    challenger_adapter: investigation.BaseInvestigationAdapter | None = None
+    challenger_adapter: adapters.BaseInvestigationAdapter | None = None
     # Optional K8s investigation adapter for cluster state queries.
-    k8s_adapter: investigation.K8sInvestigationAdapter | None = None
+    k8s_adapter: adapters.K8sInvestigationAdapter | None = None
 
 
 @dataclasses.dataclass
@@ -51,8 +52,8 @@ class State:
     # Required (no default) so a misconfigured caller fails closed at
     # State construction rather than silently losing tenant context.
     envelope: envelope_mod.Envelope
-    alert: sre_entities.Alert
-    investigation: sre_entities.Investigation | None = None
+    alert: alert_entities.Alert
+    investigation: investigation_entities.Investigation | None = None
     comparison_result: comparison.ComparisonResult | None = None
     # Populated by ClassifyAlert and consumed by AnalyseRootCause to drive
     # runbook Skills selection in the root_cause_analyser agent.
@@ -124,7 +125,7 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
             # Update alert severity based on classification
             ctx.state.alert = ctx.state.alert.model_copy(
                 update={
-                    "severity": sre_entities.AlertSeverity(result.output.severity),
+                    "severity": alert_entities.AlertSeverity(result.output.severity),
                     "service": result.output.affected_service,
                 }
             )
@@ -134,9 +135,9 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
             ctx.state.classification_category = result.output.category
 
             # Initialise the investigation
-            ctx.state.investigation = sre_entities.Investigation(
+            ctx.state.investigation = investigation_entities.Investigation(
                 alert=ctx.state.alert,
-                status=sre_entities.InvestigationStatus.INVESTIGATING,
+                status=investigation_entities.InvestigationStatus.INVESTIGATING,
                 started_at=datetime.now(tz=UTC),
             )
 
@@ -176,7 +177,7 @@ class InvestigateWithHolmes(BaseNode[State, Dependencies, common.InvestigationRe
             # Run K8s adapter if configured — merges cluster state into findings.
             if ctx.deps.k8s_adapter is not None and ctx.deps.k8s_adapter.is_configured:
                 try:
-                    k8s_context = investigation.InvestigationContext(
+                    k8s_context = adapters.InvestigationContext(
                         cluster_name=ctx.state.alert.raw_payload.get("cluster", "default"),
                         namespace=ctx.state.alert.raw_payload.get("namespace"),
                     )
@@ -221,9 +222,9 @@ class InvestigateWithHolmes(BaseNode[State, Dependencies, common.InvestigationRe
                         alert=ctx.state.alert,
                     )
                     # Build a baseline InvestigationResult from Holmes output
-                    baseline_result = investigation.InvestigationResult(
+                    baseline_result = adapters.InvestigationResult(
                         findings=tuple(
-                            sre_entities.Finding(source=s, summary="", relevance=0.5)
+                            investigation_entities.Finding(source=s, summary="", relevance=0.5)
                             for s in holmes_result.sources_queried
                         ),
                         sources_queried=tuple(holmes_result.sources_queried),
@@ -341,7 +342,7 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
 
             # Update investigation with findings
             findings = [
-                sre_entities.Finding(
+                investigation_entities.Finding(
                     source=source,
                     summary=evidence,
                     relevance=result.output.confidence,
@@ -493,7 +494,7 @@ class PublishFindings(BaseNode[State, Dependencies, common.InvestigationReply]):
             if investigation:
                 investigation = investigation.model_copy(
                     update={
-                        "status": sre_entities.InvestigationStatus.COMPLETED,
+                        "status": investigation_entities.InvestigationStatus.COMPLETED,
                         "completed_at": datetime.now(tz=UTC),
                     }
                 )
@@ -589,7 +590,7 @@ class PublishFindings(BaseNode[State, Dependencies, common.InvestigationReply]):
 
 
 async def investigate_alert(
-    alert: sre_entities.Alert,
+    alert: alert_entities.Alert,
     *,
     envelope: envelope_mod.Envelope,
     agent_for: Callable[[str], Any],
@@ -603,8 +604,8 @@ async def investigate_alert(
     request_approval_fn: common.RequestApprovalFn | None = None,
     classifier_toolsets: Sequence[AbstractToolset[object]] = (),
     analyser_toolsets: Sequence[AbstractToolset[object]] = (),
-    challenger_adapter: investigation.BaseInvestigationAdapter | None = None,
-    k8s_adapter: investigation.K8sInvestigationAdapter | None = None,
+    challenger_adapter: adapters.BaseInvestigationAdapter | None = None,
+    k8s_adapter: adapters.K8sInvestigationAdapter | None = None,
 ) -> common.InvestigationReply:
     """
     Run the full SRE investigation pipeline for an alert.

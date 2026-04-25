@@ -14,7 +14,8 @@ from typing import Any
 
 import attrs
 
-from sentinel.domain.sre import entities
+from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.investigations import entities as investigation_entities
 
 
 @attrs.frozen
@@ -58,7 +59,7 @@ class InvestigationResult:
     Carries the audit trail so every action is traceable.
     """
 
-    findings: tuple[entities.Finding, ...]
+    findings: tuple[investigation_entities.Finding, ...]
     sources_queried: tuple[str, ...]
     duration_ms: int
     adapter_name: str
@@ -78,7 +79,7 @@ class BaseInvestigationAdapter(abc.ABC):
     async def investigate(
         self,
         *,
-        alert: entities.Alert,
+        alert: alert_entities.Alert,
         context: InvestigationContext | None = None,
     ) -> InvestigationResult:
         """

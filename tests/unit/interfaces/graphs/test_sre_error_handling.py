@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from sentinel.domain.sre import entities as sre_entities
-from sentinel.domain.sre import holmes_adapter
+from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.investigations import holmes_adapter
 from sentinel.interfaces.graphs import common, sre_investigation
 from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser
 from tests import factories
@@ -55,7 +55,7 @@ class TestInvestigateWithHolmesErrorHandling:
                 return True
 
             async def investigate(
-                self, *, alert: sre_entities.Alert
+                self, *, alert: alert_entities.Alert
             ) -> holmes_adapter.HolmesInvestigationResult:
                 raise ConnectionError("Datadog API unreachable")
 

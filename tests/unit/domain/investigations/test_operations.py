@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from sentinel.domain.sre import operations
+from sentinel.domain.investigations import operations
 
 
 class TestPersistInvestigation:

@@ -7,8 +7,9 @@ from typing import Any
 
 import attrs
 
+from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.investigations import adapters
 from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
-from sentinel.domain.sre import entities, investigation
 from sentinel.domain.tools import kubernetes as k8s_tools
 from sentinel.domain.vendor_adapters.observability import BaseObservabilityClient
 from sentinel.utils import logs
@@ -36,7 +37,7 @@ class HolmesInvestigationResult:
     sources_queried: list[str]
 
 
-class BaseHolmesAdapter(investigation.BaseInvestigationAdapter):
+class BaseHolmesAdapter(adapters.BaseInvestigationAdapter):
     """
     Abstract adapter for HolmesGPT investigation engine.
 
@@ -48,8 +49,8 @@ class BaseHolmesAdapter(investigation.BaseInvestigationAdapter):
     async def investigate(  # type: ignore[override]
         self,
         *,
-        alert: entities.Alert,
-        context: investigation.InvestigationContext | None = None,
+        alert: alert_entities.Alert,
+        context: adapters.InvestigationContext | None = None,
     ) -> HolmesInvestigationResult:
         """
         Run a HolmesGPT investigation for the given alert.
@@ -100,8 +101,8 @@ class HolmesAdapter(BaseHolmesAdapter):
     async def investigate(  # type: ignore[override]
         self,
         *,
-        alert: entities.Alert,
-        context: investigation.InvestigationContext | None = None,
+        alert: alert_entities.Alert,
+        context: adapters.InvestigationContext | None = None,
     ) -> HolmesInvestigationResult:
         """
         Run a HolmesGPT investigation for the given alert.
@@ -179,7 +180,7 @@ class HolmesAdapter(BaseHolmesAdapter):
     async def _run_holmes(
         self,
         *,
-        alert: entities.Alert,
+        alert: alert_entities.Alert,
     ) -> _holmes_tcllm_mod.LLMResult:
         """
         Build the HolmesGPT engine and execute a tool-calling investigation.
@@ -253,8 +254,8 @@ class DirectToolsetAdapter(BaseHolmesAdapter):
     async def investigate(  # type: ignore[override]
         self,
         *,
-        alert: entities.Alert,
-        context: investigation.InvestigationContext | None = None,
+        alert: alert_entities.Alert,
+        context: adapters.InvestigationContext | None = None,
     ) -> HolmesInvestigationResult:
         logs.log_event(
             "direct_investigation_started",
@@ -414,7 +415,7 @@ class DirectToolsetAdapter(BaseHolmesAdapter):
     async def _query_observability(
         self,
         *,
-        alert: entities.Alert,
+        alert: alert_entities.Alert,
     ) -> (
         tuple[
             list[dict[str, Any]] | None,
@@ -460,8 +461,8 @@ class DirectToolsetAdapter(BaseHolmesAdapter):
     async def _query_k8s(
         self,
         *,
-        alert: entities.Alert,
-        context: investigation.InvestigationContext | None,
+        alert: alert_entities.Alert,
+        context: adapters.InvestigationContext | None,
     ) -> (
         tuple[
             dict[str, Any] | None,
@@ -656,7 +657,7 @@ def _summarise_k8s_events(events: list[dict[str, Any]]) -> str:
 
 def _build_analysis(
     *,
-    alert: entities.Alert,
+    alert: alert_entities.Alert,
     log_summary: str | None,
     metrics_summary: str | None,
     traces_summary: str | None,

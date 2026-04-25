@@ -16,8 +16,8 @@ from typing import Any
 
 import pytest
 
-from sentinel.domain.sre import entities as sre_entities
-from sentinel.domain.sre import holmes_adapter
+from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.investigations import holmes_adapter
 from sentinel.interfaces.graphs import sre_investigation
 from sentinel.settings import PROMPTS_DIR
 from tests import factories
@@ -34,8 +34,8 @@ def _load_golden_cases() -> list[dict[str, Any]]:
 GOLDEN_CASES = _load_golden_cases()
 
 
-def _build_alert(case: dict[str, Any]) -> sre_entities.Alert:
-    return sre_entities.Alert.model_validate(case["alert"])
+def _build_alert(case: dict[str, Any]) -> alert_entities.Alert:
+    return alert_entities.Alert.model_validate(case["alert"])
 
 
 def _build_holmes(case: dict[str, Any]) -> factories.MockHolmesAdapter:

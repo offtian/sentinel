@@ -6,18 +6,19 @@ from unittest import mock
 
 import pytest
 
+from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.investigations import adapters, holmes_adapter
 from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
-from sentinel.domain.sre import entities, holmes_adapter, investigation
 
 
 @pytest.fixture
 def sample_alert():
-    return entities.Alert(
+    return alert_entities.Alert(
         id="P123ABC",
         source="pagerduty",
         title="High CPU usage on web-01",
         description="CPU usage exceeded 90% for 5 minutes",
-        severity=entities.AlertSeverity.HIGH,
+        severity=alert_entities.AlertSeverity.HIGH,
         service="api-service",
         triggered_at=datetime(2024, 1, 1, tzinfo=UTC),
     )
@@ -223,7 +224,7 @@ class TestDirectToolsetAdapterK8s:
         # Given a configured observability client and K8s client with investigation context
         obs_client = _make_datadog_client()
         k8s_client = _make_k8s_client()
-        context = investigation.InvestigationContext(
+        context = adapters.InvestigationContext(
             cluster_name="prod-us-east",
             namespace="default",
         )
@@ -261,7 +262,7 @@ class TestDirectToolsetAdapterK8s:
         # Given a K8s client that is not configured
         obs_client = _make_datadog_client()
         k8s_client = _make_k8s_client(is_configured=False)
-        context = investigation.InvestigationContext(
+        context = adapters.InvestigationContext(
             cluster_name="prod-us-east",
             namespace="default",
         )
@@ -290,7 +291,7 @@ class TestDirectToolsetAdapterK8s:
                 ],
             },
         )
-        context = investigation.InvestigationContext(
+        context = adapters.InvestigationContext(
             cluster_name="prod-us-east",
             namespace="default",
         )
@@ -310,7 +311,7 @@ class TestDirectToolsetAdapterK8s:
         obs_client = _make_datadog_client()
         k8s_client = _make_k8s_client()
         k8s_client.get_pod_status.side_effect = Exception("K8s API timeout")
-        context = investigation.InvestigationContext(
+        context = adapters.InvestigationContext(
             cluster_name="prod-us-east",
             namespace="default",
         )
@@ -331,7 +332,7 @@ class TestDirectToolsetAdapterK8s:
         # Given a configured K8s client
         obs_client = _make_datadog_client()
         k8s_client = _make_k8s_client()
-        context = investigation.InvestigationContext(
+        context = adapters.InvestigationContext(
             cluster_name="prod-us-east",
             namespace="default",
         )
@@ -353,7 +354,7 @@ class TestDirectToolsetAdapterK8s:
         # Given a configured K8s client
         obs_client = _make_datadog_client()
         k8s_client = _make_k8s_client()
-        context = investigation.InvestigationContext(
+        context = adapters.InvestigationContext(
             cluster_name="prod-us-east",
             namespace="default",
         )
