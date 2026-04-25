@@ -20,7 +20,7 @@ class TestInstrumentedNodeRun:
         # When wrapped and executed
         with mock.patch.object(metrics, "record_pipeline_node_duration") as recorder:
             wrapped = _node_helpers.instrumented_node_run(
-                pipeline="sre",
+                pipeline="investigation",
                 node="classify_alert",
                 fn=fake_run,
             )
@@ -30,7 +30,7 @@ class TestInstrumentedNodeRun:
         assert result == "result"
         recorder.assert_called_once()
         kwargs = recorder.call_args.kwargs
-        assert kwargs["pipeline"] == "sre"
+        assert kwargs["pipeline"] == "investigation"
         assert kwargs["node"] == "classify_alert"
         assert kwargs["status"] == "ok"
         assert kwargs["duration_seconds"] >= 0
@@ -43,7 +43,7 @@ class TestInstrumentedNodeRun:
         # When wrapped and executed
         with mock.patch.object(metrics, "record_pipeline_node_duration") as recorder:
             wrapped = _node_helpers.instrumented_node_run(
-                pipeline="sre",
+                pipeline="investigation",
                 node="classify_alert",
                 fn=fake_run,
             )
@@ -67,7 +67,7 @@ class TestInstrumentedNodeRun:
             mock.patch.object(otel_trace, "get_current_span", return_value=fake_span),
         ):
             wrapped = _node_helpers.instrumented_node_run(
-                pipeline="sre",
+                pipeline="investigation",
                 node="classify_alert",
                 fn=fake_run,
             )
@@ -90,7 +90,7 @@ class TestInstrumentedNodeRun:
             mock.patch.object(otel_trace, "get_current_span", return_value=fake_span),
         ):
             wrapped = _node_helpers.instrumented_node_run(
-                pipeline="sre",
+                pipeline="investigation",
                 node="classify_alert",
                 fn=fake_run,
                 envelope=envelope,
@@ -130,7 +130,7 @@ class TestInstrumentedNodeRun:
             mock.patch.object(otel_trace, "get_current_span", return_value=fake_span),
         ):
             wrapped = _node_helpers.instrumented_node_run(
-                pipeline="sre",
+                pipeline="investigation",
                 node="classify_alert",
                 fn=failing_run,
                 envelope=envelope,

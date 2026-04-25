@@ -17,7 +17,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent.parent)
 # Import ALL SQLModel table classes so their metadata is registered.
 from sqlmodel import SQLModel
 
-from sentinel.data import audit_models, job_models, models  # noqa: F401
+from sentinel.data.sql import (  # noqa: F401
+    audit,
+    evaluation,
+    investigations,
+    jobs,
+    tickets,
+    tracing,
+)
 
 
 config = context.config

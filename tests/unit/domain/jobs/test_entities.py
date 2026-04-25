@@ -11,7 +11,7 @@ class TestJobRequest:
         # Given a job request
         job = entities.JobRequest(
             id=uuid.uuid4(),
-            job_type=entities.JobType.SRE_INVESTIGATION,
+            job_type=entities.JobType.INVESTIGATION,
             payload_json='{"alert": "test"}',
             created_at=datetime.now(tz=UTC),
             requested_by="webhook:pagerduty",
@@ -32,14 +32,14 @@ class TestJobRequest:
         now = datetime.now(tz=UTC)
         job_a = entities.JobRequest(
             id=uuid.uuid4(),
-            job_type=entities.JobType.SRE_INVESTIGATION,
+            job_type=entities.JobType.INVESTIGATION,
             payload_json=payload,
             created_at=now,
             requested_by="test",
         )
         job_b = entities.JobRequest(
             id=uuid.uuid4(),
-            job_type=entities.JobType.SRE_INVESTIGATION,
+            job_type=entities.JobType.INVESTIGATION,
             payload_json=payload,
             created_at=now,
             requested_by="test",
@@ -53,14 +53,14 @@ class TestJobRequest:
         now = datetime.now(tz=UTC)
         job_a = entities.JobRequest(
             id=uuid.uuid4(),
-            job_type=entities.JobType.SRE_INVESTIGATION,
+            job_type=entities.JobType.INVESTIGATION,
             payload_json='{"alert": "a"}',
             created_at=now,
             requested_by="test",
         )
         job_b = entities.JobRequest(
             id=uuid.uuid4(),
-            job_type=entities.JobType.SRE_INVESTIGATION,
+            job_type=entities.JobType.INVESTIGATION,
             payload_json='{"alert": "b"}',
             created_at=now,
             requested_by="test",
@@ -106,11 +106,11 @@ class TestMakeIdempotencyKey:
     def test_deterministic(self):
         # Given the same type and source ID
         key_a = entities.make_idempotency_key(
-            job_type=entities.JobType.SRE_INVESTIGATION,
+            job_type=entities.JobType.INVESTIGATION,
             source_id="alert-123",
         )
         key_b = entities.make_idempotency_key(
-            job_type=entities.JobType.SRE_INVESTIGATION,
+            job_type=entities.JobType.INVESTIGATION,
             source_id="alert-123",
         )
 
@@ -120,7 +120,7 @@ class TestMakeIdempotencyKey:
     def test_different_for_different_types(self):
         # Given the same source ID but different job types
         key_sre = entities.make_idempotency_key(
-            job_type=entities.JobType.SRE_INVESTIGATION,
+            job_type=entities.JobType.INVESTIGATION,
             source_id="id-123",
         )
         key_support = entities.make_idempotency_key(
@@ -134,11 +134,11 @@ class TestMakeIdempotencyKey:
     def test_different_for_different_source_ids(self):
         # Given the same job type but different source IDs
         key_a = entities.make_idempotency_key(
-            job_type=entities.JobType.SRE_INVESTIGATION,
+            job_type=entities.JobType.INVESTIGATION,
             source_id="alert-111",
         )
         key_b = entities.make_idempotency_key(
-            job_type=entities.JobType.SRE_INVESTIGATION,
+            job_type=entities.JobType.INVESTIGATION,
             source_id="alert-222",
         )
 

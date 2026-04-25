@@ -13,11 +13,11 @@ Coding conventions for AI agents working in this repository.
 ### Import Pattern (most common violation)
 ```python
 # WRONG
-from sentinel.domain.sre_entities import Alert
+from sentinel.domain.alerts.entities import Alert
 
 # CORRECT
-from sentinel.domain import sre_entities
-alert = sre_entities.Alert(...)
+from sentinel.domain.alerts import entities as alert_entities
+alert = alert_entities.Alert(...)
 ```
 
 ### Logging

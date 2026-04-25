@@ -23,7 +23,7 @@ from unittest import mock
 
 import pytest
 
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.interfaces.webhooks import envelope_factory
 
 

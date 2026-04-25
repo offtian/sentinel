@@ -13,7 +13,7 @@ import databases
 from sqlalchemy import select
 from sqlmodel import col
 
-from sentinel.data import tracing_models
+from sentinel.data.sql import tracing
 from sentinel.domain.pipeline import errors as pipeline_errors
 from sentinel.domain.pipeline import types as pipeline_types
 
@@ -56,8 +56,8 @@ async def fetch_pipeline_run(
     :param trace_id: Correlation UUID used to look up the run.
     :returns: Row dict if found, or None.
     """
-    query = select(tracing_models.PipelineRunRecord).where(
-        col(tracing_models.PipelineRunRecord.trace_id) == trace_id
+    query = select(tracing.PipelineRunRecord).where(
+        col(tracing.PipelineRunRecord.trace_id) == trace_id
     )
     row = await db.fetch_one(query)
     if row is None:
@@ -78,9 +78,9 @@ async def fetch_node_executions(
     :returns: List of row dicts ordered by node_order ascending.
     """
     query = (
-        select(tracing_models.NodeExecutionRecord)
-        .where(col(tracing_models.NodeExecutionRecord.pipeline_run_id) == pipeline_run_id)
-        .order_by(col(tracing_models.NodeExecutionRecord.node_order).asc())
+        select(tracing.NodeExecutionRecord)
+        .where(col(tracing.NodeExecutionRecord.pipeline_run_id) == pipeline_run_id)
+        .order_by(col(tracing.NodeExecutionRecord.node_order).asc())
     )
     rows = await db.fetch_all(query)
     return [dict(row._mapping) for row in rows]  # noqa: SLF001
@@ -99,9 +99,9 @@ async def fetch_agent_calls(
     :returns: List of row dicts ordered by started_at ascending.
     """
     query = (
-        select(tracing_models.AgentCallRecord)
-        .where(col(tracing_models.AgentCallRecord.node_execution_id) == node_execution_id)
-        .order_by(col(tracing_models.AgentCallRecord.started_at).asc())
+        select(tracing.AgentCallRecord)
+        .where(col(tracing.AgentCallRecord.node_execution_id) == node_execution_id)
+        .order_by(col(tracing.AgentCallRecord.started_at).asc())
     )
     rows = await db.fetch_all(query)
     return [dict(row._mapping) for row in rows]  # noqa: SLF001
@@ -120,9 +120,7 @@ async def fetch_replay_bundle(
     :returns: A fully-populated ``ReplayBundle``.
     :raises pipeline_errors.ReplayBundleNotFoundError: if no row matches *run_id*.
     """
-    query = select(tracing_models.PipelineRunRecord).where(
-        col(tracing_models.PipelineRunRecord.id) == run_id
-    )
+    query = select(tracing.PipelineRunRecord).where(col(tracing.PipelineRunRecord.id) == run_id)
     row = await db.fetch_one(query)
     if row is None:
         raise pipeline_errors.ReplayBundleNotFoundError(run_id)

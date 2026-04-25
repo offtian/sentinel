@@ -5,7 +5,8 @@ import uuid
 import fastapi
 from sqlmodel import col, select
 
-from sentinel.data import database, job_models
+from sentinel.data import database
+from sentinel.data.sql import jobs
 from sentinel.interfaces.api.dependencies import require_database
 
 
@@ -23,9 +24,7 @@ async def get_job_status(
     """
     async with database.get_session() as session:
         # Fetch the job request
-        stmt = select(job_models.JobRequestRecord).where(
-            col(job_models.JobRequestRecord.id) == job_id
-        )
+        stmt = select(jobs.JobRequestRecord).where(col(jobs.JobRequestRecord.id) == job_id)
         result = await session.execute(stmt)
         job_record = result.scalar_one_or_none()
 
@@ -37,9 +36,9 @@ async def get_job_status(
 
         # Fetch the latest result if any
         result_stmt = (
-            select(job_models.JobResultRecord)
-            .where(col(job_models.JobResultRecord.job_request_id) == job_id)
-            .order_by(col(job_models.JobResultRecord.created_at).desc())
+            select(jobs.JobResultRecord)
+            .where(col(jobs.JobResultRecord.job_request_id) == job_id)
+            .order_by(col(jobs.JobResultRecord.created_at).desc())
             .limit(1)
         )
         result_row = await session.execute(result_stmt)

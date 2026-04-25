@@ -21,7 +21,7 @@ class TestReplayBundleIsFrozen:
         # Given a fully-populated ReplayBundle
         bundle = pipeline_types.ReplayBundle(
             run_id=uuid.uuid4(),
-            pipeline_type="sre_investigation",
+            pipeline_type="investigation",
             started_at=datetime(2026, 1, 1, tzinfo=UTC),
             completed_at=datetime(2026, 1, 1, 0, 5, tzinfo=UTC),
             prompt_version="v1.0.0",
@@ -47,7 +47,7 @@ class TestReplayBundleIsFrozen:
         # When constructing with default
         bundle = pipeline_types.ReplayBundle(
             run_id=uuid.uuid4(),
-            pipeline_type="sre_investigation",
+            pipeline_type="investigation",
             started_at=datetime(2026, 1, 1, tzinfo=UTC),
             completed_at=None,
             prompt_version=None,
@@ -74,7 +74,7 @@ class TestReplayBundleIsFrozen:
         # When constructing with agent_prompts
         bundle = pipeline_types.ReplayBundle(
             run_id=uuid.uuid4(),
-            pipeline_type="sre_investigation",
+            pipeline_type="investigation",
             started_at=datetime(2026, 1, 1, tzinfo=UTC),
             completed_at=None,
             prompt_version="v1",
@@ -118,7 +118,7 @@ class TestFetchReplayBundle:
         mock_row = mock.MagicMock()
         mock_row._mapping = {
             "id": run_id,
-            "pipeline_type": "sre_investigation",
+            "pipeline_type": "investigation",
             "started_at": started,
             "completed_at": completed,
             "prompt_version": "v2.1.0",
@@ -139,7 +139,7 @@ class TestFetchReplayBundle:
 
         # Then all fields are mapped correctly
         assert bundle.run_id == run_id
-        assert bundle.pipeline_type == "sre_investigation"
+        assert bundle.pipeline_type == "investigation"
         assert bundle.started_at == started
         assert bundle.completed_at == completed
         assert bundle.prompt_version == "v2.1.0"

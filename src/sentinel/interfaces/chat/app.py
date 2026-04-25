@@ -27,15 +27,15 @@ import streamlit as st
 
 from sentinel import bootstrap
 from sentinel import config as config_mod
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
+from sentinel.domain.alerts import entities as alert_entities
 from sentinel.domain.charts import entities as chart_entities
+from sentinel.domain.investigations import holmes_adapter
 from sentinel.domain.search import factory as search_factory
-from sentinel.domain.sre import entities as sre_entities
-from sentinel.domain.sre import holmes_adapter
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.chat.status_update import StreamlitStatusUpdateClient
 from sentinel.interfaces.graphs import agents as agent_module
-from sentinel.interfaces.graphs import chart_generation, common, sre_investigation, support_review
+from sentinel.interfaces.graphs import chart_generation, common, investigation, support_review
 from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
 from sentinel.settings import get_settings
 
@@ -160,12 +160,12 @@ async def _run_sre(
 
     first_line = text.split("\n")[0][:200]
     now = datetime.now(tz=UTC)
-    alert = sre_entities.Alert(
+    alert = alert_entities.Alert(
         id=f"chat-{now.timestamp():.0f}",
         source="manual",
         title=first_line or "Alert from chat",
         description=text,
-        severity=sre_entities.AlertSeverity.MEDIUM,
+        severity=alert_entities.AlertSeverity.MEDIUM,
         service="unknown",
         triggered_at=now,
         raw_payload={"chat_text": text},
@@ -203,7 +203,7 @@ async def _run_sre(
             ],
         }
 
-    return await sre_investigation.investigate_alert(
+    return await investigation.investigate_alert(
         alert=alert,
         envelope=_envelope_for_chat(),
         agent_for=cfg.agent_for,

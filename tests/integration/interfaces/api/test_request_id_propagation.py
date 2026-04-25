@@ -55,11 +55,11 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.interfaces.api import middleware as middleware_mod
 from sentinel.interfaces.api.routers.sre import router as sre_router_mod
 from sentinel.interfaces.api.routers.support import router as support_router_mod
-from sentinel.interfaces.graphs import sre_investigation, support_review
+from sentinel.interfaces.graphs import investigation, support_review
 from sentinel.interfaces.graphs.agents import (
     alert_classifier,
     response_drafter,
@@ -295,7 +295,7 @@ def patched_sre_router(monkeypatch, captured_run):
         # request and node; this test stub plays that role.
         tracer = otel_trace.get_tracer("sentinel.test.integration")
         with tracer.start_as_current_span("sre.pipeline"):
-            captured_run["sre_reply"] = await sre_investigation.investigate_alert(
+            captured_run["sre_reply"] = await investigation.investigate_alert(
                 alert=alert,
                 envelope=envelope,
                 agent_for=config_stub.agent_for,
@@ -578,7 +578,7 @@ class TestEnvelopeStructlogContextBinding:
                     "root_cause_analyser": _make_fake_agent(_fake_root_cause_run),
                 }
             )
-            captured_run["sre_reply"] = await sre_investigation.investigate_alert(
+            captured_run["sre_reply"] = await investigation.investigate_alert(
                 alert=alert,
                 envelope=elevated,
                 agent_for=config_stub.agent_for,

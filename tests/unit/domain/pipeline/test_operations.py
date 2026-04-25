@@ -25,7 +25,7 @@ class TestPersistPipelineRun:
         result_id = await operations.persist_pipeline_run(
             db=mock_db,
             trace_id=uuid.uuid4(),
-            pipeline_type="sre_investigation",
+            pipeline_type="investigation",
             started_at=started_at,
         )
 
@@ -59,7 +59,7 @@ class TestPersistPipelineRun:
         await operations.persist_pipeline_run(
             db=mock_db,
             trace_id=uuid.uuid4(),
-            pipeline_type="sre_investigation",
+            pipeline_type="investigation",
             started_at=datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC),
         )
 
@@ -85,7 +85,7 @@ class TestPersistPipelineRun:
         result_id = await operations.persist_pipeline_run(
             db=mock_db,
             trace_id=trace_id,
-            pipeline_type="sre_investigation",
+            pipeline_type="investigation",
             job_request_id=job_request_id,
             started_at=started_at,
             input_json={"alert_id": "PD-1"},
@@ -105,7 +105,7 @@ class TestPersistPipelineRun:
         await operations.persist_pipeline_run(
             db=mock_db,
             trace_id=uuid.uuid4(),
-            pipeline_type="sre_investigation",
+            pipeline_type="investigation",
             started_at=datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC),
         )
 
@@ -124,7 +124,7 @@ class TestPersistPipelineRun:
         result_id = await operations.persist_pipeline_run(
             db=mock_db,
             trace_id=uuid.uuid4(),
-            pipeline_type="sre_investigation",
+            pipeline_type="investigation",
             started_at=datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC),
             input_hash="abc123",
             model_ids_json=["openai/gpt-4.1-mini", "openai/gpt-4.1"],
@@ -157,7 +157,7 @@ class TestPersistPipelineRun:
         result_id = await operations.persist_pipeline_run(
             db=mock_db,
             trace_id=uuid.uuid4(),
-            pipeline_type="sre_investigation",
+            pipeline_type="investigation",
             started_at=datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC),
             agent_prompts_json=agent_prompts,
         )

@@ -12,7 +12,7 @@ import databases
 import sqlalchemy as sa
 from sqlmodel import col
 
-from sentinel.data import tracing_models
+from sentinel.data.sql import tracing
 from sentinel.utils import logs
 
 
@@ -38,7 +38,7 @@ async def persist_pipeline_run(
 
     :param db: The async database connection.
     :param trace_id: Correlation UUID for the trace.
-    :param pipeline_type: Name of the pipeline (e.g. "sre_investigation").
+    :param pipeline_type: Name of the pipeline (e.g. "investigation").
     :param job_request_id: Optional job request UUID to correlate with job queue.
     :param started_at: Timestamp when the pipeline started.
     :param input_json: Optional structured input payload.
@@ -54,7 +54,7 @@ async def persist_pipeline_run(
     """
     row_id = uuid.uuid4()
     created_at = datetime.now(tz=UTC)
-    query = sa.insert(tracing_models.PipelineRunRecord).values(
+    query = sa.insert(tracing.PipelineRunRecord).values(
         id=row_id,
         trace_id=trace_id,
         pipeline_type=pipeline_type,
@@ -113,8 +113,8 @@ async def complete_pipeline_run(
     """
     completed_at = datetime.now(tz=UTC)
     query = (
-        sa.update(tracing_models.PipelineRunRecord)
-        .where(col(tracing_models.PipelineRunRecord.id) == run_id)
+        sa.update(tracing.PipelineRunRecord)
+        .where(col(tracing.PipelineRunRecord.id) == run_id)
         .values(
             status=status,
             output_json=output_json,
@@ -159,7 +159,7 @@ async def persist_node_execution(
     """
     row_id = uuid.uuid4()
     created_at = datetime.now(tz=UTC)
-    query = sa.insert(tracing_models.NodeExecutionRecord).values(
+    query = sa.insert(tracing.NodeExecutionRecord).values(
         id=row_id,
         trace_id=trace_id,
         pipeline_run_id=pipeline_run_id,
@@ -209,8 +209,8 @@ async def complete_node_execution(
     """
     completed_at = datetime.now(tz=UTC)
     query = (
-        sa.update(tracing_models.NodeExecutionRecord)
-        .where(col(tracing_models.NodeExecutionRecord.id) == node_id)
+        sa.update(tracing.NodeExecutionRecord)
+        .where(col(tracing.NodeExecutionRecord.id) == node_id)
         .values(
             status=status,
             output_json=output_json,
@@ -259,7 +259,7 @@ async def persist_agent_call(
     """
     row_id = uuid.uuid4()
     created_at = datetime.now(tz=UTC)
-    query = sa.insert(tracing_models.AgentCallRecord).values(
+    query = sa.insert(tracing.AgentCallRecord).values(
         id=row_id,
         trace_id=trace_id,
         node_execution_id=node_execution_id,

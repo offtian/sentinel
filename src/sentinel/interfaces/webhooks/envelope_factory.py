@@ -35,7 +35,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.settings import Settings
 from sentinel.utils import logs
 

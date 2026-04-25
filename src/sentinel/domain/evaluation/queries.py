@@ -11,7 +11,7 @@ import databases
 from sqlalchemy import select
 from sqlmodel import col
 
-from sentinel.data import evaluation_models
+from sentinel.data.sql import evaluation
 
 
 async def fetch_comparison_runs(
@@ -29,12 +29,11 @@ async def fetch_comparison_runs(
     :returns: List of row dicts ordered by created_at descending.
     """
     query = (
-        select(evaluation_models.ComparisonRunRecord)
+        select(evaluation.ComparisonRunRecord)
         .where(
-            col(evaluation_models.ComparisonRunRecord.investigation_record_id)
-            == investigation_record_id
+            col(evaluation.ComparisonRunRecord.investigation_record_id) == investigation_record_id
         )
-        .order_by(col(evaluation_models.ComparisonRunRecord.created_at).desc())
+        .order_by(col(evaluation.ComparisonRunRecord.created_at).desc())
         .limit(limit)
     )
     rows = await db.fetch_all(query)
@@ -58,12 +57,12 @@ async def fetch_eval_runs(
     :returns: List of row dicts ordered by created_at descending.
     """
     query = (
-        select(evaluation_models.EvalRunRecord)
-        .where(col(evaluation_models.EvalRunRecord.dataset_name) == dataset_name)
-        .order_by(col(evaluation_models.EvalRunRecord.created_at).desc())
+        select(evaluation.EvalRunRecord)
+        .where(col(evaluation.EvalRunRecord.dataset_name) == dataset_name)
+        .order_by(col(evaluation.EvalRunRecord.created_at).desc())
         .limit(limit)
     )
     if agent_name is not None:
-        query = query.where(col(evaluation_models.EvalRunRecord.agent_name) == agent_name)
+        query = query.where(col(evaluation.EvalRunRecord.agent_name) == agent_name)
     rows = await db.fetch_all(query)
     return [dict(row._mapping) for row in rows]  # noqa: SLF001

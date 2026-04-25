@@ -8,11 +8,11 @@ from typing import Any
 from slack_bolt.context.ack.async_ack import AsyncAck
 
 from sentinel import config as config_mod
-from sentinel.data import envelope as envelope_mod
-from sentinel.domain.sre import entities as sre_entities
-from sentinel.domain.sre.holmes_adapter import HolmesAdapter
+from sentinel.data.primitives import envelope as envelope_mod
+from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.investigations.holmes_adapter import HolmesAdapter
 from sentinel.domain.support import entities as support_entities
-from sentinel.interfaces.graphs import common, sre_investigation, support_review
+from sentinel.interfaces.graphs import common, investigation, support_review
 from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
 from sentinel.interfaces.slack.app import app
 from sentinel.interfaces.slack.status_update import SlackStatusUpdateClient
@@ -180,19 +180,19 @@ async def _run_sre(
 
     # Build a minimal Alert from the Slack message text
     first_line = text.split("\n")[0][:200]
-    alert = sre_entities.Alert(
+    alert = alert_entities.Alert(
         id=f"slack-{thread_ts}",
         source="manual",
         title=first_line or "Alert from Slack",
         description=text,
-        severity=sre_entities.AlertSeverity.MEDIUM,
+        severity=alert_entities.AlertSeverity.MEDIUM,
         service="unknown",
         triggered_at=datetime.now(tz=UTC),
         raw_payload={"slack_text": text},
     )
 
     cfg = config_mod.get_config()
-    reply = await sre_investigation.investigate_alert(
+    reply = await investigation.investigate_alert(
         alert=alert,
         envelope=_envelope_for_slack(channel=channel, user_id="slack-thread"),
         agent_for=cfg.agent_for,
@@ -212,7 +212,7 @@ async def _run_sre(
     )
 
     logs.log_event(
-        "slack_sre_investigation_complete",
+        "slack_investigation_complete",
         params={"alert_id": alert.id, "channel": channel},
     )
 

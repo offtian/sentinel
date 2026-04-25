@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sentinel.domain.sre import entities
+from sentinel.domain.alerts import entities as alert_entities
 from sentinel.interfaces.webhooks import pagerduty
 
 
@@ -25,7 +25,7 @@ class TestParsePagerDutyWebhook:
         assert alert.id == "P123ABC"
         assert alert.source == "pagerduty"
         assert alert.title == "High CPU usage on web-server-01"
-        assert alert.severity == entities.AlertSeverity.HIGH
+        assert alert.severity == alert_entities.AlertSeverity.HIGH
         assert alert.service == "Production API"
         assert alert.description == "CPU usage exceeded 90%"
 
@@ -81,7 +81,7 @@ class TestParsePagerDutyWebhook:
         }
         alert = pagerduty.parse_pagerduty_webhook(payload)
         assert alert is not None
-        assert alert.severity == entities.AlertSeverity.LOW
+        assert alert.severity == alert_entities.AlertSeverity.LOW
 
 
 class TestParseDatadogWebhook:
@@ -100,7 +100,7 @@ class TestParseDatadogWebhook:
         assert alert is not None
         assert alert.id == "12345"
         assert alert.source == "datadog"
-        assert alert.severity == entities.AlertSeverity.CRITICAL
+        assert alert.severity == alert_entities.AlertSeverity.CRITICAL
         assert alert.service == "api"
 
     def test_skip_recovered_alert(self):
@@ -140,10 +140,10 @@ class TestParseDatadogWebhook:
 
     def test_priority_mapping(self):
         for priority, expected_severity in [
-            ("P1", entities.AlertSeverity.CRITICAL),
-            ("P2", entities.AlertSeverity.HIGH),
-            ("P3", entities.AlertSeverity.MEDIUM),
-            ("P4", entities.AlertSeverity.LOW),
+            ("P1", alert_entities.AlertSeverity.CRITICAL),
+            ("P2", alert_entities.AlertSeverity.HIGH),
+            ("P3", alert_entities.AlertSeverity.MEDIUM),
+            ("P4", alert_entities.AlertSeverity.LOW),
         ]:
             payload = {
                 "id": "300",

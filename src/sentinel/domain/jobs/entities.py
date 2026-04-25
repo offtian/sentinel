@@ -9,7 +9,7 @@ import attrs
 
 
 class JobType(enum.Enum):
-    SRE_INVESTIGATION = "sre_investigation"
+    INVESTIGATION = "investigation"
     SUPPORT_REVIEW = "support_review"
     SCHEDULED_AUTOMATION = "scheduled_automation"
 

@@ -28,7 +28,7 @@ vendors/       External SDK wrappers (Slack, PagerDuty, Jira)
 
 Both pipelines are built as [Pydantic Graph](https://ai.pydantic.dev/pydantic-graph/) DAGs with [PydanticAI](https://ai.pydantic.dev/) agents at key decision nodes. LLM calls route through [LiteLLM](https://github.com/BerriAI/litellm) SDK (in-process) via PydanticAI's `litellm:` model prefix — no external proxy.
 
-### SRE Investigation Pipeline
+### Alert Investigation Pipeline
 
 ```
 ClassifyAlert → InvestigateWithHolmes → AnalyseRootCause → DetermineConfidence → [ApprovalGate] → PublishFindings

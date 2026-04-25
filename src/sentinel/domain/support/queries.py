@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy import select
 from sqlmodel import col
 
-from sentinel.data import models
+from sentinel.data.sql import tickets
 from sentinel.domain.support import entities
 
 
@@ -28,7 +28,9 @@ async def fetch_ticket_review(
     :param record_id: UUID primary key of the ticket review record.
     :returns: Row dict if found, or None.
     """
-    query = select(models.TicketReviewRecord).where(col(models.TicketReviewRecord.id) == record_id)
+    query = select(tickets.TicketReviewRecord).where(
+        col(tickets.TicketReviewRecord.id) == record_id
+    )
     row = await db.fetch_one(query)
     if row is None:
         return None
@@ -48,9 +50,9 @@ async def fetch_reviews_for_ticket(
     :returns: List of row dicts ordered by created_at descending.
     """
     query = (
-        select(models.TicketReviewRecord)
-        .where(col(models.TicketReviewRecord.ticket_key) == ticket_key)
-        .order_by(col(models.TicketReviewRecord.created_at).desc())
+        select(tickets.TicketReviewRecord)
+        .where(col(tickets.TicketReviewRecord.ticket_key) == ticket_key)
+        .order_by(col(tickets.TicketReviewRecord.created_at).desc())
     )
     rows = await db.fetch_all(query)
     return [dict(row._mapping) for row in rows]  # noqa: SLF001
@@ -68,9 +70,9 @@ async def fetch_review_stats(
               All ReviewStatus values are included, defaulting to 0 if absent.
     """
     query = sa.select(
-        col(models.TicketReviewRecord.status),
-        sa.func.count(col(models.TicketReviewRecord.id)).label("count"),
-    ).group_by(col(models.TicketReviewRecord.status))
+        col(tickets.TicketReviewRecord.status),
+        sa.func.count(col(tickets.TicketReviewRecord.id)).label("count"),
+    ).group_by(col(tickets.TicketReviewRecord.status))
     rows = await db.fetch_all(query)
     counts_from_db = {row._mapping["status"]: row._mapping["count"] for row in rows}  # noqa: SLF001
     return {status.value: counts_from_db.get(status.value, 0) for status in entities.ReviewStatus}

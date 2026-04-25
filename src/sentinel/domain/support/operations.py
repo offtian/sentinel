@@ -12,7 +12,7 @@ import databases
 from sqlalchemy import insert, update
 from sqlmodel import col
 
-from sentinel.data import models
+from sentinel.data.sql import tickets
 from sentinel.domain.support import entities
 from sentinel.utils import logs
 
@@ -43,7 +43,7 @@ async def persist_ticket_review(
     """
     row_id = uuid.uuid4()
     created_at = datetime.now(tz=UTC)
-    query = insert(models.TicketReviewRecord).values(
+    query = insert(tickets.TicketReviewRecord).values(
         id=row_id,
         ticket_id=ticket_id,
         ticket_key=ticket_key,
@@ -84,8 +84,8 @@ async def update_review_status(
     """
     now = datetime.now(tz=UTC)
     query = (
-        update(models.TicketReviewRecord)
-        .where(col(models.TicketReviewRecord.id) == record_id)
+        update(tickets.TicketReviewRecord)
+        .where(col(tickets.TicketReviewRecord.id) == record_id)
         .values(status=status, reviewed_at=now)
     )
     await db.execute(query)

@@ -11,7 +11,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sentinel.domain.sre import entities, investigation, k8s_native_agent
+from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.investigations import adapters, k8s_native_agent
 from sentinel.domain.tools import kubernetes as k8s_tools
 from sentinel.domain.tools import kubernetes_toolset as k8s_toolset_mod
 from sentinel.interfaces.graphs.agents import k8s_investigator, utils
@@ -23,8 +24,8 @@ if TYPE_CHECKING:
 
 async def run_k8s_agent(
     *,
-    alert: entities.Alert,
-    context: investigation.InvestigationContext | None,
+    alert: alert_entities.Alert,
+    context: adapters.InvestigationContext | None,
     k8s_client: k8s_tools.K8sClient | None,
     model_name: str,
     mcp_toolsets: Sequence[Any],

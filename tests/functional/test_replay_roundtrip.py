@@ -60,7 +60,7 @@ class TestReplayRoundTrip:
         # When start_pipeline is called with all snapshot metadata
         with mock.patch.object(pipeline_ops, "persist_pipeline_run", side_effect=_spy_persist):
             await tracer.start_pipeline(
-                pipeline_type="sre_investigation",
+                pipeline_type="investigation",
                 input_data={"alert_id": "P123"},
                 input_hash="abc123",
                 model_ids_json=["openai/gpt-4.1-mini", "openai/gpt-4.1"],
@@ -74,7 +74,7 @@ class TestReplayRoundTrip:
         # Then all snapshot fields are forwarded to the persistence layer
         assert len(captured_persist_args) == 1
         persisted = captured_persist_args[0]
-        assert persisted["pipeline_type"] == "sre_investigation"
+        assert persisted["pipeline_type"] == "investigation"
         assert persisted["input_json"] == {"alert_id": "P123"}
         assert persisted["input_hash"] == "abc123"
         assert persisted["model_ids_json"] == ["openai/gpt-4.1-mini", "openai/gpt-4.1"]
@@ -92,7 +92,7 @@ class TestReplayRoundTrip:
         """Verify complete_pipeline forwards final_reply to the persistence layer."""
         # Given a pipeline that has already started
         with mock.patch.object(pipeline_ops, "persist_pipeline_run", return_value=uuid.uuid4()):
-            await tracer.start_pipeline(pipeline_type="sre_investigation")
+            await tracer.start_pipeline(pipeline_type="investigation")
 
         final_reply = {"alert_id": "P123", "root_cause": "OOM"}
 
@@ -125,7 +125,7 @@ class TestReplayRoundTrip:
 
         db_row_mapping = {
             "id": run_id,
-            "pipeline_type": "sre_investigation",
+            "pipeline_type": "investigation",
             "started_at": started,
             "completed_at": completed,
             "prompt_version": prompt_tpl.version,
@@ -149,7 +149,7 @@ class TestReplayRoundTrip:
 
         # Then the ReplayBundle contains all snapshot values
         assert bundle.run_id == run_id
-        assert bundle.pipeline_type == "sre_investigation"
+        assert bundle.pipeline_type == "investigation"
         assert bundle.started_at == started
         assert bundle.completed_at == completed
         assert bundle.prompt_version == prompt_tpl.version
@@ -227,7 +227,7 @@ class TestReplayRoundTrip:
 
         # When starting and completing a pipeline
         await tracer.start_pipeline(
-            pipeline_type="sre_investigation",
+            pipeline_type="investigation",
             input_data={"alert_id": "P123"},
         )
         await tracer.complete_pipeline(

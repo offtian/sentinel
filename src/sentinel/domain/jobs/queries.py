@@ -11,7 +11,7 @@ import databases
 from sqlalchemy import select
 from sqlmodel import col
 
-from sentinel.data import job_models
+from sentinel.data.sql import jobs
 
 
 async def fetch_job(
@@ -26,9 +26,7 @@ async def fetch_job(
     :param job_id: UUID primary key of the job request.
     :returns: Row dict if found, or None.
     """
-    query = select(job_models.JobRequestRecord).where(
-        col(job_models.JobRequestRecord.id) == job_id
-    )
+    query = select(jobs.JobRequestRecord).where(col(jobs.JobRequestRecord.id) == job_id)
     row = await db.fetch_one(query)
     if row is None:
         return None

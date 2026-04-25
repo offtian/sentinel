@@ -22,7 +22,7 @@ class TestFetchPipelineRun:
         mock_row._mapping = {
             "id": uuid.uuid4(),
             "trace_id": trace_id,
-            "pipeline_type": "sre_investigation",
+            "pipeline_type": "investigation",
             "status": "running",
         }
         mock_db.fetch_one.return_value = mock_row
@@ -35,7 +35,7 @@ class TestFetchPipelineRun:
 
         # Then the row is returned as a dict
         assert result is not None
-        assert result["pipeline_type"] == "sre_investigation"
+        assert result["pipeline_type"] == "investigation"
 
     @pytest.mark.asyncio
     async def test_returns_none_when_row_absent(self) -> None:

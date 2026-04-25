@@ -62,7 +62,7 @@ async def trigger_investigation(
             query=query,
             values={
                 "id": job_id,
-                "job_type": job_entities.JobType.SRE_INVESTIGATION.value,
+                "job_type": job_entities.JobType.INVESTIGATION.value,
                 "payload_json": payload_json,
                 "payload_hash": payload_hash,
                 "status": "pending",

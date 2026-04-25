@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sentinel.domain.sre import entities
+from sentinel.domain.alerts import entities as alert_entities
 from sentinel.utils import logs
 
 
-def parse_pagerduty_webhook(payload: dict[str, Any]) -> entities.Alert | None:
+def parse_pagerduty_webhook(payload: dict[str, Any]) -> alert_entities.Alert | None:
     """
     Parse a PagerDuty V3 webhook event into an Alert entity.
 
@@ -48,17 +48,17 @@ def parse_pagerduty_webhook(payload: dict[str, Any]) -> entities.Alert | None:
     description = body.get("details", title)
 
     severity_map = {
-        "high": entities.AlertSeverity.HIGH,
-        "low": entities.AlertSeverity.LOW,
+        "high": alert_entities.AlertSeverity.HIGH,
+        "low": alert_entities.AlertSeverity.LOW,
     }
-    severity = severity_map.get(urgency, entities.AlertSeverity.MEDIUM)
+    severity = severity_map.get(urgency, alert_entities.AlertSeverity.MEDIUM)
 
     triggered_at_str = data.get("created_at")
     triggered_at = (
         datetime.fromisoformat(triggered_at_str) if triggered_at_str else datetime.now(tz=UTC)
     )
 
-    return entities.Alert(
+    return alert_entities.Alert(
         id=incident_id,
         source="pagerduty",
         title=title,
@@ -70,7 +70,7 @@ def parse_pagerduty_webhook(payload: dict[str, Any]) -> entities.Alert | None:
     )
 
 
-def parse_datadog_webhook(payload: dict[str, Any]) -> entities.Alert | None:
+def parse_datadog_webhook(payload: dict[str, Any]) -> alert_entities.Alert | None:
     """
     Parse a Datadog webhook payload into an Alert entity.
 
@@ -111,19 +111,19 @@ def parse_datadog_webhook(payload: dict[str, Any]) -> entities.Alert | None:
                 break
 
     severity_map = {
-        "P1": entities.AlertSeverity.CRITICAL,
-        "P2": entities.AlertSeverity.HIGH,
-        "P3": entities.AlertSeverity.MEDIUM,
-        "P4": entities.AlertSeverity.LOW,
+        "P1": alert_entities.AlertSeverity.CRITICAL,
+        "P2": alert_entities.AlertSeverity.HIGH,
+        "P3": alert_entities.AlertSeverity.MEDIUM,
+        "P4": alert_entities.AlertSeverity.LOW,
     }
-    severity = severity_map.get(priority, entities.AlertSeverity.MEDIUM)
+    severity = severity_map.get(priority, alert_entities.AlertSeverity.MEDIUM)
 
     date_epoch = payload.get("date")
     triggered_at = (
         datetime.fromtimestamp(int(date_epoch), tz=UTC) if date_epoch else datetime.now(tz=UTC)
     )
 
-    return entities.Alert(
+    return alert_entities.Alert(
         id=alert_id,
         source="datadog",
         title=title,

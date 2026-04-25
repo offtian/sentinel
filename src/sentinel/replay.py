@@ -24,14 +24,14 @@ import databases
 
 from sentinel import config as config_mod
 from sentinel import settings as settings_mod
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
+from sentinel.domain.alerts import entities as alert_entities
 from sentinel.domain.pipeline import errors as pipeline_errors
 from sentinel.domain.pipeline import queries as pipeline_queries
 from sentinel.domain.pipeline import tracer as pipeline_tracer
 from sentinel.domain.pipeline import types as pipeline_types
-from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.support import entities as support_entities
-from sentinel.interfaces.graphs import sre_investigation, support_review
+from sentinel.interfaces.graphs import investigation, support_review
 from sentinel.interfaces.graphs.agents import k8s_runner
 
 
@@ -95,7 +95,7 @@ async def _replay_pipeline(*, run_id: uuid.UUID, show_diff: bool) -> None:
 
         result: pipeline_types.InvestigationReply | pipeline_types.SupportReply
 
-        if bundle.pipeline_type == "sre_investigation":
+        if bundle.pipeline_type == "investigation":
             result = await _replay_sre(bundle=bundle, cfg=cfg, db=db)
         elif bundle.pipeline_type == "support_review":
             result = await _replay_support(bundle=bundle, cfg=cfg, db=db)
@@ -126,7 +126,7 @@ async def _replay_sre(
     :param cfg: Application configuration with agent registry and adapters.
     :param db: Database connection for execution tracing.
     """
-    alert = sre_entities.Alert.model_validate(bundle.input_payload)
+    alert = alert_entities.Alert.model_validate(bundle.input_payload)
 
     et = pipeline_tracer.ExecutionTracer(db=db)
     await et.start_pipeline(
@@ -134,7 +134,7 @@ async def _replay_sre(
         input_data=bundle.input_payload,
     )
 
-    result = await sre_investigation.investigate_alert(
+    result = await investigation.investigate_alert(
         alert,
         envelope=_envelope_for_replay(bundle),
         agent_for=cfg.agent_for,

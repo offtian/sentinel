@@ -23,11 +23,11 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from sentinel import config as base_config_mod
 from sentinel.config import BaseConfiguration
+from sentinel.domain.investigations import adapters, holmes_adapter, k8s_native_agent
+from sentinel.domain.investigations import kagent_adapter as kagent_adapter_mod
 from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
 from sentinel.domain.search import factory as search_factory
 from sentinel.domain.search import searcher
-from sentinel.domain.sre import holmes_adapter, investigation, k8s_native_agent
-from sentinel.domain.sre import kagent_adapter as kagent_adapter_mod
 from sentinel.domain.vendor_adapters.confluence import ConfluenceClient
 from sentinel.domain.vendor_adapters.jira import JiraClient
 from sentinel.domain.vendor_adapters.observability import (
@@ -268,7 +268,7 @@ class CommonConfiguration(BaseConfiguration):
         self,
         *,
         agent_runner: k8s_native_agent.AgentRunner,
-    ) -> investigation.K8sInvestigationAdapter | None:
+    ) -> adapters.K8sInvestigationAdapter | None:
         """
         Build the K8s investigation adapter based on configuration.
 
@@ -304,7 +304,7 @@ class CommonConfiguration(BaseConfiguration):
 
     def build_challenger_adapter(
         self,
-    ) -> investigation.BaseInvestigationAdapter | None:
+    ) -> adapters.BaseInvestigationAdapter | None:
         """
         Build the challenger adapter for A/B comparison mode.
 

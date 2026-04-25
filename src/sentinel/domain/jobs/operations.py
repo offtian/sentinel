@@ -17,7 +17,7 @@ import databases
 from sqlalchemy import insert, select, update
 from sqlmodel import col
 
-from sentinel.data import job_models
+from sentinel.data.sql import jobs
 from sentinel.utils import logs
 
 
@@ -36,7 +36,7 @@ async def enqueue_job(
     Insert a job request into the queue.
 
     :param db: The async database connection.
-    :param job_type: Type of job (e.g. "sre_investigation").
+    :param job_type: Type of job (e.g. "investigation").
     :param payload: Arbitrary job payload dict.
     :param requested_by: Identifier for who/what requested the job.
     :param source_id: Source identifier used for idempotency.
@@ -51,7 +51,7 @@ async def enqueue_job(
     payload_hash = hashlib.sha256(payload_json.encode()).hexdigest()
     idempotency_key = hashlib.sha256(f"{job_type}:{source_id}".encode()).hexdigest()
 
-    query = insert(job_models.JobRequestRecord).values(
+    query = insert(jobs.JobRequestRecord).values(
         id=job_id,
         job_type=job_type,
         payload_json=payload_json,
@@ -89,7 +89,7 @@ async def enqueue_investigation(
     """
     Enqueue an SRE investigation job.
 
-    Convenience wrapper around ``enqueue_job`` with job_type="sre_investigation".
+    Convenience wrapper around ``enqueue_job`` with job_type="investigation".
 
     :param db: The async database connection.
     :param alert_payload: Alert data payload.
@@ -101,7 +101,7 @@ async def enqueue_investigation(
     """
     return await enqueue_job(
         db=db,
-        job_type="sre_investigation",
+        job_type="investigation",
         payload=alert_payload,
         requested_by=requested_by,
         source_id=alert_id,
@@ -181,7 +181,7 @@ async def claim_next_job(
     *,
     db: databases.Database,
     worker_id: str,
-    job_types: tuple[str, ...] = ("sre_investigation", "support_review"),
+    job_types: tuple[str, ...] = ("investigation", "support_review"),
 ) -> dict[str, Any] | None:
     """
     Claim the next available job using ``SELECT ... FOR UPDATE SKIP LOCKED``.
@@ -192,12 +192,12 @@ async def claim_next_job(
     :returns: The claimed job row as a dict, or None if no jobs available.
     """
     select_query = (
-        select(job_models.JobRequestRecord)
-        .where(col(job_models.JobRequestRecord.status) == "pending")
-        .where(col(job_models.JobRequestRecord.job_type).in_(job_types))
+        select(jobs.JobRequestRecord)
+        .where(col(jobs.JobRequestRecord.status) == "pending")
+        .where(col(jobs.JobRequestRecord.job_type).in_(job_types))
         .order_by(
-            col(job_models.JobRequestRecord.priority).asc(),
-            col(job_models.JobRequestRecord.created_at).asc(),
+            col(jobs.JobRequestRecord.priority).asc(),
+            col(jobs.JobRequestRecord.created_at).asc(),
         )
         .limit(1)
         .with_for_update(skip_locked=True)
@@ -212,8 +212,8 @@ async def claim_next_job(
     now = datetime.now(tz=UTC)
 
     update_query = (
-        update(job_models.JobRequestRecord)
-        .where(col(job_models.JobRequestRecord.id) == job_id)
+        update(jobs.JobRequestRecord)
+        .where(col(jobs.JobRequestRecord.id) == job_id)
         .values(status="running", locked_by=worker_id, locked_at=now)
     )
     await db.execute(update_query)
@@ -249,14 +249,14 @@ async def complete_job(
     now = datetime.now(tz=UTC)
 
     update_query = (
-        update(job_models.JobRequestRecord)
-        .where(col(job_models.JobRequestRecord.id) == job_id)
+        update(jobs.JobRequestRecord)
+        .where(col(jobs.JobRequestRecord.id) == job_id)
         .values(status="completed")
     )
     await db.execute(update_query)
 
     result_id = uuid.uuid4()
-    insert_query = insert(job_models.JobResultRecord).values(
+    insert_query = insert(jobs.JobResultRecord).values(
         id=result_id,
         job_request_id=job_id,
         status="completed",
@@ -304,26 +304,26 @@ async def fail_job(
 
     if should_retry:
         update_query = (
-            update(job_models.JobRequestRecord)
-            .where(col(job_models.JobRequestRecord.id) == job_id)
+            update(jobs.JobRequestRecord)
+            .where(col(jobs.JobRequestRecord.id) == job_id)
             .values(
                 status="pending",
                 locked_by=None,
                 locked_at=None,
-                retry_count=col(job_models.JobRequestRecord.retry_count) + 1,
+                retry_count=col(jobs.JobRequestRecord.retry_count) + 1,
             )
         )
     else:
         update_query = (
-            update(job_models.JobRequestRecord)
-            .where(col(job_models.JobRequestRecord.id) == job_id)
+            update(jobs.JobRequestRecord)
+            .where(col(jobs.JobRequestRecord.id) == job_id)
             .values(status="failed")
         )
 
     await db.execute(update_query)
 
     result_id = uuid.uuid4()
-    insert_query = insert(job_models.JobResultRecord).values(
+    insert_query = insert(jobs.JobResultRecord).values(
         id=result_id,
         job_request_id=job_id,
         status="failed",
@@ -361,9 +361,9 @@ async def recover_stale_jobs(
     :param worker_id: Identifier of the worker whose stale jobs to recover.
     """
     query = (
-        update(job_models.JobRequestRecord)
-        .where(col(job_models.JobRequestRecord.status) == "running")
-        .where(col(job_models.JobRequestRecord.locked_by) == worker_id)
+        update(jobs.JobRequestRecord)
+        .where(col(jobs.JobRequestRecord.status) == "running")
+        .where(col(jobs.JobRequestRecord.locked_by) == worker_id)
         .values(status="pending", locked_by=None, locked_at=None)
     )
     await db.execute(query)

@@ -67,7 +67,7 @@ class TestPersistEvalRun:
         # When an eval run is persisted with composite scoring fields
         result_id = await operations.persist_eval_run(
             db=mock_db,
-            dataset_name="sre_investigation",
+            dataset_name="investigation",
             total_cases=5,
             passed_cases=4,
             failed_cases=1,
