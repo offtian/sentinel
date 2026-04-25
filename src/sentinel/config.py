@@ -22,7 +22,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
-from sentinel.data import policies
+from sentinel.data.primitives import policies
 from sentinel.settings import Settings, get_settings
 
 

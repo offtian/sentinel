@@ -29,7 +29,7 @@ from sentinel import config as config_mod
 from sentinel.application.automations import runner as automation_runner
 from sentinel.data import database
 from sentinel.data import db as async_db
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain import prompts
 from sentinel.domain.jobs import entities
 from sentinel.domain.jobs import operations as job_ops

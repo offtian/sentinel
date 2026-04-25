@@ -24,7 +24,7 @@ import databases
 
 from sentinel import config as config_mod
 from sentinel import settings as settings_mod
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain.pipeline import errors as pipeline_errors
 from sentinel.domain.pipeline import queries as pipeline_queries
 from sentinel.domain.pipeline import tracer as pipeline_tracer

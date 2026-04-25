@@ -8,7 +8,7 @@ import fastapi
 
 from sentinel.config import get_config
 from sentinel.data import db as async_db
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain.jobs import operations as job_ops
 from sentinel.domain.support import entities
 from sentinel.domain.support import operations as support_ops

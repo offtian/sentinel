@@ -11,7 +11,7 @@ from typing import Any
 import databases
 import sqlalchemy as sa
 
-from sentinel.data import models
+from sentinel.data.sql import investigations
 from sentinel.utils import logs
 
 
@@ -53,7 +53,7 @@ async def persist_investigation(
     """
     row_id = uuid.uuid4()
     created_at = datetime.now(tz=UTC)
-    query = sa.insert(models.InvestigationRecord).values(
+    query = sa.insert(investigations.InvestigationRecord).values(
         id=row_id,
         alert_source=alert_source,
         alert_id=alert_id,

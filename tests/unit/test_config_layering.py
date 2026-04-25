@@ -14,7 +14,7 @@ import pytest
 
 from sentinel import config as config_mod
 from sentinel import settings as settings_mod
-from sentinel.data import policies
+from sentinel.data.primitives import policies
 
 
 class TestApprovalPolicy:

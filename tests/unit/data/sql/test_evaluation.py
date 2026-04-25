@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sentinel.data import evaluation_models
+from sentinel.data.sql import evaluation
 
 
 class TestEvalRunRecordFields:
@@ -10,7 +10,7 @@ class TestEvalRunRecordFields:
         # Given an EvalRunRecord model
 
         # When checking the model fields
-        fields = evaluation_models.EvalRunRecord.model_fields
+        fields = evaluation.EvalRunRecord.model_fields
 
         # Then agent_name field exists and defaults to None
         assert "agent_name" in fields
@@ -20,7 +20,7 @@ class TestEvalRunRecordFields:
         # Given an EvalRunRecord model
 
         # When checking the model fields
-        fields = evaluation_models.EvalRunRecord.model_fields
+        fields = evaluation.EvalRunRecord.model_fields
 
         # Then composite_score field exists and defaults to None
         assert "composite_score" in fields
@@ -30,7 +30,7 @@ class TestEvalRunRecordFields:
         # Given an EvalRunRecord model
 
         # When checking the model fields
-        fields = evaluation_models.EvalRunRecord.model_fields
+        fields = evaluation.EvalRunRecord.model_fields
 
         # Then assertion_details_json field exists and defaults to None
         assert "assertion_details_json" in fields
@@ -40,7 +40,7 @@ class TestEvalRunRecordFields:
         # Given an EvalRunRecord model
 
         # When checking the agent_name field info
-        field_info = evaluation_models.EvalRunRecord.model_fields["agent_name"]
+        field_info = evaluation.EvalRunRecord.model_fields["agent_name"]
 
         # Then the field metadata indicates it is indexed
         # SQLModel stores index in FieldInfoMetadata within the metadata list

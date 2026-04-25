@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable
 import structlog
 from opentelemetry import trace as otel_trace
 
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.utils import metrics
 
 

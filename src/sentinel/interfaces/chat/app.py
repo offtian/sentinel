@@ -27,7 +27,7 @@ import streamlit as st
 
 from sentinel import bootstrap
 from sentinel import config as config_mod
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain.charts import entities as chart_entities
 from sentinel.domain.search import factory as search_factory
 from sentinel.domain.sre import entities as sre_entities

@@ -10,7 +10,7 @@ from typing import Any
 import databases
 from sqlalchemy import insert
 
-from sentinel.data import evaluation_models
+from sentinel.data.sql import evaluation
 
 
 async def persist_comparison_run(
@@ -40,7 +40,7 @@ async def persist_comparison_run(
     :returns: The UUID of the inserted row.
     """
     row_id = uuid.uuid4()
-    query = insert(evaluation_models.ComparisonRunRecord).values(
+    query = insert(evaluation.ComparisonRunRecord).values(
         id=row_id,
         investigation_record_id=investigation_record_id,
         baseline_adapter=baseline_adapter,
@@ -86,7 +86,7 @@ async def persist_eval_run(
     :returns: The UUID of the inserted row.
     """
     row_id = uuid.uuid4()
-    query = insert(evaluation_models.EvalRunRecord).values(
+    query = insert(evaluation.EvalRunRecord).values(
         id=row_id,
         dataset_name=dataset_name,
         agent_name=agent_name,

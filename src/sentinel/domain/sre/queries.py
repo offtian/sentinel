@@ -11,7 +11,7 @@ import databases
 from sqlalchemy import select
 from sqlmodel import col
 
-from sentinel.data import models
+from sentinel.data.sql import investigations
 
 
 async def fetch_investigation(
@@ -26,8 +26,8 @@ async def fetch_investigation(
     :param record_id: UUID primary key of the investigation record.
     :returns: Row dict if found, or None.
     """
-    query = select(models.InvestigationRecord).where(
-        col(models.InvestigationRecord.id) == record_id
+    query = select(investigations.InvestigationRecord).where(
+        col(investigations.InvestigationRecord.id) == record_id
     )
     row = await db.fetch_one(query)
     if row is None:
@@ -48,9 +48,9 @@ async def fetch_investigations_by_alert_id(
     :returns: List of row dicts ordered by created_at descending.
     """
     query = (
-        select(models.InvestigationRecord)
-        .where(col(models.InvestigationRecord.alert_id) == alert_id)
-        .order_by(col(models.InvestigationRecord.created_at).desc())
+        select(investigations.InvestigationRecord)
+        .where(col(investigations.InvestigationRecord.alert_id) == alert_id)
+        .order_by(col(investigations.InvestigationRecord.created_at).desc())
     )
     rows = await db.fetch_all(query)
     return [dict(row._mapping) for row in rows]  # noqa: SLF001
@@ -71,9 +71,9 @@ async def fetch_investigations_for_service(
     :returns: List of row dicts ordered by created_at descending.
     """
     query = (
-        select(models.InvestigationRecord)
-        .where(col(models.InvestigationRecord.service) == service)
-        .order_by(col(models.InvestigationRecord.created_at).desc())
+        select(investigations.InvestigationRecord)
+        .where(col(investigations.InvestigationRecord.service) == service)
+        .order_by(col(investigations.InvestigationRecord.created_at).desc())
         .limit(limit)
     )
     rows = await db.fetch_all(query)

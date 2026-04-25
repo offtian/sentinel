@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta, timezone
 import attrs
 import pytest
 
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
 
 
 _FIXED_REQUEST_ID = uuid.UUID("12345678-1234-5678-1234-567812345678")

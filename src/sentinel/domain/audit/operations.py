@@ -12,7 +12,7 @@ from typing import Any
 import databases
 from sqlalchemy import insert
 
-from sentinel.data import audit_models
+from sentinel.data.sql import audit
 from sentinel.utils import logs
 
 
@@ -51,7 +51,7 @@ async def record_audit_entry(
     row_id = uuid.uuid4()
     timestamp = datetime.now(tz=UTC)
     details_json = json.dumps(details, default=str)
-    query = insert(audit_models.AuditLogRecord).values(
+    query = insert(audit.AuditLogRecord).values(
         id=row_id,
         timestamp=timestamp,
         actor=actor,

@@ -10,7 +10,7 @@ from typing import Any
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.evaluation import comparison
 from sentinel.domain.sre import entities as sre_entities

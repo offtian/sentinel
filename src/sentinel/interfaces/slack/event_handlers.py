@@ -8,7 +8,7 @@ from typing import Any
 from slack_bolt.context.ack.async_ack import AsyncAck
 
 from sentinel import config as config_mod
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre.holmes_adapter import HolmesAdapter
 from sentinel.domain.support import entities as support_entities

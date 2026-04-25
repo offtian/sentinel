@@ -55,7 +55,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.interfaces.api import middleware as middleware_mod
 from sentinel.interfaces.api.routers.sre import router as sre_router_mod
 from sentinel.interfaces.api.routers.support import router as support_router_mod

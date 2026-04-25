@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from sentinel.config import get_config
 from sentinel.data import db as async_db
-from sentinel.data import envelope as envelope_mod
+from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain.jobs import operations as job_ops
 from sentinel.domain.sre import entities as sre_entities
 from sentinel.domain.sre import queries as sre_queries
