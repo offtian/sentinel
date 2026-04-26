@@ -1,3 +1,37 @@
+# ---------------------------------------------------------------------------
+# Shared Langfuse env block — used by both langfuse-web and langfuse-worker.
+# All values here are Dev-only — do not use in production.
+# ---------------------------------------------------------------------------
+x-langfuse-env: &langfuse-env
+  DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+  CLICKHOUSE_USER: clickhouse
+  CLICKHOUSE_PASSWORD: clickhouse
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_AUTH: devredis
+  # S3 — event upload bucket (raw OTel + ingest payloads)
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse-events
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  # S3 — media upload bucket (attachments, screenshots)
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse-media
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  # Dev-only — do not use in production. SALT must be 32+ chars.
+  SALT: devsaltdevsaltdevsaltdevsaltdevs
+  # Dev-only — do not use in production. ENCRYPTION_KEY must be exactly 64 hex chars.
+  ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+  TELEMETRY_ENABLED: "false"
+
 services:
   db:
     image: postgres:16
@@ -43,6 +77,10 @@ services:
       SUPPORT_SLACK_CHANNEL: ${SUPPORT_SLACK_CHANNEL:-}
       OTEL_TRACES_ENABLED: "true"
       OTEL_TRACES_ENDPOINT: http://tempo:4318
+      # Langfuse — in-network address (host port 3001 only works from the host)
+      LANGFUSE_HOST: http://langfuse-web:3000
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-localdev}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-localdev}
     depends_on:
       db:
         condition: service_healthy
@@ -66,6 +104,10 @@ services:
       GRAFANA_TEMPO_DATASOURCE_UID: tempo
       OTEL_TRACES_ENABLED: "true"
       OTEL_TRACES_ENDPOINT: http://tempo:4318
+      # Langfuse — in-network address (host port 3001 only works from the host)
+      LANGFUSE_HOST: http://langfuse-web:3000
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-localdev}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-localdev}
     depends_on:
       db:
         condition: service_healthy
@@ -124,9 +166,137 @@ services:
       - loki
       - tempo
 
+  # ---------------------------------------------------------------------------
+  # Langfuse v3 stack (web + worker + postgres + clickhouse + redis + minio)
+  # All credentials below are Dev-only — do not use in production.
+  # ---------------------------------------------------------------------------
+
+  langfuse-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+    ports:
+      - "5433:5432"
+    volumes:
+      - langfuse-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    environment:
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_DB: default
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "devredis"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a devredis ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+    command: ["server", "/data", "--console-address", ":9001"]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Bucket bootstrap. Runs once and exits 0.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 minio miniosecret &&
+        mc mb -p local/langfuse-events local/langfuse-media &&
+        echo 'minio buckets ready'
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    environment:
+      <<: *langfuse-env
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  langfuse-web:
+    image: langfuse/langfuse:3
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_URL: http://localhost:3001
+      # Dev-only — do not use in production.
+      NEXTAUTH_SECRET: devnextauthsecretdevnextauthsecret
+      # Seed a deterministic dev org/project + API key pair so
+      # `docker compose up` immediately yields a working keypair.
+      LANGFUSE_INIT_ORG_ID: sentinel-localdev
+      LANGFUSE_INIT_ORG_NAME: Sentinel Localdev
+      LANGFUSE_INIT_PROJECT_ID: sentinel
+      LANGFUSE_INIT_PROJECT_NAME: sentinel
+      LANGFUSE_INIT_USER_EMAIL: dev@sentinel.localdev
+      LANGFUSE_INIT_USER_NAME: Dev
+      # Dev-only — do not use in production.
+      LANGFUSE_INIT_USER_PASSWORD: devpass
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-localdev
+      # Dev-only — do not use in production.
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-localdev
+    ports:
+      - "3001:3000"
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
 volumes:
   pgdata:
   prometheus_data:
   loki_data:
   tempo_data:
   grafana_data:
+  langfuse-db-data:
+  clickhouse-data:
+  minio-data:
