@@ -24,6 +24,7 @@ from sentinel.data.sql import (  # noqa: F401
     investigations,
     jobs,
     runbooks,
+    tasks,
     tickets,
     tracing,
 )
