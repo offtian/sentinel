@@ -55,7 +55,7 @@ class TestInstrumentedNodeRun:
         recorder.assert_called_once()
         assert recorder.call_args.kwargs["status"] == "error"
 
-    def test_does_not_set_span_attributes_when_envelope_is_none(self):
+    def test_sets_only_observation_type_when_envelope_is_none(self):
         # Given a wrapper invoked without an envelope
         async def fake_run():
             return "ok"
@@ -74,8 +74,11 @@ class TestInstrumentedNodeRun:
             )
             asyncio.run(wrapped())
 
-        # Then no span attributes were set
-        fake_span.set_attributes.assert_not_called()
+        # Then only the Langfuse observation-type attribute is set so the
+        # Langfuse UI classifies the graph node span as a "chain"
+        fake_span.set_attributes.assert_called_once()
+        attrs_set = fake_span.set_attributes.call_args.args[0]
+        assert attrs_set == {"langfuse.observation.type": "chain"}
 
     def test_sets_envelope_span_attributes_when_envelope_provided(self):
         # Given a wrapper invoked with an envelope and a config that resolves team_id
@@ -101,7 +104,9 @@ class TestInstrumentedNodeRun:
             )
             asyncio.run(wrapped())
 
-        # Then the six envelope-owned attributes plus team_profile land on the span
+        # Then the six envelope-owned attributes plus team_profile and the
+        # Langfuse-namespaced observation/session/user attributes land on
+        # the span in a single call
         fake_span.set_attributes.assert_called_once()
         attrs_set = fake_span.set_attributes.call_args.args[0]
         expected_keys = {
@@ -112,6 +117,9 @@ class TestInstrumentedNodeRun:
             "pii_class",
             "received_at",
             "team_profile",
+            "langfuse.observation.type",
+            "langfuse.session.id",
+            "langfuse.user.id",
         }
         assert set(attrs_set.keys()) == expected_keys
         assert attrs_set["request_id"] == str(envelope.request_id)
@@ -121,6 +129,9 @@ class TestInstrumentedNodeRun:
         assert attrs_set["pii_class"] == envelope.pii_class
         assert attrs_set["received_at"] == envelope.received_at.isoformat()
         assert attrs_set["team_profile"] == "sre"
+        assert attrs_set["langfuse.observation.type"] == "chain"
+        assert attrs_set["langfuse.session.id"] == str(envelope.request_id)
+        assert attrs_set["langfuse.user.id"] == envelope.tenant_id
 
     def test_skips_team_profile_and_warns_when_get_config_raises(self):
         # Given a wrapper with an envelope but get_config blowing up at lookup time

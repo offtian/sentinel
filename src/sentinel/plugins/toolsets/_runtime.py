@@ -27,6 +27,7 @@ from contextvars import ContextVar, Token
 from datetime import UTC, datetime
 from typing import Any
 
+from opentelemetry import trace as otel_trace
 from pydantic_ai.tools import RunContext
 from pydantic_ai.toolsets import AbstractToolset, WrapperToolset
 from pydantic_ai.toolsets.abstract import ToolsetTool
@@ -74,6 +75,9 @@ class ReplayCapturingToolset(WrapperToolset[Any]):
     ) -> Any:
         """Delegate to the wrapped toolset and capture the call into the active builder."""
         called_at = datetime.now(tz=UTC)
+        # Tag the current span as a Langfuse "tool" observation so the
+        # Langfuse UI classifies it correctly (Langfuse OTLP convention).
+        otel_trace.get_current_span().set_attribute("langfuse.observation.type", "tool")
         try:
             result = await self.wrapped.call_tool(name, tool_args, ctx, tool)
         except Exception as exc:

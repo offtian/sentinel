@@ -62,10 +62,11 @@ def instrumented_node_run[T](
     """
 
     async def _runner() -> T:
+        attributes: dict[str, otel_types.AttributeValue] = {"langfuse.observation.type": "chain"}
         if envelope is not None:
-            attributes = dict(envelope.to_span_attributes())
+            attributes.update(envelope.to_span_attributes())
             attributes.update(_team_profile_attribute())
-            otel_trace.get_current_span().set_attributes(attributes)
+        otel_trace.get_current_span().set_attributes(attributes)
         start = time.perf_counter()
         status = "ok"
         try:

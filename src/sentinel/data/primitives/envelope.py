@@ -64,7 +64,16 @@ class Envelope:
     received_at: datetime = attrs.field(validator=_validate_tz_aware)
 
     def to_span_attributes(self) -> dict[str, otel_types.AttributeValue]:
-        """Return the six envelope-owned mandatory OTel attributes (RFC §13.2)."""
+        """
+        Return the six envelope-owned mandatory OTel attributes (RFC §13.2)
+        plus Langfuse-namespaced session/user attributes that promote spans
+        into Langfuse's Sessions and Users tabs.
+
+        ``langfuse.session.id`` ← ``request_id`` (one Langfuse session per
+        ingress request, scoping every downstream graph node / agent / tool
+        span emitted under it). ``langfuse.user.id`` ← ``tenant_id`` so the
+        Users tab groups by tenant.
+        """
         return {
             "request_id": str(self.request_id),
             "tenant_id": self.tenant_id,
@@ -72,6 +81,8 @@ class Envelope:
             "region": self.region,
             "pii_class": self.pii_class,
             "received_at": self.received_at.isoformat(),
+            "langfuse.session.id": str(self.request_id),
+            "langfuse.user.id": self.tenant_id,
         }
 
     def to_log_context(self) -> dict[str, str]:

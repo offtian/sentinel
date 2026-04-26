@@ -201,12 +201,13 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
             "prompt_sha256": analyser_tpl.sha256,
         },
     ]
-    input_hash = pipeline_queries.canonical_input_hash(payload=alert.model_dump())
+    alert_payload = alert.model_dump(mode="json")
+    input_hash = pipeline_queries.canonical_input_hash(payload=alert_payload)
     model_ids = _collect_model_ids(settings, "alert_classifier_llm", "root_cause_llm")
 
     await et.start_pipeline(
         pipeline_type="investigation",
-        input_data=alert.model_dump(),
+        input_data=alert_payload,
         input_hash=input_hash,
         model_ids_json=model_ids,
         mcp_endpoints_json=[],
@@ -292,12 +293,13 @@ async def _run_support_review(payload: dict[str, object]) -> str:
             "prompt_sha256": drafter_tpl.sha256,
         },
     ]
-    input_hash = pipeline_queries.canonical_input_hash(payload=ticket.model_dump())
+    ticket_payload = ticket.model_dump(mode="json")
+    input_hash = pipeline_queries.canonical_input_hash(payload=ticket_payload)
     model_ids = _collect_model_ids(settings, "ticket_reviewer_llm", "response_drafter_llm")
 
     await et.start_pipeline(
         pipeline_type="support_review",
-        input_data=ticket.model_dump(),
+        input_data=ticket_payload,
         input_hash=input_hash,
         model_ids_json=model_ids,
         mcp_endpoints_json=[],

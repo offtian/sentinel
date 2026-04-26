@@ -110,16 +110,13 @@ class MandatoryAttributesValidator(SpanProcessor):
                 "scope": scope_name,
             },
         )
-        # ReadableSpan is the *read* projection; the live ``Span`` object
-        # passed to ``on_end`` is in fact a ``sdk.trace.Span`` that still
-        # exposes ``set_attribute`` while the span is being exported. The
-        # ``ReadableSpan`` type hint comes from the SpanProcessor signature so
-        # we narrow via Any to call the mutator. The OTel ``set_attribute`` API
-        # is positional (``key, value``) by spec — FBT003 noqa is the
-        # documented carve-out for third-party SDK boundary calls.
-        mutable_span: Any = span
-        mutable_span.set_attribute("_validation_failed", True)  # noqa: FBT003
-        mutable_span.set_attribute("_missing_attrs", missing)
+        # The ``on_end`` callback receives a ``ReadableSpan`` per OTel spec
+        # (spans are immutable once ended) so attributes cannot be stamped
+        # back onto the span here. The structured log above is the
+        # diagnostic surface; downstream validators read missing attrs from
+        # the log stream rather than from span attributes. The earlier
+        # implementation attempted ``set_attribute`` via an ``Any`` cast
+        # which crashes on the real SDK ``ReadableSpan``.
         return
 
     def shutdown(self) -> None:

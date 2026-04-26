@@ -75,6 +75,7 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
                 agent_utils.set_agent_span_attributes(
                     prompt_sha256=alert_classifier.PROMPT_SHA256,
                     model_name=agent_utils.get_model_name(classifier_agent),
+                    agent_name="alert_classifier",
                 )
                 result = await classifier_agent.run(
                     user_prompt=f"Alert: {ctx.state.alert.title}\n\n{ctx.state.alert.description}",
@@ -292,6 +293,7 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
                 agent_utils.set_agent_span_attributes(
                     prompt_sha256=root_cause_analyser.PROMPT_SHA256,
                     model_name=agent_utils.get_model_name(analyser_agent),
+                    agent_name="root_cause_analyser",
                 )
                 result = await analyser_agent.run(
                     user_prompt=f"Analyse this alert: {ctx.state.alert.title}",

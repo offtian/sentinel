@@ -138,34 +138,42 @@ class TestSetAgentSpanAttributes:
         # Given a fake current span and concrete agent context values
         fake_span = mock.MagicMock()
 
-        # When the helper is called with a non-empty model name
+        # When the helper is called with a non-empty model name and agent name
         with mock.patch.object(otel_trace, "get_current_span", return_value=fake_span):
             agents_utils.set_agent_span_attributes(
                 prompt_sha256="a" * 64,
                 model_name="openai/gpt-4.1-mini",
+                agent_name="alert_classifier",
             )
 
-        # Then both mandatory agent-context attrs land on the span in one call
+        # Then RFC §13.2 mandatory attrs plus Langfuse-namespaced prompt
+        # registry attributes land on the span in one call
         fake_span.set_attributes.assert_called_once()
         attrs_set = fake_span.set_attributes.call_args.args[0]
         assert attrs_set == {
             "prompt_version_sha": "a" * 64,
             "model_id": "openai/gpt-4.1-mini",
+            "langfuse.prompt.version": "a" * 64,
+            "langfuse.prompt.name": "alert_classifier",
         }
 
     def test_skips_model_id_when_model_name_is_empty(self) -> None:
         # Given a fake span and the placeholder "test" agent (empty model name)
         fake_span = mock.MagicMock()
 
-        # When the helper is called with an empty model_name
+        # When the helper is called with an empty model_name and no agent_name
         with mock.patch.object(otel_trace, "get_current_span", return_value=fake_span):
             agents_utils.set_agent_span_attributes(
                 prompt_sha256="b" * 64,
                 model_name="",
             )
 
-        # Then only prompt_version_sha is set; model_id is omitted to avoid
-        # polluting Langfuse with empty model identifiers from test agents
+        # Then only prompt_version_sha + Langfuse prompt.version are set;
+        # model_id and langfuse.prompt.name are omitted to avoid polluting
+        # Langfuse with empty identifiers from test agents
         fake_span.set_attributes.assert_called_once()
         attrs_set = fake_span.set_attributes.call_args.args[0]
-        assert attrs_set == {"prompt_version_sha": "b" * 64}
+        assert attrs_set == {
+            "prompt_version_sha": "b" * 64,
+            "langfuse.prompt.version": "b" * 64,
+        }

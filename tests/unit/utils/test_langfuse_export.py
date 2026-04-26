@@ -97,10 +97,9 @@ class TestMandatoryAttributesValidator:
         assert kwargs["params"]["missing"] == ("prompt_version_sha", "model_id")
         assert kwargs["params"]["scope"] is None
 
-        # And the validator stamps the diagnostic attributes onto the span
-        set_calls = span.set_attribute.call_args_list
-        assert mock.call("_validation_failed", True) in set_calls  # noqa: FBT003
-        assert mock.call("_missing_attrs", ("prompt_version_sha", "model_id")) in set_calls
+        # And no attribute mutation is attempted — ReadableSpan is immutable
+        # at on_end per OTel spec; diagnostics stay in the structured log.
+        span.set_attribute.assert_not_called()
 
     @pytest.mark.parametrize(
         "scope_name",
@@ -132,10 +131,10 @@ class TestMandatoryAttributesValidator:
         with mock.patch.object(logs_mod, "log_event"):
             result = validator.on_end(span)
 
-        # Then on_end returns None and only the two diagnostic attrs were touched
+        # Then on_end returns None and no span mutation is attempted —
+        # the ReadableSpan handed to on_end is immutable per OTel spec
         assert result is None
-        attr_names = {call.args[0] for call in span.set_attribute.call_args_list}
-        assert attr_names == {"_validation_failed", "_missing_attrs"}
+        span.set_attribute.assert_not_called()
         # And no lifecycle method (end / set_status) was called on the span
         span.end.assert_not_called()
         span.set_status.assert_not_called()
