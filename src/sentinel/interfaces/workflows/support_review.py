@@ -33,13 +33,16 @@ Differences from the legacy harness (intentional):
 from __future__ import annotations
 
 import asyncio
+import uuid
 from typing import Any, cast
 
+import attrs
 from langgraph import graph as lg_graph
 from langgraph import types as lg_types
 from langgraph.graph import state as lg_state
 
 from sentinel import config as config_mod
+from sentinel.data.primitives import envelope as envelope_module
 from sentinel.domain.approval import entities as approval_entities
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.search import searcher as search_mod
@@ -507,3 +510,205 @@ def build_support_review_graph(
     builder.add_edge("wait_for_human", lg_graph.END)
 
     return builder.compile(checkpointer=checkpointer)
+
+
+# ---------------------------------------------------------------------------
+# T16 -- review_ticket / resume_review entrypoints
+# ---------------------------------------------------------------------------
+
+
+@attrs.frozen(kw_only=True)
+class ReviewOutcome:
+    """
+    Result of a single :func:`review_ticket` or :func:`resume_review` run.
+
+    The fields below mirror the LangGraph state slots populated by the
+    pipeline. ``response_suggestion`` and ``confidence`` are ``None`` when
+    the workflow paused before those nodes executed (it currently cannot,
+    but the typing leaves room for future paused-points).
+    ``interrupt_payload`` is set to the ``wait_for_human`` interrupt body
+    when the run paused at the approval gate, ``None`` once the run has
+    completed all the way to ``END``. ``approval_decision`` is populated
+    after :func:`resume_review` runs the approval gate to completion.
+    """
+
+    request_id: uuid.UUID
+    response_suggestion: support_entities.ResponseSuggestion | None
+    confidence: confidence_entities.ConfidenceScore | None
+    needs_approval: bool
+    interrupt_payload: dict[str, Any] | None
+    approval_decision: approval_entities.ApprovalDecision | None
+
+
+def _outcome_from_state(state: dict[str, Any], request_id: uuid.UUID) -> ReviewOutcome:
+    """
+    Map a LangGraph ``ainvoke`` return value onto a :class:`ReviewOutcome`.
+
+    LangGraph surfaces a paused run by including an ``__interrupt__`` key
+    in the returned state whose value is a tuple of ``Interrupt`` objects.
+    Each interrupt's ``.value`` carries the JSON-shaped payload the node
+    passed to :func:`langgraph.types.interrupt`. We surface the first
+    payload because the support graph only ever has one paused node
+    (``wait_for_human``).
+    """
+    interrupts = state.get("__interrupt__")
+    interrupt_payload: dict[str, Any] | None = None
+    if interrupts:
+        interrupt_payload = interrupts[0].value
+
+    return ReviewOutcome(
+        request_id=request_id,
+        response_suggestion=state.get("response_suggestion"),
+        confidence=state.get("confidence"),
+        needs_approval=bool(state.get("needs_approval")),
+        interrupt_payload=interrupt_payload,
+        approval_decision=state.get("approval_decision"),
+    )
+
+
+def _seed_state(
+    *,
+    ticket: support_entities.Ticket,
+    envelope: envelope_module.Envelope,
+) -> support_state_mod.SupportReviewState:
+    """
+    Return the initial ``SupportReviewState`` for a fresh run.
+
+    Every node-output slot starts at its empty value -- ``None`` for
+    optional payloads, ``()`` for tuple slots, ``False`` for the
+    ``needs_approval`` flag -- so the TypedDict shape matches what
+    LangGraph's checkpointer persists between steps.
+    """
+    return {
+        "envelope": envelope,
+        "ticket": ticket,
+        "classification": None,
+        "doc_results": (),
+        "ticket_results": (),
+        "response_suggestion": None,
+        "confidence": None,
+        "needs_approval": False,
+        "approval_decision": None,
+    }
+
+
+def _thread_config(request_id: uuid.UUID) -> dict[str, Any]:
+    """Return the LangGraph runtime config keyed by ``request_id``."""
+    return {"configurable": {"thread_id": str(request_id)}}
+
+
+async def review_ticket(
+    *,
+    ticket: support_entities.Ticket,
+    envelope: envelope_module.Envelope,
+    graph: lg_state.CompiledStateGraph[Any, Any, Any, Any],
+) -> ReviewOutcome:
+    """
+    Run the support-review workflow for a single ticket.
+
+    Wraps ``graph.ainvoke`` with the seeded TypedDict state and a config
+    keyed by ``thread_id = str(envelope.request_id)`` so a paused run
+    can be resumed later via :func:`resume_review` against the same
+    request_id.
+
+    :param ticket: Inbound support ticket to review.
+    :param envelope: Identity envelope minted at FastAPI ingress.
+    :param graph: The compiled support-review graph (typically read off
+        ``app.state.support_review_graph`` by the webhook handler).
+    """
+    # ``ainvoke`` is overloaded against LangGraph's stream-mode literals;
+    # mypy cannot match a runtime dict against the ``RunnableConfig``
+    # overload arms. The legacy graph builder uses the same ``cast`` to
+    # ``Any`` at the boundary -- the call sites are exhaustively covered
+    # by ``test_support_entrypoint.py``.
+    state = await cast("Any", graph).ainvoke(
+        _seed_state(ticket=ticket, envelope=envelope),
+        config=_thread_config(envelope.request_id),
+    )
+    return _outcome_from_state(state, envelope.request_id)
+
+
+async def resume_review(
+    *,
+    request_id: uuid.UUID,
+    decision: approval_entities.ApprovalDecision,
+    graph: lg_state.CompiledStateGraph[Any, Any, Any, Any],
+    approver: str | None = None,
+    reason: str | None = None,
+) -> ReviewOutcome:
+    """
+    Resume a paused support-review workflow with an approval decision.
+
+    Builds a ``Command(resume=...)`` payload whose ``approved`` flag is
+    ``True`` for :attr:`ApprovalDecision.APPROVED` and ``False`` for
+    every other value (currently only ``REJECTED`` reaches this path).
+    The optional ``approver`` and ``reason`` strings ride along for the
+    audit trail when supplied.
+    """
+    resume_payload: dict[str, Any] = {
+        "approved": decision is approval_entities.ApprovalDecision.APPROVED,
+    }
+    if approver is not None:
+        resume_payload["approver"] = approver
+    if reason is not None:
+        resume_payload["reason"] = reason
+
+    state = await cast("Any", graph).ainvoke(
+        lg_types.Command(resume=resume_payload),
+        config=_thread_config(request_id),
+    )
+    return _outcome_from_state(state, request_id)
+
+
+@attrs.frozen(kw_only=True)
+class ReviewStatus:
+    """
+    Snapshot of a review thread's checkpointed state.
+
+    ``status`` is one of ``"pending"`` (paused at the approval gate),
+    ``"approved"`` / ``"rejected"`` (resumed and recorded the
+    decision), or ``"completed"`` (ran to ``END`` without ever needing
+    approval). ``approval_decision`` mirrors the decision when one has
+    been recorded, otherwise ``None``.
+    """
+
+    request_id: uuid.UUID
+    status: str
+    needs_approval: bool
+    approval_decision: approval_entities.ApprovalDecision | None
+
+
+async def get_review_status(
+    *,
+    request_id: uuid.UUID,
+    graph: lg_state.CompiledStateGraph[Any, Any, Any, Any],
+) -> ReviewStatus | None:
+    """
+    Return the current status of a review thread, or ``None`` when no
+    checkpoint exists for the supplied ``request_id``.
+
+    Reads the thread state via ``graph.aget_state(...)``; LangGraph's
+    saver returns an empty ``values`` dict for a thread it has never
+    seen, which the helper maps onto ``None`` so callers can return
+    HTTP 404 from a single check.
+    """
+    snapshot = await cast("Any", graph).aget_state(_thread_config(request_id))
+    values: dict[str, Any] = getattr(snapshot, "values", {}) or {}
+    if not values:
+        return None
+    decision = values.get("approval_decision")
+    next_nodes = tuple(getattr(snapshot, "next", ()) or ())
+    if decision is approval_entities.ApprovalDecision.APPROVED:
+        status = "approved"
+    elif decision is approval_entities.ApprovalDecision.REJECTED:
+        status = "rejected"
+    elif "wait_for_human" in next_nodes:
+        status = "pending"
+    else:
+        status = "completed"
+    return ReviewStatus(
+        request_id=request_id,
+        status=status,
+        needs_approval=bool(values.get("needs_approval")),
+        approval_decision=decision,
+    )

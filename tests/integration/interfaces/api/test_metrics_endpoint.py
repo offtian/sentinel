@@ -11,13 +11,24 @@ from sentinel.utils import metrics
 
 @pytest.fixture(autouse=True)
 def _mock_db_lifespan():
-    # Patch DB connect/disconnect and engine init so these tests can run
-    # without a real Postgres instance — the /metrics endpoint has no DB dependency.
+    # Patch DB connect/disconnect, engine init, and the LangGraph
+    # checkpointer/graph builders so these tests can run without a real
+    # Postgres instance -- the /metrics endpoint has no DB or workflow
+    # dependency.
+    saver_close = mock.AsyncMock()
     with (
         mock.patch("sentinel.interfaces.api.app.async_db.connect_db"),
         mock.patch("sentinel.interfaces.api.app.async_db.disconnect_db"),
         mock.patch("sentinel.interfaces.api.app.database.get_engine"),
         mock.patch("sentinel.interfaces.api.app.database.close_engine"),
+        mock.patch("sentinel.interfaces.api.app.bootstrap_otel.instrument_sqlalchemy"),
+        mock.patch(
+            "sentinel.interfaces.api.app.workflows_checkpointer.build_checkpointer",
+            new=mock.AsyncMock(return_value=(mock.MagicMock(), saver_close)),
+        ),
+        mock.patch(
+            "sentinel.interfaces.api.app.workflows_support_review.build_support_review_graph"
+        ),
         mock.patch(
             "sentinel.interfaces.api.app.get_settings",
             return_value=mock.Mock(
