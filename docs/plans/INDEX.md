@@ -35,6 +35,7 @@
 | [sentinel-hedgefund-foundations](sentinel-hedgefund-foundations.md) | Evolve current codebase into RFC-001 v0.4 foundations (config, identity, OTel→Langfuse→replay, LiteLLM proxy, runbooks, capability tokens, groundedness) | 2/9 phases | F1 + F2 complete (PR #22, this PR); F3 (DB schema) next |
 | [sentinel-foundations-f1-config-layering](sentinel-foundations-f1-config-layering.md) | F1 layered config substrate on `BaseConfiguration` (Pydantic) + new env-vars + policy primitives + `TEAM_CONFIG_REFS` dispatch | complete | F1 of foundations plan; PR #22 |
 | [sentinel-foundations-f2-envelope](sentinel-foundations-f2-envelope.md) | F2 identity envelope: middleware mints `request_id`, webhook factories build `Envelope`, pipelines + spans + log contexts carry it through | complete | F2 of foundations plan; this PR |
+| [sentinel-foundations-f4-otel-langfuse-replay](sentinel-foundations-f4-otel-langfuse-replay.md) | F4 OTEL → Langfuse → replay-bundle triple: 9 mandatory span attrs, MandatoryAttributesValidator, Langfuse OTLP exporter, local v3 docker-compose, replay-bundle tool/LLM I/O capture, determinism CI | in-progress | F4 of foundations plan; Phase A (Langfuse end-to-end) shipping first |
 | [pydanticai-langgraph-adoption](pydanticai-langgraph-adoption.md) | Migrate orchestration harness to LangGraph; support pipeline first, SRE/chart follow with own plans | 0/3 phases | Support migration in flight; ADR 0007 authored in this PR |
 
 ### Draft (Not Started)
