@@ -45,7 +45,7 @@ def build_agent(
         skill_names=skills,
     )
     return Agent(
-        model or "test",
+        utils.resolve_agent_model(model or "test"),
         deps_type=Dependencies,
         output_type=AlertClassification,
         system_prompt=system_prompt,

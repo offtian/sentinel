@@ -63,7 +63,7 @@ def build_agent(
         base_prompt=_PROMPT_TEMPLATE.system_text, skill_names=skills
     )
     agent_instance: Agent[Dependencies, K8sInvestigationOutput] = Agent(
-        model or "test",
+        utils.resolve_agent_model(model or "test"),
         deps_type=Dependencies,
         output_type=K8sInvestigationOutput,
         system_prompt=system_prompt,

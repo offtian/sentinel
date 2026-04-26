@@ -3,9 +3,52 @@ from __future__ import annotations
 from typing import Any
 
 from opentelemetry import trace as otel_trace
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.litellm import LiteLLMProvider
 
 from sentinel.domain import skills as skills_mod
+from sentinel.domain.llm import litellm_proxy
 from sentinel.interfaces.graphs.agents import _cache_settings
+
+
+_PLACEHOLDER_MODEL = "test"
+_LITELLM_PREFIX = "litellm:"
+
+
+def resolve_agent_model(model: str | None) -> Any:
+    """
+    Return the model handle each agent factory passes into ``Agent(...)``.
+
+    When the firm-shared LiteLLM proxy is configured (RFC §2.4), returns
+    an ``OpenAIChatModel`` whose ``LiteLLMProvider`` points at the proxy
+    URL with the operator's virtual key. Otherwise returns ``model``
+    unchanged so PydanticAI follows its existing in-process LiteLLM SDK
+    path — keeping ``just run-api`` working without a proxy.
+
+    Special cases preserved verbatim:
+
+    * ``None`` -> ``None`` so the factory's existing ``model or "test"``
+      fallback still fires for unit-test paths that monkey-patch
+      ``Agent.run``.
+    * ``"test"`` -> ``"test"`` for the same reason — production never
+      passes the placeholder; tests do.
+
+    :param model: The model identifier resolved by
+        :func:`sentinel.config._normalise_model_name` (e.g.
+        ``"litellm:openai/gpt-4.1-mini"``), or ``None`` / ``"test"``.
+    """
+    if model is None or model == _PLACEHOLDER_MODEL:
+        return model
+    if not litellm_proxy.is_proxy_configured():
+        return model
+
+    proxy_kwargs = litellm_proxy.get_proxy_kwargs()
+    # Strip the ``litellm:`` prefix when present — ``LiteLLMProvider``
+    # already sets ``system="litellm"`` on the resulting OpenAIChatModel,
+    # and the bare ``provider/model`` form is what its API expects.
+    bare_model_name = model.removeprefix(_LITELLM_PREFIX)
+    provider = LiteLLMProvider(**proxy_kwargs)
+    return OpenAIChatModel(bare_model_name, provider=provider)
 
 
 def set_agent_span_attributes(
