@@ -10,9 +10,27 @@ from collections.abc import Awaitable, Callable
 
 import structlog
 from opentelemetry import trace as otel_trace
+from opentelemetry.util import types as otel_types
 
+from sentinel import config as config_mod
 from sentinel.data.primitives import envelope as envelope_mod
-from sentinel.utils import metrics
+from sentinel.utils import logs, metrics
+
+
+def _team_profile_attribute() -> dict[str, otel_types.AttributeValue]:
+    """
+    Return a single-key span-attribute dict for ``team_profile``, or empty.
+
+    Reads ``team_id`` from the active configuration. On any failure (config
+    bootstrap is broken, registry lookup raises), logs a structured warning
+    and returns an empty dict so the rest of the envelope attributes still
+    land on the span.
+    """
+    try:
+        return {"team_profile": config_mod.get_config().team_id}
+    except Exception as exc:
+        logs.log_event("otel.team_profile.unset", params={"reason": str(exc)})
+        return {}
 
 
 def instrumented_node_run[T](
@@ -31,8 +49,10 @@ def instrumented_node_run[T](
 
     When ``envelope`` is provided, attaches the six envelope-owned mandatory
     OTel span attributes per RFC §13.2 to the current span before invoking
-    ``fn``. The remaining mandatory attributes (``prompt_version_sha``,
-    ``model_id``, ``team_profile``) are set elsewhere by F4 work.
+    ``fn``, plus the ``team_profile`` attribute resolved from the active
+    configuration. The remaining two mandatory attributes
+    (``prompt_version_sha``, ``model_id``) are set at agent invocation sites
+    via :func:`agents.utils.set_agent_span_attributes`.
 
     :param pipeline: Pipeline label (e.g. ``"sre"``, ``"support"``).
     :param node: Node label (e.g. ``"classify_alert"``).
@@ -43,9 +63,9 @@ def instrumented_node_run[T](
 
     async def _runner() -> T:
         if envelope is not None:
-            otel_trace.get_current_span().set_attributes(
-                envelope.to_span_attributes(),
-            )
+            attributes = dict(envelope.to_span_attributes())
+            attributes.update(_team_profile_attribute())
+            otel_trace.get_current_span().set_attributes(attributes)
         start = time.perf_counter()
         status = "ok"
         try:

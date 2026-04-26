@@ -37,6 +37,7 @@ from sentinel.interfaces.chat.status_update import StreamlitStatusUpdateClient
 from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.graphs import chart_generation, common, investigation, support_review
 from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
+from sentinel.interfaces.graphs.agents import utils as agent_utils
 from sentinel.settings import get_settings
 
 
@@ -133,6 +134,10 @@ async def _classify_intent(
     """Route the user message to SRE or Support via the intent router agent."""
     cfg = config_mod.get_config()
     router_agent = cfg.agent_for("intent_router")
+    agent_utils.set_agent_span_attributes(
+        prompt_sha256=intent_router.PROMPT_SHA256,
+        model_name=agent_utils.get_model_name(router_agent),
+    )
     result = await router_agent.run(
         user_prompt=text,
         deps=intent_router.Dependencies(message=text),

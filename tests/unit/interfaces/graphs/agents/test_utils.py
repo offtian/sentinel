@@ -9,6 +9,7 @@ from __future__ import annotations
 from unittest import mock
 
 import pytest
+from opentelemetry import trace as otel_trace
 
 from sentinel.domain import skills as skills_mod
 from sentinel.interfaces.graphs.agents import utils as agents_utils
@@ -130,3 +131,41 @@ class TestRenderSkillsSection:
 
         # Then the loader was invoked with the same kwargs
         mocked.assert_called_once_with(category="cat_b", max_skills=2)
+
+
+class TestSetAgentSpanAttributes:
+    def test_sets_prompt_version_sha_and_model_id_on_current_span(self) -> None:
+        # Given a fake current span and concrete agent context values
+        fake_span = mock.MagicMock()
+
+        # When the helper is called with a non-empty model name
+        with mock.patch.object(otel_trace, "get_current_span", return_value=fake_span):
+            agents_utils.set_agent_span_attributes(
+                prompt_sha256="a" * 64,
+                model_name="openai/gpt-4.1-mini",
+            )
+
+        # Then both mandatory agent-context attrs land on the span in one call
+        fake_span.set_attributes.assert_called_once()
+        attrs_set = fake_span.set_attributes.call_args.args[0]
+        assert attrs_set == {
+            "prompt_version_sha": "a" * 64,
+            "model_id": "openai/gpt-4.1-mini",
+        }
+
+    def test_skips_model_id_when_model_name_is_empty(self) -> None:
+        # Given a fake span and the placeholder "test" agent (empty model name)
+        fake_span = mock.MagicMock()
+
+        # When the helper is called with an empty model_name
+        with mock.patch.object(otel_trace, "get_current_span", return_value=fake_span):
+            agents_utils.set_agent_span_attributes(
+                prompt_sha256="b" * 64,
+                model_name="",
+            )
+
+        # Then only prompt_version_sha is set; model_id is omitted to avoid
+        # polluting Langfuse with empty model identifiers from test agents
+        fake_span.set_attributes.assert_called_once()
+        attrs_set = fake_span.set_attributes.call_args.args[0]
+        assert attrs_set == {"prompt_version_sha": "b" * 64}
