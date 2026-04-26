@@ -31,11 +31,12 @@ Public API: :func:`build_checkpointer` only. Pool internals stay private.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Protocol
+from typing import Any, Protocol
 
 import psycopg
 import psycopg_pool
 from langgraph.checkpoint.postgres import aio as lg_postgres_aio
+from psycopg import rows as psycopg_rows
 
 from sentinel.data import _dsn
 
@@ -48,6 +49,12 @@ _POOL_MIN_SIZE = 1
 _POOL_MAX_SIZE = 4
 
 
+# Type alias for the connection rows the saver expects (dict-of-string).
+# ``AsyncPostgresSaver.from_conn_string`` constructs connections with
+# ``row_factory=dict_row``; the typed pool below mirrors that contract.
+_DictRow = dict[str, Any]
+
+
 class _SettingsProtocol(Protocol):
     """Minimum surface this module reads from ``Settings``."""
 
@@ -55,7 +62,7 @@ class _SettingsProtocol(Protocol):
     langgraph_checkpoint_dsn: str | None
 
 
-async def _configure_connection(conn: psycopg.AsyncConnection) -> None:
+async def _configure_connection(conn: psycopg.AsyncConnection[_DictRow]) -> None:
     """
     Match the per-connection settings ``AsyncPostgresSaver.from_conn_string``
     applies upstream: ``autocommit=True`` and ``prepare_threshold=0``.
@@ -102,12 +109,15 @@ async def build_checkpointer(
         that closes the underlying connection pool.
     """
     dsn = _resolve_dsn(settings)
-    pool = psycopg_pool.AsyncConnectionPool(
-        conninfo=dsn,
-        min_size=_POOL_MIN_SIZE,
-        max_size=_POOL_MAX_SIZE,
-        configure=_configure_connection,
-        open=False,
+    pool: psycopg_pool.AsyncConnectionPool[psycopg.AsyncConnection[_DictRow]] = (
+        psycopg_pool.AsyncConnectionPool(
+            conninfo=dsn,
+            min_size=_POOL_MIN_SIZE,
+            max_size=_POOL_MAX_SIZE,
+            kwargs={"row_factory": psycopg_rows.dict_row},
+            configure=_configure_connection,
+            open=False,
+        )
     )
     await pool.open(wait=True)
     saver = lg_postgres_aio.AsyncPostgresSaver(conn=pool)

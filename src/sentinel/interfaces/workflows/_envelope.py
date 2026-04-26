@@ -16,18 +16,18 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar
+from typing import Any
 
 import structlog
 from opentelemetry import trace as otel_trace
 
 
-_StateT = TypeVar("_StateT", bound=dict[str, Any])
-
-WorkflowNode = Callable[[_StateT], Awaitable[dict[str, Any]]]
+type WorkflowNode[StateT: dict[str, Any]] = Callable[[StateT], Awaitable[dict[str, Any]]]
 
 
-def with_envelope(node_fn: WorkflowNode[_StateT]) -> WorkflowNode[_StateT]:
+def with_envelope[StateT: dict[str, Any]](
+    node_fn: WorkflowNode[StateT],
+) -> WorkflowNode[StateT]:
     """
     Return a LangGraph-compatible wrapper that binds envelope identity.
 
@@ -47,7 +47,7 @@ def with_envelope(node_fn: WorkflowNode[_StateT]) -> WorkflowNode[_StateT]:
     """
 
     @functools.wraps(node_fn)
-    async def wrapped(state: _StateT) -> dict[str, Any]:
+    async def wrapped(state: StateT) -> dict[str, Any]:
         envelope = state["envelope"]
         otel_trace.get_current_span().set_attributes(envelope.to_span_attributes())
         with structlog.contextvars.bound_contextvars(**envelope.to_log_context()):
