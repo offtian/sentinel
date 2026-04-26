@@ -58,6 +58,7 @@ class TestSupportReviewState:
             "ticket": ticket,
             "classification": classification,
             "doc_results": (),
+            "ticket_results": (),
             "response_suggestion": suggestion,
             "confidence": confidence,
             "needs_approval": True,
@@ -67,6 +68,7 @@ class TestSupportReviewState:
         # Then every optional key sits at its expected post-write value
         assert state["classification"] is classification
         assert state["doc_results"] == ()
+        assert state["ticket_results"] == ()
         assert state["response_suggestion"] is suggestion
         assert state["confidence"] is confidence
         assert state["needs_approval"] is True
@@ -83,6 +85,7 @@ class TestSupportReviewState:
         # Optional keys carry None in their union
         assert hints["classification"] == ticket_reviewer.TicketClassification | None
         assert hints["doc_results"] == tuple[search_module.DocumentSearchResult, ...]
+        assert hints["ticket_results"] == tuple[search_module.TicketSearchResult, ...]
         assert hints["response_suggestion"] == support_entities.ResponseSuggestion | None
         assert hints["confidence"] == confidence_entities.ConfidenceScore | None
         assert hints["needs_approval"] is bool

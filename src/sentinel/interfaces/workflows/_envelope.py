@@ -15,17 +15,23 @@ Single public symbol: :func:`with_envelope`.
 from __future__ import annotations
 
 import functools
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 import structlog
 from opentelemetry import trace as otel_trace
 
 
-type WorkflowNode[StateT: dict[str, Any]] = Callable[[StateT], Awaitable[dict[str, Any]]]
+# ``StateT`` is bound to ``Mapping[str, Any]`` rather than ``dict[str, Any]``
+# so concrete LangGraph state shapes (``TypedDict`` subclasses such as
+# ``SupportReviewState``) satisfy the bound. TypedDicts are not subtypes of
+# ``dict`` in mypy's view, but they do model ``Mapping[str, object]``;
+# the bound widens just enough for callers to pass their TypedDict state
+# in without a cast at every call site.
+type WorkflowNode[StateT: Mapping[str, Any]] = Callable[[StateT], Awaitable[dict[str, Any]]]
 
 
-def with_envelope[StateT: dict[str, Any]](
+def with_envelope[StateT: Mapping[str, Any]](
     node_fn: WorkflowNode[StateT],
 ) -> WorkflowNode[StateT]:
     """

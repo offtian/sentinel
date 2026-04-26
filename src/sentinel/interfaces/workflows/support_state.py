@@ -53,7 +53,13 @@ class SupportReviewState(TypedDict):
     - ``classification``: filled by the ``classify_ticket`` node.
     - ``doc_results``: filled by ``search_documentation``; an empty
       tuple before that node runs.
-    - ``response_suggestion``: filled by ``draft_response``.
+    - ``ticket_results``: filled by ``search_documentation`` alongside
+      ``doc_results``; an empty tuple before that node runs. Carrying
+      both result types separately keeps ``draft_response``'s input
+      cleanly typed instead of merging two heterogeneous shapes.
+    - ``response_suggestion``: filled by ``draft_response``. Its
+      ``confidence_score`` carries the agent's raw float so
+      ``determine_confidence`` can read it without a side channel.
     - ``confidence``: filled by ``determine_confidence``.
     - ``needs_approval``: routing flag set by ``determine_confidence``.
     - ``approval_decision``: written by ``wait_for_human`` from the
@@ -64,6 +70,7 @@ class SupportReviewState(TypedDict):
     ticket: support_entities.Ticket
     classification: ticket_reviewer.TicketClassification | None
     doc_results: tuple[search_module.DocumentSearchResult, ...]
+    ticket_results: tuple[search_module.TicketSearchResult, ...]
     response_suggestion: support_entities.ResponseSuggestion | None
     confidence: confidence_entities.ConfidenceScore | None
     needs_approval: bool
