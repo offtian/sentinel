@@ -1,9 +1,9 @@
 # Plan: Sentinel Hedge Fund — Foundations (RFC-001 v0.4)
 
-**Status:** draft
+**Status:** in-progress
 **Created:** 2026-04-25
-**Last updated:** 2026-04-25
-**Progress:** 0/N steps complete
+**Last updated:** 2026-04-26
+**Progress:** F0 deferred · F1 complete (PR #22) · F2 complete · F3 in-progress (F3.1–F3.3 done)
 
 ## Goal
 
@@ -303,9 +303,9 @@ What landed:
 
 Maps to RFC §12.3. Add the 4 missing canonical tables; tighten 4 existing tables. All migrations reversible.
 
-- [ ] **F3.1** Audit existing schema vs RFC §12.3. Confirm: `models.InvestigationRecord` ≈ RFC `investigation` (rename + extend), `audit_models.AuditLogRecord` ≈ RFC `audit_log` (add WORM constraints), `tracing_models.AgentCallRecord` ≈ RFC `tool_call` (rename + extend), `models.FindingRecord` (verify exists; check schema). Document the precise column delta for each as comments at the top of each new migration file
-- [ ] **F3.2** Create `src/sentinel/data/alert_request_models.py` with `AlertRequestRecord` SQLModel per RFC §12.3.1: PK `request_id: UUID`, `tenant_id: str (indexed)`, `received_at: datetime UTC`, `provider: Literal["pagerduty", "datadog", "alertmanager"]`, `alert_id: str`, `severity: str`, `redacted_annotations: JSONB`, `dedup_status: Literal["new", "duplicate"]`. Migration `alembic/versions/008_alert_request_table.py`. Indexes per RFC §12.4: `(tenant_id, received_at desc)` and `(provider, alert_id)` for dedup lookups
-- [ ] **F3.3** Create `src/sentinel/data/runbook_models.py` with `RunbookMatchRecord` per RFC §12.3.2: PK `match_id: UUID`, FK `request_id`, `runbook_id: str`, `runbook_version_sha: str (32 chars)`, `match_method: Literal["tag", "rag", "generic_fallback"]`, `match_confidence: float`, `matched_at: datetime UTC`. Migration `009_runbook_match_table.py`
+- [x] **F3.1** Audit existing schema vs RFC §12.3. Confirmed during F3.2/F3.3 dispatch: `data/sql/investigations.py::InvestigationRecord` ≈ RFC `investigation` (extend in F3.7), `data/sql/audit.py::AuditLogRecord` ≈ RFC `audit_log` (extend with WORM in F3.6), `data/sql/tracing.py::AgentCallRecord` ≈ RFC `tool_call` (extend in F3.8). **No `FindingRecord` table — findings live as JSONB `findings_json` on `InvestigationRecord`; foundations keeps that shape (§12.3.5 dedicated `finding` table is wk5+ work).** Plan filemap referenced pre-restructure paths (`data/audit_models.py`, `data/models.py`, `data/tracing_models.py`); actual paths are `data/sql/<name>.py` after the 2418e8a/6c41605 split. Column-delta docstrings landed at the top of each new migration in F3.2+ commits
+- [x] **F3.2** ✅ Created `src/sentinel/data/sql/alert_requests.py` (path corrected for the post-restructure layout) with `AlertRequestRecord` SQLModel per RFC §12.3.1: PK `request_id: UUID`, `tenant_id: str (indexed)`, `received_at: datetime UTC`, `provider: Literal["pagerduty", "datadog", "alertmanager"]`, `alert_id: str`, `severity: str`, `redacted_annotations: JSONB`, `dedup_status: Literal["new", "duplicate"]`. Migration `alembic/versions/008_alert_request_table.py` (down_revision="007"). Composite indexes `(tenant_id, received_at desc)` and `(provider, alert_id)` plus single-col `tenant_id` index. Commit `62eb3ce`
+- [x] **F3.3** ✅ Created `src/sentinel/data/sql/runbooks.py` (path corrected) with `RunbookMatchRecord` per RFC §12.3.2: PK `match_id: UUID`, FK `request_id` → `alert_request.request_id` (constraint `fk_runbook_match_alert_request`), `runbook_id: str`, `runbook_version_sha: str (max_length=32)`, `match_method: Literal["tag", "rag", "generic_fallback"]`, `match_confidence: float`, `matched_at: datetime UTC`. Migration `009_runbook_match_table.py` (down_revision="008"). Commit `892c7b7`
 - [ ] **F3.4** Create `src/sentinel/data/task_models.py` with `InvestigationTaskRecord` + `TaskStatusChangeRecord` per RFC §12.3.7: tasks table (PK `task_id`, FK `investigation_id`, `task_text`, `created_at`, `completed_at`, `evidence_refs: JSONB`); task_status_change table (PK, FK task_id, `from_status`, `to_status`, `at`, `reason`). Migration `010_investigation_task_table.py`
 - [ ] **F3.5** Create `src/sentinel/data/quality_models.py` with `QualityVerdictRecord` per RFC §12.3.8: PK `verdict_id`, FK `investigation_id`, `groundedness_pass: bool`, `evidence_ref_count: int`, `confidence_score: float`, `verdict_reason: str`, `assessed_at: datetime UTC`. Plus `ApprovalRecord` (PK, FK verdict_id, `approver`, `decision`, `decided_at`). Migration `011_quality_verdict_table.py`
 - [ ] **F3.6** Extend `src/sentinel/data/audit_models.AuditLogRecord` per RFC §12.3.10: add columns `request_id: UUID (indexed)`, `prev_hash: str`, `row_hash: str (computed via trigger)`. Add Postgres trigger blocking UPDATE/DELETE on `audit_log` rows (a Postgres trigger is the simplest WORM enforcement that doesn't require a separate role; full role-based separation is a wk5+ followup per the F0.6 ADR). Migration `012_audit_log_worm_constraints.py`
@@ -429,6 +429,7 @@ Maps to RFC §5.4 + R-QG-1 + R-AG-4 + R-CO-1. Closes the foundations loop.
 |------|-------------|-----|
 | 2026-04-25 | Initial draft | RFC-001 v0.4 ratified; foundations defined per evolve-in-place strategy |
 | 2026-04-25 | F1 pivot recorded: collapsed 4-layer attrs chain (`Settings → BaseConfig → CommonConfig → SRETeamConfig`) to two-layer Pydantic chain (`Settings → BaseConfiguration → CommonConfiguration`); multi-tenant via `Settings.team_profile` + `TEAM_CONFIG_REFS` registry; `SRETeamConfig` deferred until team behaviour diverges. Phase F1 marked complete (PR #22). | Pydantic `BaseModel` is the project's existing config contract; collapsing to one type avoided parallel attrs/Pydantic types and earned the right to keep team subclasses for when divergent behaviour actually exists. |
+| 2026-04-26 | F3 path correction: new SQLModel files land in `data/sql/<name>.py` (not `data/<name>_models.py`) after the 2418e8a `data/` restructure. F3.2 + F3.3 landed on `feat/sentinel-foundations-f3-db-schema` with `tenant_id`-prefixed composite indexes and an explicit FK constraint name on `runbook_match`. F3.1 closed: no dedicated `finding` table in foundations — findings stay JSONB on `InvestigationRecord` until the wk5+ `§12.3.5 finding` plan. | Plan filemap predated the data-layer split; new tables follow the actual repo convention. The dedicated `finding` table is out of foundations scope per the plan's §3.5 cut. |
 
 ## Outcome
 
