@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from unittest import mock
 
 import pytest
@@ -169,3 +170,76 @@ class TestSpanProcessorContract:
         # When shutdown is called
         # Then it returns None without raising
         assert validator.shutdown() is None
+
+
+class TestBuildLangfuseExporter:
+    def test_url_is_built_with_otel_traces_path(self):
+        # Given a Langfuse host with no trailing slash
+        host = "http://lf.local"
+
+        # When the exporter is built
+        exporter = langfuse_export.build_langfuse_exporter(
+            host=host,
+            public_key="pk",
+            secret_key="sk",  # noqa: S106
+        )
+
+        # Then the endpoint targets Langfuse's OTel ingestion path
+        assert exporter is not None
+        assert exporter._endpoint == "http://lf.local/api/public/otel/v1/traces"
+
+    def test_url_strips_trailing_slash_on_host(self):
+        # Given a host that already includes a trailing slash
+        host = "http://lf.local/"
+
+        # When the exporter is built
+        exporter = langfuse_export.build_langfuse_exporter(
+            host=host,
+            public_key="pk",
+            secret_key="sk",  # noqa: S106
+        )
+
+        # Then the endpoint contains exactly one slash before /api
+        assert exporter is not None
+        assert exporter._endpoint == "http://lf.local/api/public/otel/v1/traces"
+
+    def test_authorization_header_is_basic_auth_of_pk_colon_sk(self):
+        # Given a public/secret key pair
+        public_key = "pk"
+        secret_key = "sk"  # noqa: S105 — test fixture, not a real secret
+        expected_token = base64.b64encode(b"pk:sk").decode("ascii")
+
+        # When the exporter is built
+        exporter = langfuse_export.build_langfuse_exporter(
+            host="http://lf.local",
+            public_key=public_key,
+            secret_key=secret_key,
+        )
+
+        # Then the Authorization header is Basic <b64(public:secret)>
+        assert exporter is not None
+        assert exporter._headers["Authorization"] == f"Basic {expected_token}"
+
+    def test_returns_none_and_logs_when_construction_raises(self):
+        # Given OTLPSpanExporter raises during construction
+        with (
+            mock.patch.object(
+                langfuse_export,
+                "OTLPSpanExporter",
+                side_effect=RuntimeError("nope"),
+            ),
+            mock.patch.object(logs_mod, "log_exception") as patched_log_exc,
+        ):
+            # When build_langfuse_exporter is called
+            result = langfuse_export.build_langfuse_exporter(
+                host="http://lf.local",
+                public_key="pk",
+                secret_key="sk",  # noqa: S106
+            )
+
+        # Then the helper returns None and surfaces a structured exception event
+        assert result is None
+        patched_log_exc.assert_called_once()
+        params = patched_log_exc.call_args.kwargs["params"]
+        assert params["event"] == "langfuse.exporter.construction_failed"
+        assert params["host"] == "http://lf.local"

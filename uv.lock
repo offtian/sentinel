@@ -2610,6 +2610,25 @@ wheels = [
 ]
 
 [[package]]
+name = "langfuse"
+version = "4.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "backoff" },
+    { name = "httpx" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-sdk" },
+    { name = "packaging" },
+    { name = "pydantic" },
+    { name = "wrapt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/48/bd/9b12c9dd3ae1883619b20daa6d60f20a780ce2d25564d9b2168db27cbeb0/langfuse-4.5.1.tar.gz", hash = "sha256:fe8f9219f4101c0921934b0aeb1b45834f8e7d248e5f830b2c89c5b40aea6d83", size = 279735, upload-time = "2026-04-24T15:21:43.976Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2b/63/77bd7220dfd60885a272a851f780b3f83e0f653ee3a852347552c3e24a28/langfuse-4.5.1-py3-none-any.whl", hash = "sha256:5923cafe8289c9e3c53cb6992f4b46ec3132473b9f9eb65eb33ad28e2682db81", size = 479527, upload-time = "2026-04-24T15:21:45.568Z" },
+]
+
+[[package]]
 name = "langgraph"
 version = "1.1.9"
 source = { registry = "https://pypi.org/simple" }
@@ -5309,11 +5328,13 @@ dependencies = [
     { name = "jinja2" },
     { name = "jira" },
     { name = "kubernetes-asyncio" },
+    { name = "langfuse" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint-postgres" },
     { name = "litellm" },
     { name = "logfire" },
     { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-exporter-prometheus" },
     { name = "opentelemetry-instrumentation-fastapi" },
     { name = "opentelemetry-instrumentation-httpx" },
@@ -5380,12 +5401,14 @@ requires-dist = [
     { name = "jinja2" },
     { name = "jira" },
     { name = "kubernetes-asyncio", specifier = ">=31.0" },
+    { name = "langfuse", specifier = ">=4.5.1" },
     { name = "langgraph", specifier = ">=1.1.9" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=3.0.3,<4" },
     { name = "litellm", specifier = ">=1.60" },
     { name = "logfire" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
+    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },
     { name = "opentelemetry-exporter-prometheus", specifier = ">=0.48b0" },
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.48b0" },
     { name = "opentelemetry-instrumentation-httpx", specifier = ">=0.48b0" },

@@ -11,7 +11,13 @@ without being dropped (RFC §14.7 wants partial traces visible in Langfuse).
 
 from __future__ import annotations
 
+import base64
 from typing import Any
+
+# Direct symbol import: this is the documented import path for the Langfuse
+# OTLP/HTTP exporter and must be the bound class object so callers can patch
+# it in tests via ``mock.patch.object(langfuse_export, "OTLPSpanExporter")``.
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
 # Direct symbol import: subclassing requires the bound class object, mirroring
 # how ``BaseNode`` is imported across ``interfaces/graphs/`` modules.
@@ -132,3 +138,41 @@ class MandatoryAttributesValidator(SpanProcessor):
         :class:`SpanProcessor` requires a boolean success indicator.
         """
         return True
+
+
+# Langfuse exposes the OTLP/HTTP traces ingestion endpoint at this fixed path
+# under the host root (``{host}/api/public/otel/v1/traces``). Centralising the
+# constant avoids drift between docs, tests, and the exporter wiring.
+_LANGFUSE_OTEL_TRACES_PATH = "/api/public/otel/v1/traces"
+
+
+def build_langfuse_exporter(
+    *, host: str, public_key: str, secret_key: str
+) -> OTLPSpanExporter | None:
+    """
+    Return an OTLPSpanExporter pointed at a Langfuse OTel ingestion endpoint.
+
+    The endpoint URL is composed as ``f"{host.rstrip('/')}{_LANGFUSE_OTEL_TRACES_PATH}"``
+    to tolerate a host string with or without a trailing slash. The
+    Authorization header carries Basic auth derived from
+    ``base64(public_key:secret_key)`` per Langfuse's OTLP ingest contract.
+
+    On any construction error (network resolver failure, invalid arg, etc.)
+    the failure is logged via :func:`logs.log_exception` with event
+    ``langfuse.exporter.construction_failed`` and ``None`` is returned so the
+    caller can fall back to the existing exporters without crashing startup.
+    """
+    try:
+        endpoint = f"{host.rstrip('/')}{_LANGFUSE_OTEL_TRACES_PATH}"
+        token = base64.b64encode(f"{public_key}:{secret_key}".encode()).decode("ascii")
+        headers = {"Authorization": f"Basic {token}"}
+        return OTLPSpanExporter(endpoint=endpoint, headers=headers)
+    except Exception as exc:
+        logs.log_exception(
+            exc,
+            params={
+                "event": "langfuse.exporter.construction_failed",
+                "host": host,
+            },
+        )
+        return None
