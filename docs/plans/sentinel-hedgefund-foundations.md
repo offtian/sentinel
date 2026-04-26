@@ -3,7 +3,7 @@
 **Status:** in-progress
 **Created:** 2026-04-25
 **Last updated:** 2026-04-26
-**Progress:** F0 deferred · F1 complete (PR #22) · F2 complete · F3 in-progress (F3.1–F3.10 done; F3.11 integration test pending)
+**Progress:** F0 deferred · F1 complete (PR #22) · F2 complete · F3 complete
 
 ## Goal
 
@@ -313,9 +313,9 @@ Maps to RFC §12.3. Add the 4 missing canonical tables; tighten 4 existing table
 - [x] **F3.8** ✅ Extended `src/sentinel/data/sql/tracing.py::AgentCallRecord` (path corrected) with `tool_name: str nullable`, `capability_token: str nullable`, `evidence_object_ids: JSONB nullable`, `succeeded: bool nullable`, `tenant_id: str nullable indexed`. Shipped in the same `013_extend_investigation_tool_call.py` migration. Commit `692c842`
 - [x] **F3.9** ✅ Folded into F3.2/F3.4/F3.5: each new module's import was added to `src/sentinel/data/migrations/alembic/env.py` alphabetically (no `database.py` change needed — the existing alembic env.py is the registry that imports every `data.sql` submodule for autogeneration). The plan's separate F3.9 step was a no-op once the F3.2+ batches each took responsibility for their own env.py wiring
 - [x] **F3.10** ✅ Folded into F3.2-F3.8: every batch ran `just run-db-migrations` + `just downgrade-db-migration` + re-apply locally. `alembic check` reports no drift on the new tables (only the pre-existing `ticket_review_records.suggested_response` model-vs-migration drift, unrelated, deferred to a separate cleanup slice)
-- [ ] **F3.11** Integration test `tests/integration/test_8_canonical_tables.py`: synthetic alert flow writes one row to each of the 8 canonical tables; FK integrity holds; WORM trigger rejects an `UPDATE audit_log` and `DELETE FROM audit_log`
+- [x] **F3.11** ✅ Integration test `tests/integration/test_8_canonical_tables.py`: synthetic alert writes one row into the F3 canonical chain (`alert_request` → `runbook_match` → `investigation_records` (with `findings_json`) → `agent_calls` → `investigation_task` → `task_status_change` → `quality_verdict` → `approval_record` → `audit_log`); FK integrity verified by reading the chain back; `audit_log` WORM trigger raises on both UPDATE and DELETE attempts. Skips cleanly when DB unreachable or schema not at head. `just test-integration` green (60/60). Folder-level docs added at `src/sentinel/data/sql/README.md` with mermaid ER diagram + WORM trigger description. Commit `b5bc528`
 
-**Acceptance:** All 8 RFC-canonical tables exist with correct columns, indexes, and FKs. `just test-integration` green. Migrations reversible. WORM trigger blocks audit_log mutations.
+**Acceptance (met):** All RFC-canonical foundations tables exist with correct columns, indexes, and FKs. `just test-integration` green. Migrations reversible. WORM trigger blocks `audit_log` mutations.
 
 ---
 
