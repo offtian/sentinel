@@ -47,12 +47,37 @@ def _configure_llm_env() -> None:
     os.environ.setdefault("OPENAI_API_KEY", "ollama")
 
 
+def _log_litellm_proxy_state() -> None:
+    """
+    Emit a structured-log event recording whether the LiteLLM proxy is wired
+    (RFC §2.4, ADR 0007).
+
+    - ``litellm_base_url`` unset -> WARNING ``litellm_proxy_disabled`` with a
+      ``fallback=in_process_sdk`` marker. This is the local-dev path.
+    - ``litellm_base_url`` set -> INFO ``litellm_proxy_enabled`` with the
+      proxy host. The virtual key is NEVER logged.
+    """
+    cfg = settings.get_settings()
+    if cfg.litellm_base_url is None:
+        logs.get_logger().warning(
+            "litellm_proxy_disabled",
+            fallback="in_process_sdk",
+        )
+        return
+
+    logs.log_event(
+        "litellm_proxy_enabled",
+        params={"host": str(cfg.litellm_base_url)},
+    )
+
+
 def initialise() -> None:
     global _initialised  # noqa: PLW0603
     if _initialised:
         return
     _configure_llm_env()
     logs.configure_logging()
+    _log_litellm_proxy_state()
 
     bootstrap_otel.init_traces()
     _initialised = True
