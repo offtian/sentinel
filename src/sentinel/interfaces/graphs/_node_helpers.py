@@ -33,6 +33,10 @@ def _team_profile_attribute() -> dict[str, otel_types.AttributeValue]:
         return {}
 
 
+_NODE_TRACER = otel_trace.get_tracer("sentinel.node")
+_PIPELINE_TRACER = otel_trace.get_tracer("sentinel.pipeline")
+
+
 def instrumented_node_run[T](
     *,
     pipeline: str,
@@ -62,25 +66,39 @@ def instrumented_node_run[T](
     """
 
     async def _runner() -> T:
+        attributes: dict[str, otel_types.AttributeValue] = {"langfuse.observation.type": "chain"}
         if envelope is not None:
-            attributes = dict(envelope.to_span_attributes())
+            attributes.update(envelope.to_span_attributes())
             attributes.update(_team_profile_attribute())
+        # Open an explicit child span for the node so the agent.run() and tool
+        # spans nest under a stable, named parent. pydantic-graph's own
+        # ``run node X`` span is unreliable for nodes that call into
+        # pydantic-ai (its instrumented agent context detaches in practice),
+        # leaving classifier/analyser agent spans floating as siblings of the
+        # graph iteration span. Owning the node span here makes the parent
+        # explicit regardless of pydantic-graph's behaviour.
+        span_name = f"{pipeline}.{node}"
+        with _NODE_TRACER.start_as_current_span(span_name):
+            # Use ``get_current_span`` so callers patching the OTel API at
+            # the ``_node_helpers.otel_trace`` reference can observe the
+            # attribute set in unit tests; in production this returns the
+            # same span just opened above.
             otel_trace.get_current_span().set_attributes(attributes)
-        start = time.perf_counter()
-        status = "ok"
-        try:
-            return await fn()
-        except Exception:
-            status = "error"
-            raise
-        finally:
-            duration = time.perf_counter() - start
-            metrics.record_pipeline_node_duration(
-                pipeline=pipeline,
-                node=node,
-                duration_seconds=duration,
-                status=status,
-            )
+            start = time.perf_counter()
+            status = "ok"
+            try:
+                return await fn()
+            except Exception:
+                status = "error"
+                raise
+            finally:
+                duration = time.perf_counter() - start
+                metrics.record_pipeline_node_duration(
+                    pipeline=pipeline,
+                    node=node,
+                    duration_seconds=duration,
+                    status=status,
+                )
 
     return _runner
 
@@ -115,3 +133,51 @@ async def run_node_with_envelope[T](
             fn=fn,
             envelope=envelope,
         )()
+
+
+async def run_pipeline_with_envelope[T](
+    *,
+    pipeline: str,
+    envelope: envelope_mod.Envelope,
+    input_payload: str,
+    fn: Callable[[], Awaitable[T]],
+    serialize_output: Callable[[T], str],
+) -> T:
+    """
+    Run a top-level pipeline body inside a parent OTel span carrying envelope
+    identity, ``team_profile``, and Langfuse-namespaced trace I/O attributes.
+
+    The pydantic-graph ``run graph ...`` span carries only the static graph
+    schema, so without a wrapping span Langfuse renders the trace with no
+    input or output. This helper opens ``sre.investigation_pipeline`` (or
+    similar) as the new root observation, stamps the envelope's mandatory
+    attributes plus ``langfuse.observation.input`` before the run, and
+    stamps ``langfuse.observation.output`` once the body returns. Children
+    inherit the envelope attrs through ``MandatoryAttributesPropagator``.
+
+    :param pipeline: Pipeline label (e.g. ``"sre"``); used as the span name.
+    :param envelope: Identity envelope minted at ingress.
+    :param input_payload: Pre-serialised input string for Langfuse trace I/O.
+    :param fn: Async callable producing the pipeline output.
+    :param serialize_output: Callable that turns the output into a string for
+        ``langfuse.observation.output``. Called only when ``fn`` returns
+        normally; on exception the output attribute is left unset.
+    """
+    span_name = f"{pipeline}.investigation_pipeline"
+    attributes: dict[str, otel_types.AttributeValue] = {
+        "langfuse.observation.type": "chain",
+        "langfuse.observation.input": input_payload,
+    }
+    attributes.update(envelope.to_span_attributes())
+    attributes.update(_team_profile_attribute())
+
+    with _PIPELINE_TRACER.start_as_current_span(span_name, attributes=attributes) as span:
+        result = await fn()
+        try:
+            span.set_attribute("langfuse.observation.output", serialize_output(result))
+        except Exception as exc:
+            logs.log_exception(
+                exc,
+                params={"event": "otel.pipeline_output.serialize_failed"},
+            )
+        return result

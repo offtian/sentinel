@@ -43,7 +43,7 @@ from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.graphs import common, investigation, support_review
 from sentinel.interfaces.graphs.agents import k8s_runner
 from sentinel.settings import get_settings
-from sentinel.utils import logs
+from sentinel.utils import llm_warmup, logs
 
 
 def _collect_model_ids(settings: object, *attr_names: str) -> list[str]:
@@ -201,12 +201,14 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
             "prompt_sha256": analyser_tpl.sha256,
         },
     ]
-    input_hash = pipeline_queries.canonical_input_hash(payload=alert.model_dump())
+    alert_payload = alert.model_dump(mode="json")
+    input_hash = pipeline_queries.canonical_input_hash(payload=alert_payload)
     model_ids = _collect_model_ids(settings, "alert_classifier_llm", "root_cause_llm")
+    envelope = _envelope_for_job(payload)
 
     await et.start_pipeline(
         pipeline_type="investigation",
-        input_data=alert.model_dump(),
+        input_data=alert_payload,
         input_hash=input_hash,
         model_ids_json=model_ids,
         mcp_endpoints_json=[],
@@ -216,6 +218,10 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
         prompt_sha256=classifier_tpl.sha256,
         prompt_text=classifier_tpl.system_text,
         agent_prompts_json=agent_prompts,
+        # F4.7: open the ReplayBundle capture window for the worker leg.
+        # The graph guards against double-start, so this is the single owner.
+        envelope=envelope,
+        alert_payload=alert_payload,
     )
 
     async def _persist(reply: common.InvestigationReply) -> None:
@@ -243,7 +249,7 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     try:
         result = await investigation.investigate_alert(
             alert=alert,
-            envelope=_envelope_for_job(payload),
+            envelope=envelope,
             agent_for=cfg.agent_for,
             holmes=holmes,
             pagerduty_client=pd_client,
@@ -255,7 +261,13 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
             challenger_adapter=challenger_adapter,
         )
     except Exception:
-        await et.complete_pipeline(status="failed", error_message="pipeline raised")
+        # F4.7: pass runbook fields (None for now — F6 wires real values).
+        await et.complete_pipeline(
+            status="failed",
+            error_message="pipeline raised",
+            runbook_id=None,
+            runbook_version_sha=None,
+        )
         raise
 
     result_data = json.loads(result.model_dump_json())
@@ -263,6 +275,8 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
         status="completed",
         output_data=result_data,
         final_reply=result_data,
+        runbook_id=None,
+        runbook_version_sha=None,
     )
 
     return result.model_dump_json()
@@ -292,12 +306,14 @@ async def _run_support_review(payload: dict[str, object]) -> str:
             "prompt_sha256": drafter_tpl.sha256,
         },
     ]
-    input_hash = pipeline_queries.canonical_input_hash(payload=ticket.model_dump())
+    ticket_payload = ticket.model_dump(mode="json")
+    input_hash = pipeline_queries.canonical_input_hash(payload=ticket_payload)
     model_ids = _collect_model_ids(settings, "ticket_reviewer_llm", "response_drafter_llm")
+    envelope = _envelope_for_job(payload)
 
     await et.start_pipeline(
         pipeline_type="support_review",
-        input_data=ticket.model_dump(),
+        input_data=ticket_payload,
         input_hash=input_hash,
         model_ids_json=model_ids,
         mcp_endpoints_json=[],
@@ -307,6 +323,9 @@ async def _run_support_review(payload: dict[str, object]) -> str:
         prompt_sha256=reviewer_tpl.sha256,
         prompt_text=reviewer_tpl.system_text,
         agent_prompts_json=agent_prompts,
+        # F4.7: open the ReplayBundle capture window for the worker leg.
+        envelope=envelope,
+        alert_payload=ticket_payload,
     )
 
     async def _persist(reply: common.SupportReply) -> None:
@@ -328,7 +347,7 @@ async def _run_support_review(payload: dict[str, object]) -> str:
     try:
         result = await support_review.review_ticket(
             ticket=ticket,
-            envelope=_envelope_for_job(payload),
+            envelope=envelope,
             agent_for=cfg.agent_for,
             document_searcher=cfg.build_document_searcher(),
             ticket_searcher=cfg.build_ticket_searcher(),
@@ -338,7 +357,13 @@ async def _run_support_review(payload: dict[str, object]) -> str:
             drafter_toolsets=(cfg.build_support_search_toolset(), *shared_mcp),
         )
     except Exception:
-        await et.complete_pipeline(status="failed", error_message="pipeline raised")
+        # F4.7: support has no runbook concept — both ids stay None permanently.
+        await et.complete_pipeline(
+            status="failed",
+            error_message="pipeline raised",
+            runbook_id=None,
+            runbook_version_sha=None,
+        )
         raise
 
     result_data = json.loads(result.model_dump_json())
@@ -346,6 +371,8 @@ async def _run_support_review(payload: dict[str, object]) -> str:
         status="completed",
         output_data=result_data,
         final_reply=result_data,
+        runbook_id=None,
+        runbook_version_sha=None,
     )
 
     return result.model_dump_json()
@@ -465,12 +492,19 @@ async def _main() -> None:
         await async_db.connect_db()
         logs.log_event("worker.database_initialised")
 
+    # Run warmup in the background so polling starts immediately. The task
+    # holds a reference for the lifetime of `_main` to keep it from being
+    # garbage-collected mid-flight; on shutdown we cancel it cleanly.
+    warmup_task = asyncio.create_task(llm_warmup.warm_ollama_models())
+
     try:
         if args.run_once:
             await _run_once(worker_id=worker_id)
         else:
             await _poll_loop(worker_id=worker_id)
     finally:
+        if not warmup_task.done():
+            warmup_task.cancel()
         if get_settings().database_url:
             await async_db.disconnect_db()
         await database.close_engine()

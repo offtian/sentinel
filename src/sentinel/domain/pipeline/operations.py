@@ -98,6 +98,8 @@ async def complete_pipeline_run(
     duration_ms: int | None = None,
     final_reply: dict[str, Any] | None = None,
     total_token_usage_json: dict[str, Any] | None = None,
+    replay_bundle_json: dict[str, Any] | None = None,
+    replay_bundle_sha: str | None = None,
 ) -> None:
     """
     Update a pipeline_runs row to its final status.
@@ -110,6 +112,8 @@ async def complete_pipeline_run(
     :param duration_ms: Wall-clock duration of the run in milliseconds.
     :param final_reply: Optional structured final reply payload for replay.
     :param total_token_usage_json: Optional aggregate token usage and cost across all agent calls.
+    :param replay_bundle_json: Optional RFC §3.8 ReplayBundle as canonical JSON dict.
+    :param replay_bundle_sha: Optional SHA-256 over the canonical bundle JSON.
     """
     completed_at = datetime.now(tz=UTC)
     query = (
@@ -123,6 +127,8 @@ async def complete_pipeline_run(
             duration_ms=duration_ms,
             final_reply=final_reply,
             total_token_usage_json=total_token_usage_json,
+            replay_bundle_json=replay_bundle_json,
+            replay_bundle_sha=replay_bundle_sha,
         )
     )
     await db.execute(query)
@@ -131,6 +137,7 @@ async def complete_pipeline_run(
         params={
             "run_id": str(run_id),
             "status": status,
+            "replay_bundle_sha": replay_bundle_sha,
         },
     )
 

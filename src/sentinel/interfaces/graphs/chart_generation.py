@@ -45,6 +45,7 @@ async def _parse_request(
     utils.set_agent_span_attributes(
         prompt_sha256=chart_request_parser.PROMPT_SHA256,
         model_name=utils.get_model_name(parser_agent),
+        agent_name="chart_request_parser",
     )
     result = await parser_agent.run(
         user_prompt=request.raw_message,
@@ -103,6 +104,7 @@ async def _generate_chart_files(
     utils.set_agent_span_attributes(
         prompt_sha256=chart_generator.PROMPT_SHA256,
         model_name=utils.get_model_name(generator_agent),
+        agent_name="chart_generator",
     )
     result = await generator_agent.run(
         user_prompt=user_prompt,

@@ -110,7 +110,9 @@ class TestEnvelopeToSpanAttributes:
         # When to_span_attributes is called
         attributes = built.to_span_attributes()
 
-        # Then the 6 envelope-owned mandatory keys are present
+        # Then the 6 envelope-owned mandatory keys are present alongside
+        # the Langfuse-namespaced session/user attributes that promote
+        # spans into the Langfuse Sessions/Users tabs
         assert set(attributes) == {
             "request_id",
             "tenant_id",
@@ -118,7 +120,11 @@ class TestEnvelopeToSpanAttributes:
             "region",
             "pii_class",
             "received_at",
+            "langfuse.session.id",
+            "langfuse.user.id",
         }
+        assert attributes["langfuse.session.id"] == str(built.request_id)
+        assert attributes["langfuse.user.id"] == built.tenant_id
 
     def test_received_at_is_iso_8601_string(self) -> None:
         # Given a constructed envelope with a known received_at

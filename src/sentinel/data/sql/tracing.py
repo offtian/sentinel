@@ -58,6 +58,20 @@ class PipelineRunRecord(SQLModel, table=True):
         default=None, sa_column=Column(JSON, nullable=True)
     )
 
+    # -- F4.7 ReplayBundle persistence (RFC §3.8) --
+    # The full canonical RFC §3.8 bundle (envelope + alert payload + tool I/O +
+    # LLM I/O + final outputs). Stored as JSONB so the replay CLI can reconstruct
+    # the bundle without joining other tables; nullable for rolling-deploy safety
+    # and back-compat with pre-F4.7 rows.
+    replay_bundle_json: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSONB, nullable=True)
+    )
+    # SHA-256 over the canonical-JSON encoding of ``replay_bundle_json``. Indexed
+    # for replay-CLI lookups by digest and to surface canonicalisation drift.
+    replay_bundle_sha: str | None = Field(
+        default=None, max_length=64, sa_column=Column(Text, nullable=True, index=True)
+    )
+
 
 class NodeExecutionRecord(SQLModel, table=True):
     """

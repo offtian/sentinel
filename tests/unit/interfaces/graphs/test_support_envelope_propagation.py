@@ -183,6 +183,9 @@ class TestReviewTicketSetsSpanAttributesOnEveryNode:
             "pii_class",
             "received_at",
             "team_profile",
+            "langfuse.observation.type",
+            "langfuse.session.id",
+            "langfuse.user.id",
         }
         for attrs in envelope_calls:
             assert set(attrs.keys()) == expected_keys

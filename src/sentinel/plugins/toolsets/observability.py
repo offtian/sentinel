@@ -14,17 +14,21 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic_ai.tools import RunContext
-from pydantic_ai.toolsets import FunctionToolset
+from pydantic_ai.toolsets import AbstractToolset, FunctionToolset
 
 from sentinel.domain.tools import observability as obs_tools
 from sentinel.domain.vendor_adapters.observability import base as obs_base
+from sentinel.plugins.toolsets import _runtime as runtime_mod
+
+
+_REPLAY_LABEL = "observability"
 
 
 def build_observability_toolset(
     *,
     observability_client: obs_base.BaseObservabilityClient | None,
     service_name: str = "",
-) -> FunctionToolset[Any]:
+) -> AbstractToolset[Any]:
     """
     Build a read-only toolset for querying logs, metrics, and traces.
 
@@ -112,4 +116,4 @@ def build_observability_toolset(
             minutes_back=minutes_back,
         )
 
-    return toolset
+    return runtime_mod.wrap_for_replay(toolset, label=_REPLAY_LABEL)  # type: ignore[return-value]

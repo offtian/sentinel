@@ -51,6 +51,7 @@ async def _classify_intent(text: str) -> intent_router.Intent:
     agent_utils.set_agent_span_attributes(
         prompt_sha256=intent_router.PROMPT_SHA256,
         model_name=agent_utils.get_model_name(router_agent),
+        agent_name="intent_router",
     )
     result = await router_agent.run(
         user_prompt=text,

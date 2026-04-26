@@ -17,17 +17,18 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic_ai.tools import RunContext
-from pydantic_ai.toolsets import FunctionToolset
+from pydantic_ai.toolsets import AbstractToolset, FunctionToolset
 
 from sentinel.domain.search import searcher
 from sentinel.domain.tools import documentation as doc_tools
+from sentinel.plugins.toolsets import _runtime as runtime_mod
 
 
 def build_support_search_toolset(
     *,
     document_searcher: searcher.BaseDocumentSearcher | None,
     ticket_searcher: searcher.BasePastTicketSearcher | None,
-) -> FunctionToolset[Any]:
+) -> AbstractToolset[Any]:
     """
     Build a read-only toolset for searching documentation and past tickets.
 
@@ -81,13 +82,13 @@ def build_support_search_toolset(
             client=ticket_searcher, query=query, limit=limit
         )
 
-    return toolset
+    return runtime_mod.wrap_for_replay(toolset, label="support_search")  # type: ignore[return-value]
 
 
 def build_ticket_triage_toolset(
     *,
     ticket_searcher: searcher.BasePastTicketSearcher | None,
-) -> FunctionToolset[Any]:
+) -> AbstractToolset[Any]:
     """
     Build a read-only toolset for duplicate/similar ticket detection.
 
@@ -119,4 +120,4 @@ def build_ticket_triage_toolset(
             client=ticket_searcher, query=query, limit=limit
         )
 
-    return toolset
+    return runtime_mod.wrap_for_replay(toolset, label="ticket_triage")  # type: ignore[return-value]

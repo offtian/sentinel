@@ -1,0 +1,23 @@
+# Overlay enabling Grafana/Tempo wiring on api, worker, and mcp-server.
+# Apply alongside the grafana profile:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.grafana.yml \
+#     --profile grafana up -d
+#
+# Without this overlay, the base compose leaves GRAFANA_URL and
+# OTEL_TRACES_ENDPOINT empty so the vendor adapter and OTel trace exporter
+# stay no-op when the grafana stack isn't running.
+
+services:
+  api:
+    environment:
+      GRAFANA_URL: http://grafana:3000
+      OTEL_TRACES_ENDPOINT: http://tempo:4318
+  worker:
+    environment:
+      GRAFANA_URL: http://grafana:3000
+      OTEL_TRACES_ENDPOINT: http://tempo:4318
+  mcp-server:
+    environment:
+      GRAFANA_URL: http://grafana:3000
+      OTEL_TRACES_ENDPOINT: http://tempo:4318

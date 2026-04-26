@@ -15,20 +15,24 @@ def _configure_llm_env() -> None:
     """
     Configure LiteLLM SDK and provider-specific environment variables.
 
-    LiteLLM runs in-process (SDK mode) — no external proxy.  PydanticAI
-    delegates to LiteLLM via the ``litellm:`` model prefix, and LiteLLM
-    routes to the correct provider based on the model name
-    (e.g. ``openai/gpt-4.1-mini`` → OpenAI, ``ollama/qwen3:8b`` → Ollama).
+    Routing in this codebase splits on model prefix
+    (see :func:`sentinel.config._normalise_model_name`):
 
-    LiteLLM SDK settings replace the former ``litellm_config.yaml`` proxy
-    configuration.  Provider-specific env vars:
+    - ``ollama/<model>`` → PydanticAI's OpenAI-compat client repointed at
+      Ollama's OpenAI-compatible endpoint (``<OLLAMA_BASE_URL>/v1``). We
+      override ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY`` to that endpoint
+      so the OpenAI provider talks to the local Ollama daemon. (Ollama
+      ignores the API key but ``openai-python`` rejects an empty one.)
+    - ``openai/<model>`` → PydanticAI's ``litellm:`` prefix, which builds
+      an OpenAI HTTP client targeted at ``LITELLM_BASE_URL`` (a real
+      LiteLLM proxy). Local-dev with ``LITELLM_BASE_URL=""`` will only
+      work for OpenAI when ``OPENAI_API_KEY`` is set on the host.
 
-    - **OpenAI** — ``OPENAI_API_KEY``
-    - **Ollama** — ``OLLAMA_BASE_URL``
+    LiteLLM SDK settings (``drop_params``, ``request_timeout``) are kept
+    so any direct ``litellm.completion(...)`` calls still behave well.
     """
     cfg = settings.get_settings()
 
-    # LiteLLM SDK settings (equivalent to litellm_settings in proxy config)
     litellm.drop_params = True  # Ignore unsupported params per provider
     litellm.request_timeout = 300  # type: ignore[attr-defined]  # Local models can be slow
 
@@ -37,6 +41,10 @@ def _configure_llm_env() -> None:
         ollama_url = f"{ollama_url}/v1"
 
     os.environ.setdefault("OLLAMA_BASE_URL", ollama_url)
+    # Repoint PydanticAI's OpenAI-compat client at Ollama for ollama/* models.
+    # ``setdefault`` so an explicit OPENAI_BASE_URL pointing elsewhere wins.
+    os.environ.setdefault("OPENAI_BASE_URL", ollama_url)
+    os.environ.setdefault("OPENAI_API_KEY", "ollama")
 
 
 def initialise() -> None:

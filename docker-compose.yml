@@ -58,8 +58,13 @@ services:
       PGUSER: postgres
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       ENVIRONMENT: localdev
-      # Grafana stack (auto-selected when ENVIRONMENT=localdev)
-      GRAFANA_URL: http://grafana:3000
+      # Grafana stack — opt-in via the `grafana` compose profile. Default
+      # to empty so the vendor adapter and OTel exporter no-op when the
+      # stack isn't running (otherwise DNS resolution for `grafana` /
+      # `tempo` floods the worker logs with errors). Set GRAFANA_URL +
+      # OTEL_TRACES_ENDPOINT in `.env` (or run with --profile grafana
+      # which has its own override) to enable.
+      GRAFANA_URL: ${GRAFANA_URL:-}
       GRAFANA_API_TOKEN: ${GRAFANA_API_TOKEN:-}
       GRAFANA_PROMETHEUS_DATASOURCE_UID: prometheus
       GRAFANA_LOKI_DATASOURCE_UID: loki
@@ -76,7 +81,10 @@ services:
       SRE_SLACK_CHANNEL: ${SRE_SLACK_CHANNEL:-}
       SUPPORT_SLACK_CHANNEL: ${SUPPORT_SLACK_CHANNEL:-}
       OTEL_TRACES_ENABLED: "true"
-      OTEL_TRACES_ENDPOINT: http://tempo:4318
+      # Empty when grafana profile isn't running (Tempo isn't up). Logfire
+      # falls back to console export and Langfuse export still flows over
+      # its own dedicated exporter, so traces still reach Langfuse.
+      OTEL_TRACES_ENDPOINT: ${OTEL_TRACES_ENDPOINT:-}
       # Langfuse — in-network address (host port 3001 only works from the host)
       LANGFUSE_HOST: http://langfuse-web:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-localdev}
@@ -84,6 +92,49 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  worker:
+    build: .
+    command: ["/app/.venv/bin/python", "-m", "sentinel.worker"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://db:5432/sentinel
+      PGUSER: postgres
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      ENVIRONMENT: localdev
+      # Grafana stack — opt-in via the `grafana` compose profile. Default
+      # to empty so the vendor adapter and OTel exporter no-op when the
+      # stack isn't running (otherwise DNS resolution for `grafana` /
+      # `tempo` floods the worker logs with errors). Set GRAFANA_URL +
+      # OTEL_TRACES_ENDPOINT in `.env` (or run with --profile grafana
+      # which has its own override) to enable.
+      GRAFANA_URL: ${GRAFANA_URL:-}
+      GRAFANA_API_TOKEN: ${GRAFANA_API_TOKEN:-}
+      GRAFANA_PROMETHEUS_DATASOURCE_UID: prometheus
+      GRAFANA_LOKI_DATASOURCE_UID: loki
+      GRAFANA_TEMPO_DATASOURCE_UID: tempo
+      # Vendor integrations (pass through from host .env)
+      PAGERDUTY_API_KEY: ${PAGERDUTY_API_KEY:-}
+      DATADOG_API_KEY: ${DATADOG_API_KEY:-}
+      DATADOG_APP_KEY: ${DATADOG_APP_KEY:-}
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      JIRA_USER_EMAIL: ${JIRA_USER_EMAIL:-}
+      CONFLUENCE_BASE_URL: ${CONFLUENCE_BASE_URL:-}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SRE_SLACK_CHANNEL: ${SRE_SLACK_CHANNEL:-}
+      SUPPORT_SLACK_CHANNEL: ${SUPPORT_SLACK_CHANNEL:-}
+      OTEL_TRACES_ENABLED: "true"
+      # Empty when grafana profile isn't running (Tempo isn't up). Logfire
+      # falls back to console export and Langfuse export still flows over
+      # its own dedicated exporter, so traces still reach Langfuse.
+      OTEL_TRACES_ENDPOINT: ${OTEL_TRACES_ENDPOINT:-}
+      LANGFUSE_HOST: http://langfuse-web:3000
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-localdev}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-localdev}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
   mcp-server:
     build: .
@@ -103,7 +154,10 @@ services:
       GRAFANA_LOKI_DATASOURCE_UID: loki
       GRAFANA_TEMPO_DATASOURCE_UID: tempo
       OTEL_TRACES_ENABLED: "true"
-      OTEL_TRACES_ENDPOINT: http://tempo:4318
+      # Empty when grafana profile isn't running (Tempo isn't up). Logfire
+      # falls back to console export and Langfuse export still flows over
+      # its own dedicated exporter, so traces still reach Langfuse.
+      OTEL_TRACES_ENDPOINT: ${OTEL_TRACES_ENDPOINT:-}
       # Langfuse — in-network address (host port 3001 only works from the host)
       LANGFUSE_HOST: http://langfuse-web:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-localdev}
@@ -116,8 +170,11 @@ services:
   # Observability stack (Grafana + Prometheus + Loki + Tempo)
   # ---------------------------------------------------------------------------
 
+  # Grafana stack is opt-in. Default `docker compose up` skips it.
+  # Bring it up with: docker compose --profile grafana up -d
   prometheus:
     image: prom/prometheus:v3.4.1
+    profiles: ["grafana"]
     ports:
       - "9090:9090"
     volumes:
@@ -131,6 +188,7 @@ services:
 
   loki:
     image: grafana/loki:3.5.0
+    profiles: ["grafana"]
     ports:
       - "3100:3100"
     volumes:
@@ -140,6 +198,7 @@ services:
 
   tempo:
     image: grafana/tempo:2.7.2
+    profiles: ["grafana"]
     ports:
       - "3200:3200"   # Tempo HTTP API
       - "4317:4317"   # OTLP gRPC receiver
@@ -151,6 +210,7 @@ services:
 
   grafana:
     image: grafana/grafana:11.6.0
+    profiles: ["grafana"]
     ports:
       - "3000:3000"
     environment:
@@ -196,7 +256,11 @@ services:
     volumes:
       - clickhouse-data:/var/lib/clickhouse
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:8123/ping"]
+      # 127.0.0.1, not localhost: on Apple Silicon this image fails the IPv6
+      # listen with "Address family for hostname not supported" so it only
+      # binds 0.0.0.0; busybox wget resolves localhost to ::1 first and gets
+      # connection refused. Bypass the resolver.
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:8123/ping"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -273,7 +337,7 @@ services:
       LANGFUSE_INIT_USER_EMAIL: dev@sentinel.localdev
       LANGFUSE_INIT_USER_NAME: Dev
       # Dev-only — do not use in production.
-      LANGFUSE_INIT_USER_PASSWORD: devpass
+      LANGFUSE_INIT_USER_PASSWORD: devpass1
       LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-localdev
       # Dev-only — do not use in production.
       LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-localdev

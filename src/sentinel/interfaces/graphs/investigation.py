@@ -75,6 +75,7 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
                 agent_utils.set_agent_span_attributes(
                     prompt_sha256=alert_classifier.PROMPT_SHA256,
                     model_name=agent_utils.get_model_name(classifier_agent),
+                    agent_name="alert_classifier",
                 )
                 result = await classifier_agent.run(
                     user_prompt=f"Alert: {ctx.state.alert.title}\n\n{ctx.state.alert.description}",
@@ -292,6 +293,7 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
                 agent_utils.set_agent_span_attributes(
                     prompt_sha256=root_cause_analyser.PROMPT_SHA256,
                     model_name=agent_utils.get_model_name(analyser_agent),
+                    agent_name="root_cause_analyser",
                 )
                 result = await analyser_agent.run(
                     user_prompt=f"Analyse this alert: {ctx.state.alert.title}",
@@ -652,9 +654,58 @@ async def investigate_alert(
         ),
     )
 
-    result = await investigation_graph.run(
-        ClassifyAlert(),
-        deps=dependencies,
-        state=state,
+    async def _run_graph() -> common.InvestigationReply:
+        # F4.7: when the tracer hasn't yet been started by the outer caller
+        # (worker/replay/chat), open the replay-capture window here so the
+        # bundle's envelope + alert payload are attached. When the worker
+        # already started the run, we skip — Slice D will reconcile the
+        # worker call site to thread envelope + alert_payload through too.
+        tracer = trace_collector
+        owns_pipeline = (
+            tracer is not None
+            and hasattr(tracer, "start_pipeline")
+            and getattr(tracer, "pipeline_run_id", None) is None
+        )
+        if owns_pipeline:
+            await tracer.start_pipeline(  # type: ignore[union-attr]
+                pipeline_type="investigation",
+                input_data={"alert_id": alert.id, "title": alert.title},
+                envelope=envelope,
+                alert_payload=alert.model_dump(),
+            )
+        try:
+            result = await investigation_graph.run(
+                ClassifyAlert(),
+                deps=dependencies,
+                state=state,
+            )
+        except Exception:
+            if owns_pipeline:
+                # Best-effort flush so the ContextVar token is released even on
+                # failure. Runbook ids are unknown here — see TODO below.
+                await tracer.complete_pipeline(  # type: ignore[union-attr]
+                    status="failed",
+                    runbook_id=None,
+                    runbook_version_sha=None,
+                )
+            raise
+        if owns_pipeline:
+            # TODO(f6-runbook-pinning): the SRE pipeline does not yet thread the
+            # matched runbook id / version SHA through to completion. Pass None
+            # for now; F6 (runbook pinning) wires real values into State so the
+            # bundle records "which runbook drove the run" for replay drift.
+            await tracer.complete_pipeline(  # type: ignore[union-attr]
+                status="completed",
+                final_reply=result.output.model_dump(),
+                runbook_id=None,
+                runbook_version_sha=None,
+            )
+        return result.output
+
+    return await _node_helpers.run_pipeline_with_envelope(
+        pipeline="sre",
+        envelope=envelope,
+        input_payload=alert.model_dump_json(),
+        fn=_run_graph,
+        serialize_output=lambda reply: reply.model_dump_json(),
     )
-    return result.output

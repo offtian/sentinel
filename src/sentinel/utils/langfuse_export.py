@@ -14,6 +14,8 @@ from __future__ import annotations
 import base64
 from typing import Any
 
+from opentelemetry import trace as otel_trace
+
 # Direct symbol import: this is the documented import path for the Langfuse
 # OTLP/HTTP exporter and must be the bound class object so callers can patch
 # it in tests via ``mock.patch.object(langfuse_export, "OTLPSpanExporter")``.
@@ -51,6 +53,82 @@ _FRAMEWORK_SCOPES: frozenset[str] = frozenset(
         "opentelemetry.instrumentation.httpx",
     }
 )
+
+
+def _is_framework_scope(span: Any) -> bool:
+    scope = getattr(span, "instrumentation_scope", None)
+    scope_name = scope.name if scope is not None else None
+    return scope_name in _FRAMEWORK_SCOPES
+
+
+class MandatoryAttributesPropagator(SpanProcessor):
+    """
+    SpanProcessor that copies missing mandatory attrs from parent to child.
+
+    pydantic-ai opens ``chat ...`` and ``running tool`` spans as children of
+    the pipeline-node span set by ``_node_helpers.run_node_with_envelope``.
+    The parent carries the six envelope attrs plus ``team_profile``; the
+    agent-set helper stamps ``prompt_version_sha`` and ``model_id`` onto the
+    same parent. Without propagation, the child LLM/tool spans go to
+    Langfuse missing every mandatory attribute, breaking session/user
+    grouping and the RFC §13.2 contract.
+
+    On ``on_start``, this processor reads the active parent span from the
+    OTel context and copies any of :data:`MANDATORY_ATTRS` that the parent
+    has but the child does not. Spans whose instrumentation scope is in
+    :data:`_FRAMEWORK_SCOPES` are skipped (HTTP/SQL spans are deliberately
+    out of scope per the validator carve-out).
+    """
+
+    def on_start(self, span: Any, parent_context: Any = None) -> None:
+        """
+        Copy missing mandatory attrs from parent span onto ``span`` at start.
+
+        ``span`` is a live SDK ``Span`` here (mutable) — this is the only
+        callback that fires before pydantic-ai's instrumented ``chat``
+        bodies record their tokens, so attributes set here propagate into
+        the exported payload.
+        """
+        try:
+            if _is_framework_scope(span):
+                return
+
+            parent_span = otel_trace.get_current_span(parent_context)
+            parent_attrs = getattr(parent_span, "attributes", None)
+            if not parent_attrs:
+                return
+
+            child_attrs = getattr(span, "attributes", None) or {}
+            to_copy = {
+                attr: parent_attrs[attr]
+                for attr in MANDATORY_ATTRS
+                if attr in parent_attrs and attr not in child_attrs
+            }
+            if to_copy:
+                span.set_attributes(to_copy)
+        except Exception as exc:
+            logs.log_exception(
+                exc,
+                params={"event": "otel.mandatory_attrs.propagate_failed"},
+            )
+
+    def on_end(self, span: ReadableSpan) -> None:
+        """
+        Return immediately; propagation work is done in :meth:`on_start`.
+        """
+        return
+
+    def shutdown(self) -> None:
+        """
+        Return immediately; the propagator owns no resources to release.
+        """
+        return
+
+    def force_flush(self, timeout_millis: int = 30_000) -> bool:
+        """
+        Return True; the propagator buffers no work.
+        """
+        return True
 
 
 class MandatoryAttributesValidator(SpanProcessor):
@@ -110,16 +188,13 @@ class MandatoryAttributesValidator(SpanProcessor):
                 "scope": scope_name,
             },
         )
-        # ReadableSpan is the *read* projection; the live ``Span`` object
-        # passed to ``on_end`` is in fact a ``sdk.trace.Span`` that still
-        # exposes ``set_attribute`` while the span is being exported. The
-        # ``ReadableSpan`` type hint comes from the SpanProcessor signature so
-        # we narrow via Any to call the mutator. The OTel ``set_attribute`` API
-        # is positional (``key, value``) by spec — FBT003 noqa is the
-        # documented carve-out for third-party SDK boundary calls.
-        mutable_span: Any = span
-        mutable_span.set_attribute("_validation_failed", True)  # noqa: FBT003
-        mutable_span.set_attribute("_missing_attrs", missing)
+        # The ``on_end`` callback receives a ``ReadableSpan`` per OTel spec
+        # (spans are immutable once ended) so attributes cannot be stamped
+        # back onto the span here. The structured log above is the
+        # diagnostic surface; downstream validators read missing attrs from
+        # the log stream rather than from span attributes. The earlier
+        # implementation attempted ``set_attribute`` via an ``Any`` cast
+        # which crashes on the real SDK ``ReadableSpan``.
         return
 
     def shutdown(self) -> None:

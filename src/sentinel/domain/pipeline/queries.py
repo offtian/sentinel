@@ -7,15 +7,18 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from datetime import datetime
 from typing import Any
 
 import databases
 from sqlalchemy import select
 from sqlmodel import col
 
+from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.data.sql import tracing
 from sentinel.domain.pipeline import errors as pipeline_errors
 from sentinel.domain.pipeline import types as pipeline_types
+from sentinel.utils import replay_bundle as replay_bundle_mod
 
 
 _EXCLUDED_KEYS: frozenset[str] = frozenset(
@@ -141,3 +144,89 @@ async def fetch_replay_bundle(
         input_payload=mapping.get("input_json"),
         agent_prompts=tuple(mapping.get("agent_prompts_json") or []),
     )
+
+
+def _envelope_from_dict(payload: dict[str, Any]) -> envelope_mod.Envelope:
+    """Reconstruct a frozen Envelope from its canonical-JSON dict form."""
+    return envelope_mod.Envelope(
+        request_id=uuid.UUID(payload["request_id"]),
+        tenant_id=payload["tenant_id"],
+        cluster_id=payload["cluster_id"],
+        region=payload["region"],
+        pii_class=payload["pii_class"],
+        received_at=datetime.fromisoformat(payload["received_at"]),
+    )
+
+
+def _tool_entry_from_dict(payload: dict[str, Any]) -> replay_bundle_mod.ToolIOEntry:
+    return replay_bundle_mod.ToolIOEntry(
+        tool_name=payload["tool_name"],
+        inputs=payload["inputs"],
+        outputs=payload["outputs"],
+        evidence_object_id=payload.get("evidence_object_id"),
+        at=datetime.fromisoformat(payload["at"]),
+    )
+
+
+def _llm_entry_from_dict(payload: dict[str, Any]) -> replay_bundle_mod.LLMIOEntry:
+    return replay_bundle_mod.LLMIOEntry(
+        agent_name=payload["agent_name"],
+        model_id=payload["model_id"],
+        inputs=payload["inputs"],
+        outputs=payload["outputs"],
+        token_usage=payload.get("token_usage"),
+        at=datetime.fromisoformat(payload["at"]),
+    )
+
+
+async def fetch_recorded_replay_bundle(
+    *,
+    db: databases.Database,
+    run_id: uuid.UUID,
+) -> replay_bundle_mod.ReplayBundle:
+    """
+    Return the persisted RFC §3.8 :class:`ReplayBundle` for *run_id*.
+
+    Loads ``replay_bundle_json`` and ``replay_bundle_sha`` from the
+    pipeline run row (written on the capture path by F4.7 slice A's
+    tracer integration), reconstructs the frozen
+    :class:`~sentinel.utils.replay_bundle.ReplayBundle`, and asserts the
+    recomputed canonical sha matches the stored one. Sha drift surfaces
+    canonicalisation regressions or DB corruption.
+
+    :param db: The async database connection.
+    :param run_id: Primary key of the pipeline run record.
+    :raises pipeline_errors.ReplayBundleNotFoundError: if no row matches
+        *run_id* or the row's ``replay_bundle_json`` column is null
+        (a pre-F4.7 run, or one that did not opt into capture).
+    :raises pipeline_errors.ReplayBundleSHAMismatchError: if the stored
+        sha does not match the bundle's recomputed canonical sha.
+    """
+    query = select(tracing.PipelineRunRecord).where(
+        col(tracing.PipelineRunRecord.id) == run_id,
+    )
+    row = await db.fetch_one(query)
+    if row is None:
+        raise pipeline_errors.ReplayBundleNotFoundError(run_id)
+    mapping = dict(row._mapping)  # noqa: SLF001
+    bundle_payload = mapping.get("replay_bundle_json")
+    stored_sha = mapping.get("replay_bundle_sha")
+    if bundle_payload is None or stored_sha is None:
+        raise pipeline_errors.ReplayBundleNotFoundError(run_id)
+    bundle = replay_bundle_mod.ReplayBundle(
+        envelope=_envelope_from_dict(bundle_payload["envelope"]),
+        alert_payload=bundle_payload["alert_payload"],
+        runbook_id=bundle_payload.get("runbook_id"),
+        runbook_version_sha=bundle_payload.get("runbook_version_sha"),
+        tool_io=tuple(_tool_entry_from_dict(e) for e in bundle_payload.get("tool_io", [])),
+        llm_io=tuple(_llm_entry_from_dict(e) for e in bundle_payload.get("llm_io", [])),
+        final_outputs=bundle_payload["final_outputs"],
+    )
+    recomputed_sha = bundle.bundle_sha
+    if recomputed_sha != stored_sha:
+        raise pipeline_errors.ReplayBundleSHAMismatchError(
+            run_id,
+            stored_sha,
+            recomputed_sha,
+        )
+    return bundle

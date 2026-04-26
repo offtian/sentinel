@@ -438,25 +438,33 @@ pipeline_runs (trace_id, pipeline_type, status, duration_ms)
 
 **Domain types:** `data/tracing_models.py` defines `PipelineRunRecord`, `NodeExecutionRecord`, `AgentCallRecord`.
 
-**ExecutionTracer** (`domain/pipeline/tracer.py`) — DB-backed tracer that records pipeline runs, node executions, and agent calls with prompt version metadata. Each `AgentCallRecord` captures `prompt_version` (git SHA + filename) and `prompt_sha256` for regulatory traceability. `ReplayBundle` (`domain/pipeline/types.py`) aggregates the full snapshot (model, prompts, MCP servers, skills, input payload) for reproducibility via `python -m sentinel.replay`.
+**ExecutionTracer** (`domain/pipeline/tracer.py`) — DB-backed tracer that records pipeline runs, node executions, and agent calls with prompt version metadata. Each `AgentCallRecord` captures `prompt_version` (git SHA + filename) and `prompt_sha256` for regulatory traceability. The legacy `ReplayBundle` (`domain/pipeline/types.py`) aggregates run-level metadata; the F4.5+ RFC §3.8 `ReplayBundle` (`utils/replay_bundle.py`) layers tool I/O + LLM I/O + canonical SHA on top for bit-for-bit replay via `python -m sentinel.replay <run_id> --replay`. See §Replay below.
 
 ## Observability
 
 ### Mandatory span attributes (RFC §13.2)
 
-Every pipeline span carries nine mandatory attributes, split by source:
+Every pipeline span carries nine mandatory attributes. The canonical tuple lives at `src/sentinel/utils/langfuse_export.py:29` (`MANDATORY_ATTRS`); any addition must land there first so the validator picks it up.
 
-| Source | Attribute | Set by |
-|--------|-----------|--------|
-| Envelope-derived (F2) | `request_id`, `tenant_id`, `cluster_id`, `region`, `pii_class`, `received_at` | `run_node_with_envelope()` in `interfaces/graphs/_node_helpers.py` |
-| Agent-context (F4) | `prompt_version_sha`, `model_id` | `set_agent_span_attributes()` in `interfaces/graphs/agents/utils.py`, called at every PydanticAI invocation site |
-| Process-constant (F4) | `team_profile` | `run_node_with_envelope()` (read once from `get_config().team_id`) |
+| Source | Attribute | Set by | Carries |
+|--------|-----------|--------|---------|
+| Envelope (F2) | `request_id` | `run_node_with_envelope()` (`src/sentinel/interfaces/graphs/_node_helpers.py:88`) via `Envelope.to_span_attributes()` (`src/sentinel/data/primitives/envelope.py:66`) | UUID minted at ingress; correlates webhook → DB rows → spans → logs |
+| Envelope (F2) | `tenant_id` | same | Resolved tenant identifier (or `"unknown"` in soft-mode fallback) |
+| Envelope (F2) | `cluster_id` | same | Source cluster for the alert/event |
+| Envelope (F2) | `region` | same | Source region for the alert/event |
+| Envelope (F2) | `pii_class` | same | `public` / `internal` / `confidential` / `restricted`; gates redaction |
+| Envelope (F2) | `received_at` | same | UTC tz-aware ISO timestamp at ingress |
+| Agent context (F4.1) | `prompt_version_sha` | `set_agent_span_attributes()` (`src/sentinel/interfaces/graphs/agents/utils.py:11`), called at every PydanticAI invocation site | SHA-256 of the rendered system prompt (regulatory traceability) |
+| Agent context (F4.1) | `model_id` | same | Resolved model identifier (e.g. `openai/gpt-4.1`); skipped only for the `"test"` placeholder |
+| Process constant (F4.1) | `team_profile` | `_team_profile_attribute()` (`src/sentinel/interfaces/graphs/_node_helpers.py:20`); read once from `get_config().team_id` | Active team profile (`sre` / `devops` / `ace`) for multi-tenant routing |
 
-Enforcement lives in `MandatoryAttributesValidator` (`src/sentinel/utils/langfuse_export.py`), an OTel `SpanProcessor` registered on the trace pipeline during `bootstrap_otel.init_traces()`.
+**Validator behaviour (uniform across all nine attrs).** `MandatoryAttributesValidator` (`src/sentinel/utils/langfuse_export.py:56`) runs as an OTel `SpanProcessor` registered on the trace pipeline during `init_traces()` (`src/sentinel/bootstrap_otel.py:142`). On `on_end` (`src/sentinel/utils/langfuse_export.py:86`) it walks `MANDATORY_ATTRS`; any missing attribute is collected into a `missing` tuple and:
 
-**Carve-out for framework spans.** Spans whose `instrumentation_scope.name` matches `opentelemetry.instrumentation.{fastapi,sqlalchemy,httpx}` skip validation — they sit below the pipeline boundary and do not carry envelope or agent context, so flagging them would fill Langfuse with false positives.
+1. Emits a structured `otel.span.missing_mandatory_attrs` log event with `span_name`, `missing`, and `scope`.
+2. Stamps two diagnostic attributes onto the live span — `_validation_failed=True` and `_missing_attrs=(...)`.
+3. **Does not drop the span.** RFC §14.7 wants partial traces visible in Langfuse for debugging; tightening to a drop policy is post-foundations work once shadow mode confirms no false positives.
 
-**Shadow-mode behaviour.** Spans missing any mandatory attribute are *not* dropped. The validator emits a structured `otel.span.missing_mandatory_attrs` event and stamps `_validation_failed=True` plus `_missing_attrs=(...)` onto the span. RFC §14.7 wants partial traces visible in Langfuse for debugging the integration; tightening to a drop policy is post-foundations work.
+**Carve-out for framework spans.** Spans whose `instrumentation_scope.name` is in `_FRAMEWORK_SCOPES` (`src/sentinel/utils/langfuse_export.py:47` — `opentelemetry.instrumentation.{fastapi,sqlalchemy,httpx}`) short-circuit validation. They sit below the pipeline boundary, do not carry envelope or agent context, and would otherwise fill Langfuse with false-positive warnings.
 
 ### Local Langfuse
 
@@ -483,6 +491,61 @@ Sentinel api ── OTLPSpanExporter ──► langfuse-web:3000/api/public/otel
 ```
 
 The existing Tempo / Logfire-OTLP exporter remains live in parallel — Langfuse is additive, and unsetting `LANGFUSE_HOST` falls back cleanly to the prior console / Tempo path.
+
+## Replay
+
+The RFC §3.8 ReplayBundle (`src/sentinel/utils/replay_bundle.py`) is the per-run reproducibility contract. Every pipeline run that opts into capture (`cfg.enable_replay_bundle`, default true) persists a frozen, canonical-JSON snapshot to `pipeline_runs.replay_bundle_json` plus a SHA-256 over its canonical encoding to `pipeline_runs.replay_bundle_sha`. Replay re-executes the pipeline against recorded substitutes and exits non-zero on any drift.
+
+### Bundle shape
+
+| Field | Source | Purpose |
+|-------|--------|---------|
+| `envelope` | Ingress (RFC §3.1) | `request_id`, `tenant_id`, `cluster_id`, `region`, `pii_class`, `received_at` — replay reuses the original envelope verbatim so spans correlate. |
+| `alert_payload` | Webhook payload | The raw alert/ticket dict the pipeline ran against. |
+| `runbook_id` / `runbook_version_sha` | F6 (pinned later) | Identifies which runbook drove the run; runbook edits invalidate replay by changing the SHA. Currently `None` everywhere; F6 wires real values. |
+| `tool_io` | `ReplayCapturingToolset` (`plugins/toolsets/_runtime.py:46`) | Every tool invocation in invocation order: `tool_name`, `inputs`, `outputs`, `evidence_object_id`, `at`. |
+| `llm_io` | `CapturingModel` (`plugins/models/capturing.py`) | Every LLM agent invocation in invocation order: `agent_name`, `model_id`, `inputs`, `outputs`, `token_usage`, `at`. |
+| `final_outputs` | Pipeline reply | The final `InvestigationReply` / `SupportReply` dict. |
+| `bundle_sha` (derived) | `to_canonical_json` + SHA-256 | Sorted-keys, no-whitespace canonical JSON of every other field; identical inputs always produce identical SHA. |
+
+### Capture flow
+
+1. Worker / graph entry calls `et.start_pipeline(envelope=..., alert_payload=...)`. The tracer creates a `ReplayBundleBuilder` and binds it to a `ContextVar` so per-asyncio-task isolation is automatic — concurrent runs under `asyncio.gather` see only their own builder.
+2. `CommonConfiguration.load_agents()` wraps each registered agent's `.model` with `CapturingModel`; each `agent.run()` call records an `LLMIOEntry` into the active builder via `runtime.record_llm_call()`.
+3. Toolsets are wrapped with `ReplayCapturingToolset`; each `call_tool` records a `ToolIOEntry` via `runtime.record_tool_call()`.
+4. `et.complete_pipeline(...)` flushes the builder via `runtime.flush_replay_capture(...)`, builds the immutable bundle, serialises via `to_canonical_json`, and persists `replay_bundle_json` + `replay_bundle_sha` to the run row. The `ContextVar` token is always released (try/finally) so a persist failure cannot leak the binding to the next task.
+
+### Replay flow
+
+```
+python -m sentinel.replay <run_id>              # print canonical bundle JSON + sha
+python -m sentinel.replay <run_id> --replay     # re-execute against recorded I/O
+python -m sentinel.replay <run_id> --diff       # re-execute and diff vs original
+```
+
+`fetch_recorded_replay_bundle()` (`domain/pipeline/queries.py`) loads the row, reconstructs the frozen `ReplayBundle`, recomputes `bundle_sha`, and asserts equality with the stored SHA. Mismatch raises `ReplayBundleSHAMismatchError` (exit code 4) — the canary for canonicalisation regressions or DB corruption.
+
+The CLI swaps every registered agent's `.model` for a single shared `RecordedModel` (`plugins/models/recorded.py`) and every toolset slot for a single shared `RecordedToolset` (`plugins/toolsets/recorded.py`). Both are strict on order; `RecordedToolset` additionally asserts on `tool_name` and `inputs`. Drift raises `RecordedReplayMismatchError` (exit code 5) with a `kind` discriminator (`tool` / `tool_name` / `tool_args` / `llm`).
+
+### Determinism guarantee
+
+`tests/integration/test_replay_determinism.py` (F4.8) drives the full SRE graph against a synthetic crashloop bundle 30 times against fresh `RecordedModel` / `RecordedToolset` instances per iteration and asserts every output is byte-identical to `bundle.final_outputs`. The 30-run loop guards three regression classes:
+
+1. Iterator-state leak in `RecordedModel` / `RecordedToolset` queues across runs.
+2. `to_canonical_json` drift (sort order, separator, default coercion).
+3. Pipeline-level non-determinism in graph nodes (hash randomisation, dict ordering, asyncio race).
+
+R-AG-4 (RFC §14.7) names 100 runs; foundations CI does 30 to keep wall time bounded; the week-5 nightly job extends to 100. Marked `@pytest.mark.slow` and wired into `just test-integration` via the default glob.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Inspection / replay match |
+| 1 | No recorded bundle for `run_id` (pre-F4.7 row or capture disabled) |
+| 3 | `--diff` drift — outputs differ |
+| 4 | Bundle SHA mismatch (canonicalisation regression / DB corruption) |
+| 5 | Replay drift mid-run (`RecordedReplayMismatchError`) |
 
 ## Deployment
 

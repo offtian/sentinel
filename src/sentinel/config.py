@@ -74,16 +74,24 @@ SKILLS_BY_AGENT: dict[str, tuple[str, ...]] = {
 
 def _normalise_model_name(model_name: str) -> str:
     """
-    Normalise LLM model names for pydantic-ai with LiteLLM routing.
+    Normalise LLM model names for pydantic-ai routing.
 
-    Config uses ``openai/gpt-4.1-mini``; pydantic-ai with the ``litellm:``
-    prefix delegates to LiteLLM's SDK (in-process) for provider routing.
-    No external proxy is required — LiteLLM handles routing, ``drop_params``,
-    and provider-specific quirks in-process.
+    - ``ollama/<model>`` → ``openai:<model>``: PydanticAI's OpenAI-compat
+      client is repointed at Ollama via ``OPENAI_BASE_URL`` set in
+      :func:`sentinel.bootstrap._configure_llm_env` (Ollama exposes an
+      OpenAI-compatible endpoint at ``<base>/v1``). PydanticAI's ``litellm:``
+      prefix is **not** the in-process LiteLLM SDK — it builds an OpenAI
+      HTTP client that targets ``LITELLM_BASE_URL`` (a proxy). With no
+      proxy configured locally that route falls back to ``api.openai.com``,
+      which 401s for Ollama model names; bypassing it for ollama lets us
+      hit the local daemon directly.
+    - ``openai/<model>`` → ``litellm:openai/<model>``: kept on the
+      LiteLLM proxy path for parity with prod, where ``LITELLM_BASE_URL``
+      points at the firm-shared LiteLLM proxy.
     """
     model_name = model_name.removeprefix("litellm_proxy/")
-    # LiteLLM model names use provider/model format (e.g. "openai/gpt-4.1-mini").
-    # PydanticAI's litellm: prefix expects this format unchanged.
+    if model_name.startswith("ollama/"):
+        return f"openai:{model_name.removeprefix('ollama/')}"
     return f"litellm:{model_name}"
 
 

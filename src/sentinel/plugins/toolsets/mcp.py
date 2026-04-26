@@ -13,6 +13,7 @@ from typing import Any
 import attrs
 from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
 
+from sentinel.plugins.toolsets import _runtime as runtime_mod
 from sentinel.utils import logs
 
 
@@ -76,10 +77,16 @@ def build_mcp_toolsets(*, config_json: str) -> tuple[Any, ...]:
     toolsets: list[Any] = []
     for config in configs:
         if config.url:
-            toolsets.append(MCPServerSSE(url=config.url))
+            sse_toolset = MCPServerSSE(url=config.url)
+            toolsets.append(
+                runtime_mod.wrap_for_replay(sse_toolset, label=f"mcp:{config.name}"),
+            )
             logger.info("MCP HTTP client configured", name=config.name, url=config.url)
         elif config.command:
-            toolsets.append(MCPServerStdio(config.command, args=list(config.args)))
+            stdio_toolset = MCPServerStdio(config.command, args=list(config.args))
+            toolsets.append(
+                runtime_mod.wrap_for_replay(stdio_toolset, label=f"mcp:{config.name}"),
+            )
             logger.info("MCP stdio client configured", name=config.name, command=config.command)
 
     return tuple(toolsets)
