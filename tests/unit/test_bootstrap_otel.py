@@ -6,6 +6,14 @@ from sentinel import bootstrap_otel
 from sentinel.utils import metrics
 
 
+def _make_settings_stub(**attrs: object) -> mock.MagicMock:
+    """Return a MagicMock that mimics the module-level Settings singleton."""
+    stub = mock.MagicMock()
+    for name, value in attrs.items():
+        setattr(stub, name, value)
+    return stub
+
+
 class TestInitOtel:
     def setup_method(self):
         bootstrap_otel._initialised = False
@@ -17,10 +25,11 @@ class TestInitOtel:
 
     def test_no_op_when_metrics_disabled(self):
         # Given metrics are disabled in settings
-        with mock.patch.object(bootstrap_otel, "settings") as mock_settings:
-            mock_settings.return_value.otel_metrics_enabled = False
-            mock_settings.return_value.otel_service_name = "sentinel"
-
+        settings_stub = _make_settings_stub(
+            otel_metrics_enabled=False,
+            otel_service_name="sentinel",
+        )
+        with mock.patch.object(bootstrap_otel, "settings", settings_stub):
             # When init_otel is called
             bootstrap_otel.init_otel()
 
@@ -29,14 +38,15 @@ class TestInitOtel:
 
     def test_initialises_meter_when_enabled(self):
         # Given metrics are enabled
+        settings_stub = _make_settings_stub(
+            otel_metrics_enabled=True,
+            otel_service_name="sentinel-test",
+        )
         with (
-            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings", settings_stub),
             mock.patch.object(bootstrap_otel, "HTTPXClientInstrumentor"),
             mock.patch.object(bootstrap_otel, "SystemMetricsInstrumentor"),
         ):
-            mock_settings.return_value.otel_metrics_enabled = True
-            mock_settings.return_value.otel_service_name = "sentinel-test"
-
             # When init_otel is called
             bootstrap_otel.init_otel()
 
@@ -44,10 +54,16 @@ class TestInitOtel:
             assert metrics._meter is not None
 
     def test_swallows_exceptions(self):
-        # Given an init that raises
-        with mock.patch.object(bootstrap_otel, "settings") as mock_settings:
-            mock_settings.return_value.otel_metrics_enabled = True
-            mock_settings.side_effect = RuntimeError("boom")
+        # Given metrics are enabled but Resource.create raises
+        settings_stub = _make_settings_stub(
+            otel_metrics_enabled=True,
+            otel_service_name="sentinel-test",
+        )
+        with (
+            mock.patch.object(bootstrap_otel, "settings", settings_stub),
+            mock.patch.object(bootstrap_otel, "Resource") as mock_resource,
+        ):
+            mock_resource.create.side_effect = RuntimeError("boom")
 
             # When init_otel is called — Then no exception escapes
             bootstrap_otel.init_otel()
@@ -62,13 +78,14 @@ class TestInitTraces:
 
     def test_no_op_when_traces_disabled(self):
         # Given traces are disabled in settings
+        settings_stub = _make_settings_stub(
+            otel_traces_enabled=False,
+            otel_traces_endpoint="http://tempo:4318",
+        )
         with (
-            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings", settings_stub),
             mock.patch.object(bootstrap_otel, "logs") as mock_logs,
         ):
-            mock_settings.return_value.otel_traces_enabled = False
-            mock_settings.return_value.otel_traces_endpoint = "http://tempo:4318"
-
             # When init_traces is called
             bootstrap_otel.init_traces()
 
@@ -77,13 +94,14 @@ class TestInitTraces:
 
     def test_no_op_when_no_endpoint(self):
         # Given traces enabled but no endpoint configured
+        settings_stub = _make_settings_stub(
+            otel_traces_enabled=True,
+            otel_traces_endpoint="",
+        )
         with (
-            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings", settings_stub),
             mock.patch.object(bootstrap_otel, "logs") as mock_logs,
         ):
-            mock_settings.return_value.otel_traces_enabled = True
-            mock_settings.return_value.otel_traces_endpoint = ""
-
             # When init_traces is called
             bootstrap_otel.init_traces()
 
@@ -93,16 +111,22 @@ class TestInitTraces:
     def test_configures_logfire_when_enabled(self):
         # Given traces enabled with a valid endpoint
         mock_logfire = mock.MagicMock()
+        settings_stub = _make_settings_stub(
+            otel_traces_enabled=True,
+            otel_traces_endpoint="http://tempo:4318",
+            otel_service_name="sentinel-test",
+            langfuse_host=None,
+            langfuse_public_key=None,
+            langfuse_secret_key=None,
+        )
         with (
-            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings", settings_stub),
             mock.patch.dict("sys.modules", {"logfire": mock_logfire}),
             mock.patch.object(bootstrap_otel, "os"),
             mock.patch.object(bootstrap_otel, "logs"),
+            mock.patch.object(bootstrap_otel, "trace"),
+            mock.patch.object(bootstrap_otel, "langfuse_export"),
         ):
-            mock_settings.return_value.otel_traces_enabled = True
-            mock_settings.return_value.otel_traces_endpoint = "http://tempo:4318"
-            mock_settings.return_value.otel_service_name = "sentinel-test"
-
             # When init_traces is called
             bootstrap_otel.init_traces()
 
@@ -115,37 +139,49 @@ class TestInitTraces:
     def test_sets_otel_endpoint_env_var(self):
         # Given traces enabled with a valid endpoint
         mock_logfire = mock.MagicMock()
+        settings_stub = _make_settings_stub(
+            otel_traces_enabled=True,
+            otel_traces_endpoint="http://tempo:4318",
+            otel_service_name="sentinel-test",
+            langfuse_host=None,
+            langfuse_public_key=None,
+            langfuse_secret_key=None,
+        )
         with (
-            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings", settings_stub),
             mock.patch.dict("sys.modules", {"logfire": mock_logfire}),
             mock.patch.object(bootstrap_otel, "os") as patched_os,
             mock.patch.object(bootstrap_otel, "logs"),
+            mock.patch.object(bootstrap_otel, "trace"),
+            mock.patch.object(bootstrap_otel, "langfuse_export"),
         ):
-            mock_settings.return_value.otel_traces_enabled = True
-            mock_settings.return_value.otel_traces_endpoint = "http://tempo:4318"
-            mock_settings.return_value.otel_service_name = "sentinel-test"
-
             # When init_traces is called
             bootstrap_otel.init_traces()
 
-            # Then OTEL_EXPORTER_OTLP_ENDPOINT is set via os.environ.setdefault
+            # Then OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is set via os.environ.setdefault
             patched_os.environ.setdefault.assert_called_once_with(
-                "OTEL_EXPORTER_OTLP_ENDPOINT", "http://tempo:4318"
+                "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://tempo:4318"
             )
 
     def test_is_idempotent(self):
         # Given traces already initialised
         mock_logfire = mock.MagicMock()
+        settings_stub = _make_settings_stub(
+            otel_traces_enabled=True,
+            otel_traces_endpoint="http://tempo:4318",
+            otel_service_name="sentinel-test",
+            langfuse_host=None,
+            langfuse_public_key=None,
+            langfuse_secret_key=None,
+        )
         with (
-            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings", settings_stub),
             mock.patch.dict("sys.modules", {"logfire": mock_logfire}),
             mock.patch.object(bootstrap_otel, "os"),
             mock.patch.object(bootstrap_otel, "logs"),
+            mock.patch.object(bootstrap_otel, "trace"),
+            mock.patch.object(bootstrap_otel, "langfuse_export"),
         ):
-            mock_settings.return_value.otel_traces_enabled = True
-            mock_settings.return_value.otel_traces_endpoint = "http://tempo:4318"
-            mock_settings.return_value.otel_service_name = "sentinel-test"
-
             # When init_traces is called twice
             bootstrap_otel.init_traces()
             mock_logfire.configure.reset_mock()
@@ -155,10 +191,16 @@ class TestInitTraces:
             mock_logfire.configure.assert_not_called()
 
     def test_swallows_exceptions(self):
-        # Given settings raises
-        with mock.patch.object(bootstrap_otel, "settings") as mock_settings:
-            mock_settings.side_effect = RuntimeError("boom")
-
+        # Given traces enabled but logfire import fails
+        settings_stub = _make_settings_stub(
+            otel_traces_enabled=True,
+            otel_traces_endpoint="http://tempo:4318",
+            otel_service_name="sentinel-test",
+        )
+        with (
+            mock.patch.object(bootstrap_otel, "settings", settings_stub),
+            mock.patch.dict("sys.modules", {"logfire": None}),
+        ):
             # When init_traces is called — Then no exception escapes
             bootstrap_otel.init_traces()
 
@@ -174,29 +216,29 @@ class TestInitTracesLangfuseWiring:
         """
         Return a Settings stub with traces enabled and the given Langfuse host.
         """
-        settings = mock.MagicMock()
-        settings.otel_traces_enabled = True
-        settings.otel_traces_endpoint = "http://tempo:4318"
-        settings.otel_service_name = "sentinel-test"
-        settings.langfuse_host = langfuse_host
+        settings_stub = mock.MagicMock()
+        settings_stub.otel_traces_enabled = True
+        settings_stub.otel_traces_endpoint = "http://tempo:4318"
+        settings_stub.otel_service_name = "sentinel-test"
+        settings_stub.langfuse_host = langfuse_host
         if langfuse_host:
             pk = mock.MagicMock()
             pk.get_secret_value.return_value = "pk"
             sk = mock.MagicMock()
             sk.get_secret_value.return_value = "sk"
-            settings.langfuse_public_key = pk
-            settings.langfuse_secret_key = sk
+            settings_stub.langfuse_public_key = pk
+            settings_stub.langfuse_secret_key = sk
         else:
-            settings.langfuse_public_key = None
-            settings.langfuse_secret_key = None
-        return settings
+            settings_stub.langfuse_public_key = None
+            settings_stub.langfuse_secret_key = None
+        return settings_stub
 
     def test_validator_registered_when_langfuse_host_unset(self):
         # Given traces enabled but no Langfuse host configured
         provider = mock.MagicMock()
         mock_logfire = mock.MagicMock()
         with (
-            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings", self._settings(langfuse_host=None)),
             mock.patch.dict("sys.modules", {"logfire": mock_logfire}),
             mock.patch.object(bootstrap_otel, "os"),
             mock.patch.object(bootstrap_otel, "logs"),
@@ -204,16 +246,20 @@ class TestInitTracesLangfuseWiring:
             mock.patch.object(bootstrap_otel, "langfuse_export") as mock_lf,
             mock.patch.object(bootstrap_otel, "BatchSpanProcessor") as mock_batch,
         ):
-            mock_settings.return_value = self._settings(langfuse_host=None)
             mock_trace.get_tracer_provider.return_value = provider
+            propagator_instance = mock.MagicMock()
             validator_instance = mock.MagicMock()
+            mock_lf.MandatoryAttributesPropagator.return_value = propagator_instance
             mock_lf.MandatoryAttributesValidator.return_value = validator_instance
 
             # When init_traces is called
             bootstrap_otel.init_traces()
 
-            # Then the validator is registered exactly once and no exporter wires up
-            provider.add_span_processor.assert_called_once_with(validator_instance)
+            # Then the propagator and validator are registered, in that order, and no exporter wires up
+            assert provider.add_span_processor.call_args_list == [
+                mock.call(propagator_instance),
+                mock.call(validator_instance),
+            ]
             mock_lf.build_langfuse_exporter.assert_not_called()
             mock_batch.assert_not_called()
 
@@ -224,7 +270,9 @@ class TestInitTracesLangfuseWiring:
         exporter_instance = mock.MagicMock()
         batch_processor_instance = mock.MagicMock()
         with (
-            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
+            mock.patch.object(
+                bootstrap_otel, "settings", self._settings(langfuse_host="http://lf.local")
+            ),
             mock.patch.dict("sys.modules", {"logfire": mock_logfire}),
             mock.patch.object(bootstrap_otel, "os"),
             mock.patch.object(bootstrap_otel, "logs"),
@@ -232,9 +280,10 @@ class TestInitTracesLangfuseWiring:
             mock.patch.object(bootstrap_otel, "langfuse_export") as mock_lf,
             mock.patch.object(bootstrap_otel, "BatchSpanProcessor") as mock_batch,
         ):
-            mock_settings.return_value = self._settings(langfuse_host="http://lf.local")
             mock_trace.get_tracer_provider.return_value = provider
+            propagator_instance = mock.MagicMock()
             validator_instance = mock.MagicMock()
+            mock_lf.MandatoryAttributesPropagator.return_value = propagator_instance
             mock_lf.MandatoryAttributesValidator.return_value = validator_instance
             mock_lf.build_langfuse_exporter.return_value = exporter_instance
             mock_batch.return_value = batch_processor_instance
@@ -250,8 +299,9 @@ class TestInitTracesLangfuseWiring:
             )
             # And the BatchSpanProcessor wraps the exporter
             mock_batch.assert_called_once_with(exporter_instance)
-            # And both processors are registered exactly once on the provider
+            # And propagator, validator, and exporter processors are registered exactly once each, in order
             assert provider.add_span_processor.call_args_list == [
+                mock.call(propagator_instance),
                 mock.call(validator_instance),
                 mock.call(batch_processor_instance),
             ]
@@ -261,7 +311,9 @@ class TestInitTracesLangfuseWiring:
         provider = mock.MagicMock()
         mock_logfire = mock.MagicMock()
         with (
-            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
+            mock.patch.object(
+                bootstrap_otel, "settings", self._settings(langfuse_host="http://lf.local")
+            ),
             mock.patch.dict("sys.modules", {"logfire": mock_logfire}),
             mock.patch.object(bootstrap_otel, "os"),
             mock.patch.object(bootstrap_otel, "logs"),
@@ -269,17 +321,21 @@ class TestInitTracesLangfuseWiring:
             mock.patch.object(bootstrap_otel, "langfuse_export") as mock_lf,
             mock.patch.object(bootstrap_otel, "BatchSpanProcessor") as mock_batch,
         ):
-            mock_settings.return_value = self._settings(langfuse_host="http://lf.local")
             mock_trace.get_tracer_provider.return_value = provider
+            propagator_instance = mock.MagicMock()
             validator_instance = mock.MagicMock()
+            mock_lf.MandatoryAttributesPropagator.return_value = propagator_instance
             mock_lf.MandatoryAttributesValidator.return_value = validator_instance
             mock_lf.build_langfuse_exporter.return_value = None
 
             # When init_traces is called
             bootstrap_otel.init_traces()
 
-            # Then only the validator is registered; no BatchSpanProcessor is built
-            provider.add_span_processor.assert_called_once_with(validator_instance)
+            # Then only the propagator and validator are registered; no BatchSpanProcessor is built
+            assert provider.add_span_processor.call_args_list == [
+                mock.call(propagator_instance),
+                mock.call(validator_instance),
+            ]
             mock_batch.assert_not_called()
 
     def test_init_traces_is_idempotent(self):
@@ -288,7 +344,9 @@ class TestInitTracesLangfuseWiring:
         mock_logfire = mock.MagicMock()
         exporter_instance = mock.MagicMock()
         with (
-            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
+            mock.patch.object(
+                bootstrap_otel, "settings", self._settings(langfuse_host="http://lf.local")
+            ),
             mock.patch.dict("sys.modules", {"logfire": mock_logfire}),
             mock.patch.object(bootstrap_otel, "os"),
             mock.patch.object(bootstrap_otel, "logs"),
@@ -296,8 +354,8 @@ class TestInitTracesLangfuseWiring:
             mock.patch.object(bootstrap_otel, "langfuse_export") as mock_lf,
             mock.patch.object(bootstrap_otel, "BatchSpanProcessor") as mock_batch,
         ):
-            mock_settings.return_value = self._settings(langfuse_host="http://lf.local")
             mock_trace.get_tracer_provider.return_value = provider
+            mock_lf.MandatoryAttributesPropagator.return_value = mock.MagicMock()
             mock_lf.MandatoryAttributesValidator.return_value = mock.MagicMock()
             mock_lf.build_langfuse_exporter.return_value = exporter_instance
             mock_batch.return_value = mock.MagicMock()
@@ -306,7 +364,8 @@ class TestInitTracesLangfuseWiring:
             bootstrap_otel.init_traces()
             bootstrap_otel.init_traces()
 
-            # Then validator and exporter are registered exactly once each
-            assert provider.add_span_processor.call_count == 2
+            # Then propagator, validator, and exporter are registered exactly once each
+            assert provider.add_span_processor.call_count == 3
+            assert mock_lf.MandatoryAttributesPropagator.call_count == 1
             assert mock_lf.MandatoryAttributesValidator.call_count == 1
             assert mock_lf.build_langfuse_exporter.call_count == 1
