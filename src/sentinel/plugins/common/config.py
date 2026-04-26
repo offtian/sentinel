@@ -19,7 +19,7 @@ from typing import Any
 from kubernetes_asyncio import client as k8s_async_client
 from pydantic import ConfigDict, PrivateAttr
 from pydantic_ai.mcp import MCPServerSSE
-from pydantic_ai.toolsets import FunctionToolset
+from pydantic_ai.toolsets import AbstractToolset
 
 from sentinel import config as base_config_mod
 from sentinel.config import BaseConfiguration
@@ -406,7 +406,7 @@ class CommonConfiguration(BaseConfiguration):
 
     # -- Toolset builders (injected at agent.run() time) ----------------------
 
-    def build_observability_toolset(self, *, service_name: str = "") -> FunctionToolset[object]:
+    def build_observability_toolset(self, *, service_name: str = "") -> AbstractToolset[object]:
         """
         Build a read-only observability toolset for SRE investigation agents.
 
@@ -420,7 +420,7 @@ class CommonConfiguration(BaseConfiguration):
             service_name=service_name,
         )
 
-    def build_support_search_toolset(self) -> FunctionToolset[object]:
+    def build_support_search_toolset(self) -> AbstractToolset[object]:
         """
         Build a read-only search toolset for the response drafter agent.
 
@@ -431,7 +431,7 @@ class CommonConfiguration(BaseConfiguration):
             ticket_searcher=self.build_ticket_searcher(),
         )
 
-    def build_ticket_triage_toolset(self) -> FunctionToolset[object]:
+    def build_ticket_triage_toolset(self) -> AbstractToolset[object]:
         """
         Build a read-only toolset for the ticket reviewer agent.
 
