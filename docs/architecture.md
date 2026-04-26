@@ -440,6 +440,50 @@ pipeline_runs (trace_id, pipeline_type, status, duration_ms)
 
 **ExecutionTracer** (`domain/pipeline/tracer.py`) — DB-backed tracer that records pipeline runs, node executions, and agent calls with prompt version metadata. Each `AgentCallRecord` captures `prompt_version` (git SHA + filename) and `prompt_sha256` for regulatory traceability. `ReplayBundle` (`domain/pipeline/types.py`) aggregates the full snapshot (model, prompts, MCP servers, skills, input payload) for reproducibility via `python -m sentinel.replay`.
 
+## Observability
+
+### Mandatory span attributes (RFC §13.2)
+
+Every pipeline span carries nine mandatory attributes, split by source:
+
+| Source | Attribute | Set by |
+|--------|-----------|--------|
+| Envelope-derived (F2) | `request_id`, `tenant_id`, `cluster_id`, `region`, `pii_class`, `received_at` | `run_node_with_envelope()` in `interfaces/graphs/_node_helpers.py` |
+| Agent-context (F4) | `prompt_version_sha`, `model_id` | `set_agent_span_attributes()` in `interfaces/graphs/agents/utils.py`, called at every PydanticAI invocation site |
+| Process-constant (F4) | `team_profile` | `run_node_with_envelope()` (read once from `get_config().team_id`) |
+
+Enforcement lives in `MandatoryAttributesValidator` (`src/sentinel/utils/langfuse_export.py`), an OTel `SpanProcessor` registered on the trace pipeline during `bootstrap_otel.init_traces()`.
+
+**Carve-out for framework spans.** Spans whose `instrumentation_scope.name` matches `opentelemetry.instrumentation.{fastapi,sqlalchemy,httpx}` skip validation — they sit below the pipeline boundary and do not carry envelope or agent context, so flagging them would fill Langfuse with false positives.
+
+**Shadow-mode behaviour.** Spans missing any mandatory attribute are *not* dropped. The validator emits a structured `otel.span.missing_mandatory_attrs` event and stamps `_validation_failed=True` plus `_missing_attrs=(...)` onto the span. RFC §14.7 wants partial traces visible in Langfuse for debugging the integration; tightening to a drop policy is post-foundations work.
+
+### Local Langfuse
+
+A self-hosted Langfuse v3 stack ships in `docker-compose.yml` for local end-to-end validation. Bring it up with `just docker-compose-up` (or `docker compose up -d`).
+
+| Service | Host port | Purpose |
+|---------|-----------|---------|
+| `langfuse-web` | `:3001` | UI + OTLP ingestion |
+| `langfuse-db` (Postgres 16) | `:5433` | Langfuse metadata (separate from Sentinel's `db`) |
+| `minio` | `:9000` (S3) / `:9001` (console) | Event + media object storage |
+
+The compose stack seeds a deterministic dev project on first boot via `LANGFUSE_INIT_*` env vars — user `dev@sentinel.localdev` / `devpass`, project `sentinel`, key pair `pk-lf-localdev` / `sk-lf-localdev`. These keys are dev-only and **not secrets**.
+
+Trace flow:
+
+```
+Sentinel api ── OTLPSpanExporter ──► langfuse-web:3000/api/public/otel/v1/traces
+                                                      │
+                                                      ▼
+                                       langfuse-worker ──► ClickHouse
+                                                      │
+                                                      ▼
+                                            UI at http://localhost:3001
+```
+
+The existing Tempo / Logfire-OTLP exporter remains live in parallel — Langfuse is additive, and unsetting `LANGFUSE_HOST` falls back cleanly to the prior console / Tempo path.
+
 ## Deployment
 
 ## Helm Chart

@@ -15,6 +15,7 @@ import os
 from typing import Any
 
 from opentelemetry import metrics as otel_metrics
+from opentelemetry import trace
 from opentelemetry.exporter.prometheus import PrometheusMetricReader
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
@@ -23,8 +24,14 @@ from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrument
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 
+# Direct symbol import: ``BatchSpanProcessor`` is the canonical wrapper used
+# alongside any OTel exporter and is documented as a top-level symbol of
+# ``opentelemetry.sdk.trace.export``; bringing the class onto the module
+# surface lets unit tests patch it via ``mock.patch.object``.
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
 from sentinel.settings import get_settings
-from sentinel.utils import logs
+from sentinel.utils import langfuse_export, logs
 from sentinel.utils import metrics as sentinel_metrics
 
 
@@ -117,13 +124,49 @@ def init_traces() -> None:
             service_name=settings.otel_service_name,
         )
 
+        # Mark the bootstrap done before layering the optional validator /
+        # exporter so partial wiring failures (e.g. a Langfuse DNS hiccup)
+        # don't cause subsequent calls to re-run ``logfire.configure``. The
+        # outer ``except`` still records the underlying problem.
         _traces_initialised = True
+
+        # Layer the mandatory-attribute validator and the optional Langfuse
+        # exporter on top of Logfire's already-configured TracerProvider. The
+        # validator is always-on (RFC §13.2 / §14.7) so partial spans surface
+        # in any backend; the Langfuse exporter only registers when a host is
+        # configured so dev with Tempo + console exporters keeps working.
+        # ``trace.get_tracer_provider()`` is typed against the abstract API
+        # (no ``add_span_processor``); Logfire's ProxyTracerProvider and the
+        # SDK ``TracerProvider`` both expose it, so we narrow via ``Any``.
+        tracer_provider: Any = trace.get_tracer_provider()
+        validator = langfuse_export.MandatoryAttributesValidator()
+        tracer_provider.add_span_processor(validator)
+
+        if settings.langfuse_host:
+            public_key = (
+                settings.langfuse_public_key.get_secret_value()
+                if settings.langfuse_public_key is not None
+                else ""
+            )
+            secret_key = (
+                settings.langfuse_secret_key.get_secret_value()
+                if settings.langfuse_secret_key is not None
+                else ""
+            )
+            exporter = langfuse_export.build_langfuse_exporter(
+                host=str(settings.langfuse_host),
+                public_key=public_key,
+                secret_key=secret_key,
+            )
+            if exporter is not None:
+                tracer_provider.add_span_processor(BatchSpanProcessor(exporter))
         logs.log_event(
             "otel.traces.initialised",
             params={
                 "backend": "logfire-sdk",
                 "endpoint": settings.otel_traces_endpoint,
                 "service": settings.otel_service_name,
+                "langfuse_host": str(settings.langfuse_host) if settings.langfuse_host else None,
             },
         )
     except Exception as exc:

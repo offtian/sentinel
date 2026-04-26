@@ -72,6 +72,10 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
 
             try:
                 classifier_agent = ctx.deps.agent_for("alert_classifier")
+                agent_utils.set_agent_span_attributes(
+                    prompt_sha256=alert_classifier.PROMPT_SHA256,
+                    model_name=agent_utils.get_model_name(classifier_agent),
+                )
                 result = await classifier_agent.run(
                     user_prompt=f"Alert: {ctx.state.alert.title}\n\n{ctx.state.alert.description}",
                     deps=alert_classifier.Dependencies(
@@ -285,6 +289,10 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
 
             try:
                 analyser_agent = ctx.deps.agent_for("root_cause_analyser")
+                agent_utils.set_agent_span_attributes(
+                    prompt_sha256=root_cause_analyser.PROMPT_SHA256,
+                    model_name=agent_utils.get_model_name(analyser_agent),
+                )
                 result = await analyser_agent.run(
                     user_prompt=f"Analyse this alert: {ctx.state.alert.title}",
                     deps=root_cause_analyser.Dependencies(

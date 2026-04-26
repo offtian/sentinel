@@ -2,8 +2,29 @@ from __future__ import annotations
 
 from typing import Any
 
+from opentelemetry import trace as otel_trace
+
 from sentinel.domain import skills as skills_mod
 from sentinel.interfaces.graphs.agents import _cache_settings
+
+
+def set_agent_span_attributes(*, prompt_sha256: str, model_name: str) -> None:
+    """
+    Set the prompt_version_sha and model_id mandatory OTel attributes on the
+    current span per RFC §13.2.
+
+    Called immediately before ``agent.run(...)`` at every PydanticAI invocation
+    site so the agent's LLM child spans inherit these attributes (the six
+    envelope-derived attrs are set by ``_node_helpers.run_node_with_envelope``).
+
+    :param prompt_sha256: The agent module's ``PROMPT_SHA256`` constant.
+    :param model_name: Result of :func:`get_model_name` on the agent. Empty
+        string (test/mock model) skips the ``model_id`` attribute.
+    """
+    attributes: dict[str, str] = {"prompt_version_sha": prompt_sha256}
+    if model_name:
+        attributes["model_id"] = model_name
+    otel_trace.get_current_span().set_attributes(attributes)
 
 
 def get_model_name(agent: Any) -> str:

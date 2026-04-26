@@ -53,7 +53,7 @@ just install
 # Copy and fill in environment variables
 cp .env.default .env
 
-# Start PostgreSQL + API with Docker Compose
+# Start the full stack (Sentinel API + Postgres + local Langfuse v3)
 just docker-compose-up
 
 # Or run the API locally (requires a running Postgres)
@@ -61,6 +61,18 @@ just run-api
 ```
 
 The API starts at `http://localhost:8000`. Health check at `GET /health`.
+
+### Local stack endpoints
+
+| Service        | URL                          | Notes                                                                 |
+| -------------- | ---------------------------- | --------------------------------------------------------------------- |
+| Sentinel API   | `http://localhost:8000`      | Webhooks, manual triggers, health.                                    |
+| Langfuse UI    | `http://localhost:3001`      | Trace explorer. Sign in `dev@sentinel.localdev` / `devpass`.          |
+| MinIO console  | `http://localhost:9001`      | Object store backing Langfuse (`minio` / `miniosecret`).              |
+| Postgres (app) | `localhost:5432`             | Sentinel application database.                                        |
+| Postgres (lf)  | `localhost:5433`             | Langfuse's own database, isolated from the app DB.                    |
+
+The Langfuse stack ships with deterministic dev keys (`pk-lf-localdev` / `sk-lf-localdev`) seeded via `LANGFUSE_INIT_*` env vars — no UI clicks required after `docker compose up`. These are **dev-only**, not secrets. See [`docs/architecture.md`](docs/architecture.md) §Observability for the full trace-pipeline diagram and the RFC §13.2 mandatory-attribute contract.
 
 ## API Endpoints
 
@@ -131,6 +143,9 @@ Key settings:
 | `K8S_MCP_SERVER_URL` | Optional kubectl MCP server URL for K8s agent | ``                                  |
 | `MCP_SERVER_PORT` | Port for Sentinel's MCP server | `8811`                                              |
 | `MCP_SERVER_API_KEY` | API key for MCP server authentication (empty = disabled) | ``                    |
+| `LANGFUSE_HOST` | Langfuse OTel ingestion endpoint (empty = disabled) | `http://localhost:3001` (docker-compose default) |
+| `LANGFUSE_PUBLIC_KEY` | Langfuse project public key (Basic-auth username) | `pk-lf-localdev` (dev only) |
+| `LANGFUSE_SECRET_KEY` | Langfuse project secret key (Basic-auth password) | `sk-lf-localdev` (dev only) |
 
 
 ## Tech Stack

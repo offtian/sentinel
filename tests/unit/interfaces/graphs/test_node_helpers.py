@@ -6,8 +6,9 @@ from unittest import mock
 
 from opentelemetry import trace as otel_trace
 
+from sentinel import config as config_mod
 from sentinel.interfaces.graphs import _node_helpers
-from sentinel.utils import metrics
+from sentinel.utils import logs, metrics
 from tests import factories
 
 
@@ -77,7 +78,52 @@ class TestInstrumentedNodeRun:
         fake_span.set_attributes.assert_not_called()
 
     def test_sets_envelope_span_attributes_when_envelope_provided(self):
-        # Given a wrapper invoked with an envelope
+        # Given a wrapper invoked with an envelope and a config that resolves team_id
+        async def fake_run():
+            return "ok"
+
+        envelope = factories.make_envelope()
+        fake_span = mock.MagicMock()
+        fake_config = mock.MagicMock()
+        fake_config.team_id = "sre"
+
+        # When the wrapper executes
+        with (
+            mock.patch.object(metrics, "record_pipeline_node_duration"),
+            mock.patch.object(otel_trace, "get_current_span", return_value=fake_span),
+            mock.patch.object(config_mod, "get_config", return_value=fake_config),
+        ):
+            wrapped = _node_helpers.instrumented_node_run(
+                pipeline="investigation",
+                node="classify_alert",
+                fn=fake_run,
+                envelope=envelope,
+            )
+            asyncio.run(wrapped())
+
+        # Then the six envelope-owned attributes plus team_profile land on the span
+        fake_span.set_attributes.assert_called_once()
+        attrs_set = fake_span.set_attributes.call_args.args[0]
+        expected_keys = {
+            "request_id",
+            "tenant_id",
+            "cluster_id",
+            "region",
+            "pii_class",
+            "received_at",
+            "team_profile",
+        }
+        assert set(attrs_set.keys()) == expected_keys
+        assert attrs_set["request_id"] == str(envelope.request_id)
+        assert attrs_set["tenant_id"] == envelope.tenant_id
+        assert attrs_set["cluster_id"] == envelope.cluster_id
+        assert attrs_set["region"] == envelope.region
+        assert attrs_set["pii_class"] == envelope.pii_class
+        assert attrs_set["received_at"] == envelope.received_at.isoformat()
+        assert attrs_set["team_profile"] == "sre"
+
+    def test_skips_team_profile_and_warns_when_get_config_raises(self):
+        # Given a wrapper with an envelope but get_config blowing up at lookup time
         async def fake_run():
             return "ok"
 
@@ -88,6 +134,10 @@ class TestInstrumentedNodeRun:
         with (
             mock.patch.object(metrics, "record_pipeline_node_duration"),
             mock.patch.object(otel_trace, "get_current_span", return_value=fake_span),
+            mock.patch.object(
+                config_mod, "get_config", side_effect=RuntimeError("config bootstrap failure")
+            ),
+            mock.patch.object(logs, "log_event") as log_event,
         ):
             wrapped = _node_helpers.instrumented_node_run(
                 pipeline="investigation",
@@ -97,24 +147,13 @@ class TestInstrumentedNodeRun:
             )
             asyncio.run(wrapped())
 
-        # Then the six envelope-owned mandatory attributes are set on the span
+        # Then the envelope attrs still land on the span and the failure was logged
         fake_span.set_attributes.assert_called_once()
         attrs_set = fake_span.set_attributes.call_args.args[0]
-        expected_keys = {
-            "request_id",
-            "tenant_id",
-            "cluster_id",
-            "region",
-            "pii_class",
-            "received_at",
-        }
-        assert set(attrs_set.keys()) == expected_keys
-        assert attrs_set["request_id"] == str(envelope.request_id)
-        assert attrs_set["tenant_id"] == envelope.tenant_id
-        assert attrs_set["cluster_id"] == envelope.cluster_id
-        assert attrs_set["region"] == envelope.region
-        assert attrs_set["pii_class"] == envelope.pii_class
-        assert attrs_set["received_at"] == envelope.received_at.isoformat()
+        assert "team_profile" not in attrs_set
+        assert "request_id" in attrs_set
+        log_event.assert_called_once()
+        assert log_event.call_args.args[0] == "otel.team_profile.unset"
 
     def test_sets_envelope_attributes_even_when_inner_fn_raises(self):
         # Given a wrapper with an envelope and a failing inner function
@@ -123,11 +162,14 @@ class TestInstrumentedNodeRun:
 
         envelope = factories.make_envelope()
         fake_span = mock.MagicMock()
+        fake_config = mock.MagicMock()
+        fake_config.team_id = "sre"
 
         # When the wrapper executes and the inner function raises
         with (
             mock.patch.object(metrics, "record_pipeline_node_duration"),
             mock.patch.object(otel_trace, "get_current_span", return_value=fake_span),
+            mock.patch.object(config_mod, "get_config", return_value=fake_config),
         ):
             wrapped = _node_helpers.instrumented_node_run(
                 pipeline="investigation",

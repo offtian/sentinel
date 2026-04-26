@@ -14,6 +14,7 @@ from sentinel.domain.investigations.holmes_adapter import HolmesAdapter
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.graphs import common, investigation, support_review
 from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
+from sentinel.interfaces.graphs.agents import utils as agent_utils
 from sentinel.interfaces.slack.app import app
 from sentinel.interfaces.slack.status_update import SlackStatusUpdateClient
 from sentinel.settings import get_settings
@@ -47,6 +48,10 @@ async def _classify_intent(text: str) -> intent_router.Intent:
     """Route user message to SRE or Support via the intent router agent."""
     cfg = config_mod.get_config()
     router_agent = cfg.agent_for("intent_router")
+    agent_utils.set_agent_span_attributes(
+        prompt_sha256=intent_router.PROMPT_SHA256,
+        model_name=agent_utils.get_model_name(router_agent),
+    )
     result = await router_agent.run(
         user_prompt=text,
         deps=intent_router.Dependencies(message=text),

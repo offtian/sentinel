@@ -42,6 +42,10 @@ async def _parse_request(
     :returns: A structured ChartSpec extracted from the request.
     """
     parser_agent = agent_for("chart_request_parser")
+    utils.set_agent_span_attributes(
+        prompt_sha256=chart_request_parser.PROMPT_SHA256,
+        model_name=utils.get_model_name(parser_agent),
+    )
     result = await parser_agent.run(
         user_prompt=request.raw_message,
         deps=chart_request_parser.Dependencies(
@@ -96,6 +100,10 @@ async def _generate_chart_files(
         )
 
     generator_agent = agent_for("chart_generator")
+    utils.set_agent_span_attributes(
+        prompt_sha256=chart_generator.PROMPT_SHA256,
+        model_name=utils.get_model_name(generator_agent),
+    )
     result = await generator_agent.run(
         user_prompt=user_prompt,
         deps=chart_generator.Dependencies(

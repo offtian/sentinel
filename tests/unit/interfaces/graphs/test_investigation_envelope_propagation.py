@@ -259,8 +259,14 @@ class TestInvestigateAlertSetsSpanAttributesOnEveryNode:
                 post_to_slack=False,
             )
 
-        # Then every node set the same six envelope attributes on the span
-        assert len(spying_span.attribute_calls) == 5
+        # Then every node set the seven envelope-plus-team-profile attributes,
+        # and each agent-invocation site additionally set the agent-context attrs
+        envelope_calls = [attrs for attrs in spying_span.attribute_calls if "request_id" in attrs]
+        agent_calls = [
+            attrs for attrs in spying_span.attribute_calls if "prompt_version_sha" in attrs
+        ]
+        assert len(envelope_calls) == 5
+        assert len(agent_calls) == 2
         expected_keys = {
             "request_id",
             "tenant_id",
@@ -268,7 +274,8 @@ class TestInvestigateAlertSetsSpanAttributesOnEveryNode:
             "region",
             "pii_class",
             "received_at",
+            "team_profile",
         }
-        for attrs in spying_span.attribute_calls:
+        for attrs in envelope_calls:
             assert set(attrs.keys()) == expected_keys
             assert attrs["request_id"] == str(envelope.request_id)

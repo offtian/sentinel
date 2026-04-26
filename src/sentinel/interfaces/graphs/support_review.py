@@ -53,6 +53,10 @@ class ClassifyTicket(BaseNode[State, Dependencies, common.SupportReply]):
 
             try:
                 reviewer_agent = ctx.deps.agent_for("ticket_reviewer")
+                agent_utils.set_agent_span_attributes(
+                    prompt_sha256=ticket_reviewer.PROMPT_SHA256,
+                    model_name=agent_utils.get_model_name(reviewer_agent),
+                )
                 result = await reviewer_agent.run(
                     user_prompt=f"Ticket: {ctx.state.ticket.summary}\n\n{ctx.state.ticket.description}",
                     deps=ticket_reviewer.Dependencies(
@@ -215,6 +219,10 @@ class DraftResponse(BaseNode[State, Dependencies, common.SupportReply]):
 
             try:
                 drafter_agent = ctx.deps.agent_for("response_drafter")
+                agent_utils.set_agent_span_attributes(
+                    prompt_sha256=response_drafter.PROMPT_SHA256,
+                    model_name=agent_utils.get_model_name(drafter_agent),
+                )
                 result = await drafter_agent.run(
                     user_prompt=f"Draft a response for: {ctx.state.ticket.summary}",
                     deps=response_drafter.Dependencies(

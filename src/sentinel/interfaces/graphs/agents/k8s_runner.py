@@ -59,6 +59,10 @@ async def run_k8s_agent(
         agent = config.agent_for("k8s_investigator")
     else:
         agent = k8s_investigator.build_agent(model=model_name)
+    utils.set_agent_span_attributes(
+        prompt_sha256=k8s_investigator.PROMPT_SHA256,
+        model_name=utils.get_model_name(agent),
+    )
     result = await agent.run(
         deps=deps,
         toolsets=toolsets,
