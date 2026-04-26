@@ -444,19 +444,27 @@ pipeline_runs (trace_id, pipeline_type, status, duration_ms)
 
 ### Mandatory span attributes (RFC §13.2)
 
-Every pipeline span carries nine mandatory attributes, split by source:
+Every pipeline span carries nine mandatory attributes. The canonical tuple lives at `src/sentinel/utils/langfuse_export.py:29` (`MANDATORY_ATTRS`); any addition must land there first so the validator picks it up.
 
-| Source | Attribute | Set by |
-|--------|-----------|--------|
-| Envelope-derived (F2) | `request_id`, `tenant_id`, `cluster_id`, `region`, `pii_class`, `received_at` | `run_node_with_envelope()` in `interfaces/graphs/_node_helpers.py` |
-| Agent-context (F4) | `prompt_version_sha`, `model_id` | `set_agent_span_attributes()` in `interfaces/graphs/agents/utils.py`, called at every PydanticAI invocation site |
-| Process-constant (F4) | `team_profile` | `run_node_with_envelope()` (read once from `get_config().team_id`) |
+| Source | Attribute | Set by | Carries |
+|--------|-----------|--------|---------|
+| Envelope (F2) | `request_id` | `run_node_with_envelope()` (`src/sentinel/interfaces/graphs/_node_helpers.py:88`) via `Envelope.to_span_attributes()` (`src/sentinel/data/primitives/envelope.py:66`) | UUID minted at ingress; correlates webhook → DB rows → spans → logs |
+| Envelope (F2) | `tenant_id` | same | Resolved tenant identifier (or `"unknown"` in soft-mode fallback) |
+| Envelope (F2) | `cluster_id` | same | Source cluster for the alert/event |
+| Envelope (F2) | `region` | same | Source region for the alert/event |
+| Envelope (F2) | `pii_class` | same | `public` / `internal` / `confidential` / `restricted`; gates redaction |
+| Envelope (F2) | `received_at` | same | UTC tz-aware ISO timestamp at ingress |
+| Agent context (F4.1) | `prompt_version_sha` | `set_agent_span_attributes()` (`src/sentinel/interfaces/graphs/agents/utils.py:11`), called at every PydanticAI invocation site | SHA-256 of the rendered system prompt (regulatory traceability) |
+| Agent context (F4.1) | `model_id` | same | Resolved model identifier (e.g. `openai/gpt-4.1`); skipped only for the `"test"` placeholder |
+| Process constant (F4.1) | `team_profile` | `_team_profile_attribute()` (`src/sentinel/interfaces/graphs/_node_helpers.py:20`); read once from `get_config().team_id` | Active team profile (`sre` / `devops` / `ace`) for multi-tenant routing |
 
-Enforcement lives in `MandatoryAttributesValidator` (`src/sentinel/utils/langfuse_export.py`), an OTel `SpanProcessor` registered on the trace pipeline during `bootstrap_otel.init_traces()`.
+**Validator behaviour (uniform across all nine attrs).** `MandatoryAttributesValidator` (`src/sentinel/utils/langfuse_export.py:56`) runs as an OTel `SpanProcessor` registered on the trace pipeline during `init_traces()` (`src/sentinel/bootstrap_otel.py:142`). On `on_end` (`src/sentinel/utils/langfuse_export.py:86`) it walks `MANDATORY_ATTRS`; any missing attribute is collected into a `missing` tuple and:
 
-**Carve-out for framework spans.** Spans whose `instrumentation_scope.name` matches `opentelemetry.instrumentation.{fastapi,sqlalchemy,httpx}` skip validation — they sit below the pipeline boundary and do not carry envelope or agent context, so flagging them would fill Langfuse with false positives.
+1. Emits a structured `otel.span.missing_mandatory_attrs` log event with `span_name`, `missing`, and `scope`.
+2. Stamps two diagnostic attributes onto the live span — `_validation_failed=True` and `_missing_attrs=(...)`.
+3. **Does not drop the span.** RFC §14.7 wants partial traces visible in Langfuse for debugging; tightening to a drop policy is post-foundations work once shadow mode confirms no false positives.
 
-**Shadow-mode behaviour.** Spans missing any mandatory attribute are *not* dropped. The validator emits a structured `otel.span.missing_mandatory_attrs` event and stamps `_validation_failed=True` plus `_missing_attrs=(...)` onto the span. RFC §14.7 wants partial traces visible in Langfuse for debugging the integration; tightening to a drop policy is post-foundations work.
+**Carve-out for framework spans.** Spans whose `instrumentation_scope.name` is in `_FRAMEWORK_SCOPES` (`src/sentinel/utils/langfuse_export.py:47` — `opentelemetry.instrumentation.{fastapi,sqlalchemy,httpx}`) short-circuit validation. They sit below the pipeline boundary, do not carry envelope or agent context, and would otherwise fill Langfuse with false-positive warnings.
 
 ### Local Langfuse
 
