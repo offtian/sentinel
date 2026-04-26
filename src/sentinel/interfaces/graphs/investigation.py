@@ -654,9 +654,18 @@ async def investigate_alert(
         ),
     )
 
-    result = await investigation_graph.run(
-        ClassifyAlert(),
-        deps=dependencies,
-        state=state,
+    async def _run_graph() -> common.InvestigationReply:
+        result = await investigation_graph.run(
+            ClassifyAlert(),
+            deps=dependencies,
+            state=state,
+        )
+        return result.output
+
+    return await _node_helpers.run_pipeline_with_envelope(
+        pipeline="sre",
+        envelope=envelope,
+        input_payload=alert.model_dump_json(),
+        fn=_run_graph,
+        serialize_output=lambda reply: reply.model_dump_json(),
     )
-    return result.output
