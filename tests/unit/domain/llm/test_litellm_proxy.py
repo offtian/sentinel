@@ -1,15 +1,13 @@
 """
 Unit tests for the LiteLLM proxy helper.
 
-The helper exposes ``is_proxy_configured()`` and ``get_proxy_kwargs()``
-so PydanticAI agent factories can plumb proxy ``base_url`` + virtual
-key into their model construction without each factory duplicating
-the conditional logic. Behaviour:
-
-- Both env vars set -> kwargs returned with ``api_base`` + ``api_key``.
-- Either env var unset -> empty kwargs (caller falls back to today's
-  in-process LiteLLM SDK behaviour) plus a structured-log warning when
-  the partial-config case is hit (operator forgot one of the two).
+The helper exposes a single ``get_proxy_kwargs()`` returning either the
+provider kwargs ``{"api_base", "api_key"}`` (proxy configured) or
+``None`` (in-process SDK fallback). Callers that only need the boolean
+"configured?" answer compare the result against ``None`` so settings
+are read exactly once per call. Partial configs (one of the two fields
+set) emit a structured-log warning and fail safe to ``None`` rather
+than sending unauthenticated traffic to a half-wired proxy.
 """
 
 from __future__ import annotations
@@ -63,60 +61,6 @@ def _install_settings(
     )
 
 
-class TestIsProxyConfigured:
-    def test_returns_true_when_base_url_and_virtual_key_set(self, monkeypatch):
-        # Given both proxy fields populated
-        _install_settings(
-            monkeypatch,
-            base_url=HttpUrl("http://proxy.local:4000"),
-            virtual_key=SecretStr("sk-virtual-key"),
-        )
-
-        # When checking proxy configuration
-        configured = litellm_proxy.is_proxy_configured()
-
-        # Then it reports configured
-        assert configured is True
-
-    def test_returns_false_when_both_unset(self, monkeypatch):
-        # Given no proxy fields set
-        _install_settings(monkeypatch, base_url=None, virtual_key=None)
-
-        # When checking proxy configuration
-        configured = litellm_proxy.is_proxy_configured()
-
-        # Then it reports unconfigured
-        assert configured is False
-
-    def test_returns_false_when_only_base_url_set(self, monkeypatch):
-        # Given only the URL is set (operator forgot the virtual key)
-        _install_settings(
-            monkeypatch,
-            base_url=HttpUrl("http://proxy.local:4000"),
-            virtual_key=None,
-        )
-
-        # When checking proxy configuration
-        configured = litellm_proxy.is_proxy_configured()
-
-        # Then it falls back to unconfigured
-        assert configured is False
-
-    def test_returns_false_when_only_virtual_key_set(self, monkeypatch):
-        # Given only the virtual key is set
-        _install_settings(
-            monkeypatch,
-            base_url=None,
-            virtual_key=SecretStr("sk-virtual-key"),
-        )
-
-        # When checking proxy configuration
-        configured = litellm_proxy.is_proxy_configured()
-
-        # Then it falls back to unconfigured
-        assert configured is False
-
-
 class TestGetProxyKwargs:
     def test_returns_api_base_and_api_key_when_configured(self, monkeypatch):
         # Given both proxy fields populated
@@ -135,17 +79,17 @@ class TestGetProxyKwargs:
             "api_key": "sk-virtual-key",
         }
 
-    def test_returns_empty_dict_when_unconfigured(self, monkeypatch):
+    def test_returns_none_when_unconfigured(self, monkeypatch):
         # Given the proxy fields are unset
         _install_settings(monkeypatch, base_url=None, virtual_key=None)
 
         # When the helper computes provider kwargs
         kwargs = litellm_proxy.get_proxy_kwargs()
 
-        # Then no kwargs are returned (caller skips the proxy path)
-        assert kwargs == {}
+        # Then None signals the caller to take the in-process SDK path
+        assert kwargs is None
 
-    def test_returns_empty_dict_when_only_base_url_set(self, monkeypatch):
+    def test_returns_none_when_only_base_url_set(self, monkeypatch):
         # Given a partial proxy config (URL but no key)
         _install_settings(
             monkeypatch,
@@ -162,12 +106,12 @@ class TestGetProxyKwargs:
         # When the helper computes provider kwargs
         kwargs = litellm_proxy.get_proxy_kwargs()
 
-        # Then it falls back to unconfigured AND emits the partial-config
+        # Then it falls back to None AND emits the partial-config
         # structured event so the misconfiguration surfaces in startup logs
-        assert kwargs == {}
+        assert kwargs is None
         assert any(event == "litellm_proxy_partial_config" for event, _ in emitted_events)
 
-    def test_returns_empty_dict_when_only_virtual_key_set(self, monkeypatch):
+    def test_returns_none_when_only_virtual_key_set(self, monkeypatch):
         # Given a partial proxy config (key but no URL)
         _install_settings(
             monkeypatch,
@@ -184,6 +128,23 @@ class TestGetProxyKwargs:
         # When the helper computes provider kwargs
         kwargs = litellm_proxy.get_proxy_kwargs()
 
-        # Then it falls back to unconfigured AND emits the partial-config event
-        assert kwargs == {}
+        # Then it falls back to None AND emits the partial-config event
+        assert kwargs is None
         assert any(event == "litellm_proxy_partial_config" for event, _ in emitted_events)
+
+    def test_does_not_emit_partial_config_event_when_both_unset(self, monkeypatch):
+        # Given neither field is set (clean local-dev fallback)
+        _install_settings(monkeypatch, base_url=None, virtual_key=None)
+        emitted_events: list[tuple[str, dict[str, object] | None]] = []
+
+        def _capture_event(event, *, params=None):
+            emitted_events.append((event, params))
+
+        monkeypatch.setattr(litellm_proxy.logs, "log_event", _capture_event)
+
+        # When the helper computes provider kwargs
+        litellm_proxy.get_proxy_kwargs()
+
+        # Then no warning fires — fully-unset is the documented dev default,
+        # not a misconfiguration
+        assert all(event != "litellm_proxy_partial_config" for event, _ in emitted_events)

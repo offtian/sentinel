@@ -370,10 +370,10 @@ class CommonConfiguration(BaseConfiguration):
         """
         if model_name is None or model_name == "test":
             return model_name
-        if not litellm_proxy.is_proxy_configured():
-            return model_name
 
         proxy_kwargs = litellm_proxy.get_proxy_kwargs()
+        if proxy_kwargs is None:
+            return model_name
         # Strip the ``litellm:`` prefix when present — ``LiteLLMProvider``
         # already sets ``system="litellm"`` on the resulting OpenAIChatModel,
         # and the bare ``provider/model`` form is what its API expects.

@@ -41,14 +41,12 @@ _PROXY_KWARGS = {"api_base": "http://proxy.local:4000/", "api_key": "sk-virtual-
 
 def _enable_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pretend the firm-shared LiteLLM proxy is configured."""
-    monkeypatch.setattr(litellm_proxy, "is_proxy_configured", lambda: True)
     monkeypatch.setattr(litellm_proxy, "get_proxy_kwargs", lambda: dict(_PROXY_KWARGS))
 
 
 def _disable_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pretend the proxy is unconfigured (local-dev fallback path)."""
-    monkeypatch.setattr(litellm_proxy, "is_proxy_configured", lambda: False)
-    monkeypatch.setattr(litellm_proxy, "get_proxy_kwargs", dict)
+    monkeypatch.setattr(litellm_proxy, "get_proxy_kwargs", lambda: None)
 
 
 def _make_settings() -> mock.MagicMock:

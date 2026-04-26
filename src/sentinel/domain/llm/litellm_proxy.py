@@ -24,42 +24,33 @@ from sentinel.utils import logs
 _PARTIAL_CONFIG_WARNING_EVENT = "litellm_proxy_partial_config"
 
 
-def is_proxy_configured() -> bool:
+def get_proxy_kwargs() -> dict[str, Any] | None:
     """
-    Return True when both LiteLLM proxy fields are set.
+    Return ``LiteLLMProvider`` kwargs when the proxy is configured, else ``None``.
 
-    Reads ``litellm_base_url`` and ``litellm_virtual_key`` off
-    ``get_config().settings``. Both must be set for the proxy path to
-    activate; partial configs fail safe back to unconfigured.
-    """
-    settings = config_module.get_config().settings
-    return settings.litellm_base_url is not None and settings.litellm_virtual_key is not None
+    When both ``litellm_base_url`` and ``litellm_virtual_key`` are set on
+    ``Settings``, returns ``{"api_base": ..., "api_key": ...}`` ready to
+    pass straight into pydantic-ai's ``LiteLLMProvider``. When neither
+    is set, returns ``None`` so the caller falls back to the in-process
+    LiteLLM SDK path (``just run-api`` works locally without a proxy).
 
+    Partial configs (one of the two fields set) emit the
+    ``litellm_proxy_partial_config`` structured event and are treated
+    as unconfigured — fail safe rather than silently constructing a
+    half-wired proxy URL.
 
-def get_proxy_kwargs() -> dict[str, Any]:
-    """
-    Return ``LiteLLMProvider`` kwargs when the proxy is configured.
-
-    When configured, returns a dict with ``api_base`` and ``api_key``
-    keys that pydantic-ai's ``LiteLLMProvider`` accepts directly. When
-    unconfigured (either field unset), returns an empty dict so the
-    caller falls back to the in-process LiteLLM SDK path.
-
-    Partial configs (one of the two fields set) emit a structured-log
-    warning and are treated as unconfigured.
+    Single source of truth: callers who only need the boolean
+    "configured?" answer pattern-match on ``is None`` instead of using
+    a separate predicate, so settings are read exactly once per call.
     """
     settings = config_module.get_config().settings
     base_url = settings.litellm_base_url
     virtual_key = settings.litellm_virtual_key
 
     if base_url is None and virtual_key is None:
-        return {}
+        return None
 
     if base_url is None or virtual_key is None:
-        # Operator forgot one of the two — fail safe back to in-process
-        # SDK rather than silently constructing a half-wired proxy URL.
-        # Emit a structured event so the misconfiguration surfaces in
-        # startup logs.
         logs.log_event(
             _PARTIAL_CONFIG_WARNING_EVENT,
             params={
@@ -67,7 +58,7 @@ def get_proxy_kwargs() -> dict[str, Any]:
                 "virtual_key_set": virtual_key is not None,
             },
         )
-        return {}
+        return None
 
     return {
         "api_base": str(base_url),
