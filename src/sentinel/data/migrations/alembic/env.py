@@ -23,6 +23,7 @@ from sentinel.data.sql import (  # noqa: F401
     evaluation,
     investigations,
     jobs,
+    runbooks,
     tickets,
     tracing,
 )
