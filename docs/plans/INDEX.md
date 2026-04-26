@@ -32,7 +32,8 @@
 | Plan | Goal | Progress | Notes |
 |------|------|----------|-------|
 | [grafana-metrics](grafana-metrics.md) | OTel metrics instrumentation for Grafana dashboards | 2/5 | Prometheus reader + basic metrics wired |
-| [sentinel-hedgefund-foundations](sentinel-hedgefund-foundations.md) | Evolve current codebase into RFC-001 v0.4 foundations (config, identity, OTel→Langfuse→replay, LiteLLM proxy, runbooks, capability tokens, groundedness) | 4/9 phases | F1 + F2 + F3 + F4 complete (F4.4 runtime smoke deferred); F5 next |
+| [sentinel-hedgefund-foundations](sentinel-hedgefund-foundations.md) | Evolve current codebase into RFC-001 v0.4 foundations (config, identity, OTel→Langfuse→replay, LiteLLM proxy, runbooks, capability tokens, groundedness) | 5/9 phases | F1 + F2 + F3 + F4 + F5 complete (F4.4 runtime smoke deferred); F6 next |
+| [sentinel-foundations-f5-litellm-proxy](sentinel-foundations-f5-litellm-proxy.md) | F5 LiteLLM proxy migration + ADR 0007 orchestration framework decision | complete | F5 of foundations plan; this PR |
 | [sentinel-foundations-f1-config-layering](sentinel-foundations-f1-config-layering.md) | F1 layered config substrate on `BaseConfiguration` (Pydantic) + new env-vars + policy primitives + `TEAM_CONFIG_REFS` dispatch | complete | F1 of foundations plan; PR #22 |
 | [sentinel-foundations-f2-envelope](sentinel-foundations-f2-envelope.md) | F2 identity envelope: middleware mints `request_id`, webhook factories build `Envelope`, pipelines + spans + log contexts carry it through | complete | F2 of foundations plan; this PR |
 | [sentinel-foundations-f4-otel-langfuse-replay](sentinel-foundations-f4-otel-langfuse-replay.md) | F4 Phase A — OTel → Langfuse triple: 9 mandatory span attrs, MandatoryAttributesValidator, Langfuse OTLP exporter, local v3 docker-compose | complete | Phase A merged via PR #28; runtime smoke (F4.4) deferred until Docker available on dev host |
