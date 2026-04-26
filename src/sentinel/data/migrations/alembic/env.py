@@ -18,10 +18,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent.parent)
 from sqlmodel import SQLModel
 
 from sentinel.data.sql import (  # noqa: F401
+    alert_requests,
     audit,
     evaluation,
     investigations,
     jobs,
+    quality,
+    runbooks,
+    tasks,
     tickets,
     tracing,
 )

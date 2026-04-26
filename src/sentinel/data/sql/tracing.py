@@ -8,8 +8,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Column, DateTime, Text
-from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy import Boolean, Column, DateTime, Text
+from sqlalchemy.dialects.postgresql import JSON, JSONB
 from sqlmodel import Field, SQLModel
 
 
@@ -112,4 +112,26 @@ class AgentCallRecord(SQLModel, table=True):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(tz=UTC),
         sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+    # -- RFC 12.3.6 tool_call extension columns (foundations slice) --
+    tool_name: str | None = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+    )
+    capability_token: str | None = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+    )
+    evidence_object_ids: list[str] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+    )
+    succeeded: bool | None = Field(
+        default=None,
+        sa_column=Column(Boolean, nullable=True),
+    )
+    tenant_id: str | None = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True, index=True),
     )
