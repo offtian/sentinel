@@ -28,6 +28,8 @@ from langgraph import graph as lg_graph
 from langgraph import types as lg_types
 from langgraph.checkpoint.postgres import aio as lg_postgres_aio
 
+from sentinel.data import _dsn
+
 
 def _libpq_dsn_from_settings() -> str:
     """
@@ -36,10 +38,10 @@ def _libpq_dsn_from_settings() -> str:
     ``langgraph-checkpoint-postgres`` uses psycopg under the hood, which
     speaks plain libpq URLs. The pytest env sets a SQLAlchemy-flavoured URL
     (``postgresql+asyncpg://...``) so the application can use asyncpg via
-    SQLAlchemy. The saver needs the ``+asyncpg`` driver suffix stripped.
+    SQLAlchemy. The saver needs the ``+asyncpg`` driver suffix stripped via
+    the shared :func:`sentinel.data._dsn.to_libpq` helper.
     """
-    url = os.environ["DATABASE_URL"]
-    return url.replace("+asyncpg", "")
+    return _dsn.to_libpq(os.environ["DATABASE_URL"])
 
 
 class _SpikeState(TypedDict, total=False):
