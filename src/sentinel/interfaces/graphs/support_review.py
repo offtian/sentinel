@@ -400,9 +400,42 @@ async def review_ticket(
         nodes=(ClassifyTicket, SearchDocumentation, DraftResponse, DetermineConfidence),
     )
 
-    result = await review_graph.run(
-        ClassifyTicket(),
-        deps=dependencies,
-        state=state,
+    # F4.7: when the tracer hasn't yet been started by the outer caller
+    # (worker/replay/chat), open the replay-capture window here so the
+    # bundle's envelope + ticket payload are attached. Support has no
+    # runbook concept, so both runbook fields are None at completion.
+    tracer = trace_collector
+    owns_pipeline = (
+        tracer is not None
+        and hasattr(tracer, "start_pipeline")
+        and getattr(tracer, "pipeline_run_id", None) is None
     )
+    if owns_pipeline:
+        await tracer.start_pipeline(  # type: ignore[union-attr]
+            pipeline_type="support_review",
+            input_data={"ticket_id": ticket.id, "ticket_key": ticket.key},
+            envelope=envelope,
+            alert_payload=ticket.model_dump(),
+        )
+    try:
+        result = await review_graph.run(
+            ClassifyTicket(),
+            deps=dependencies,
+            state=state,
+        )
+    except Exception:
+        if owns_pipeline:
+            await tracer.complete_pipeline(  # type: ignore[union-attr]
+                status="failed",
+                runbook_id=None,
+                runbook_version_sha=None,
+            )
+        raise
+    if owns_pipeline:
+        await tracer.complete_pipeline(  # type: ignore[union-attr]
+            status="completed",
+            final_reply=result.output.model_dump(),
+            runbook_id=None,
+            runbook_version_sha=None,
+        )
     return result.output

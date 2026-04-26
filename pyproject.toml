@@ -231,6 +231,15 @@ layers = [
     "settings",
     "version",
 ]
+# F4.7: ExecutionTracer (domain) drives the replay-bundle capture lifecycle —
+# bind/flush/record helpers live in plugins.toolsets._runtime alongside the
+# ReplayCapturingToolset that uses them. The helpers themselves have no
+# pydantic-ai dependency and could be lifted into utils/, but doing so would
+# duplicate the ContextVar across layers. Allowed pending a follow-up that
+# moves the harness-only helpers down into utils/replay_runtime.py.
+ignore_imports = [
+    "sentinel.domain.pipeline.tracer -> sentinel.plugins.toolsets._runtime",
+]
 
 [[tool.importlinter.contracts]]
 name = "Stdlib logging forbidden"

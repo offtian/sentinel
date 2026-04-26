@@ -18,6 +18,7 @@ from typing import Any
 
 from kubernetes_asyncio import client as k8s_async_client
 from pydantic import ConfigDict, PrivateAttr
+from pydantic_ai import models as pydantic_ai_models
 from pydantic_ai.mcp import MCPServerSSE
 from pydantic_ai.toolsets import AbstractToolset
 
@@ -36,6 +37,7 @@ from sentinel.domain.vendor_adapters.observability import (
     GrafanaClient,
 )
 from sentinel.domain.vendor_adapters.pagerduty import PagerDutyClient
+from sentinel.plugins.models import capturing as capturing_model_mod
 from sentinel.plugins.toolsets import documentation as doc_toolsets
 from sentinel.plugins.toolsets import mcp as mcp_toolset_mod
 from sentinel.plugins.toolsets import observability as obs_toolsets
@@ -387,8 +389,66 @@ class CommonConfiguration(BaseConfiguration):
                 skills=base_config_mod.SKILLS_BY_AGENT.get("k8s_investigator", ()),
             ),
         }
+        if self.enable_replay_bundle:
+            agents = {
+                name: self._wrap_agent_for_capture(agent=agent, agent_name=name)
+                for name, agent in agents.items()
+            }
         self.set_agents(agents)
         logger.info("Agents loaded", count=len(agents))
+
+    @staticmethod
+    def _wrap_agent_for_capture(*, agent: Any, agent_name: str) -> Any:
+        """
+        Replace *agent*'s default model with a :class:`CapturingModel` for replay capture.
+
+        PydanticAI ``Agent`` instances expose ``.model`` as either a
+        :class:`pydantic_ai.models.Model` instance, a known model name
+        string, or ``None``.  We resolve the current value to a concrete
+        ``Model`` via :func:`pydantic_ai.models.infer_model`, wrap it in a
+        :class:`~sentinel.plugins.models.capturing.CapturingModel` tagged
+        with *agent_name*, and reassign it back through the public
+        ``.model`` setter — leaving every other agent attribute (skills,
+        tools, prompts, output_type) untouched.
+
+        Non-Agent objects (e.g. ``mock.Mock`` test stubs) and agents whose
+        ``.model`` cannot be resolved are returned unchanged.  This keeps
+        the wrapping wholly opt-in: tests that don't care about replay
+        capture keep working without ceremony.
+        """
+        try:
+            current_model = agent.model
+        except AttributeError:
+            return agent
+        if current_model is None:
+            return agent
+        try:
+            resolved = pydantic_ai_models.infer_model(current_model)
+        except Exception as exc:
+            logs.log_event(
+                "agent_capture_wrap_skipped",
+                params={
+                    "agent_name": agent_name,
+                    "reason": f"{type(exc).__name__}: {exc}",
+                },
+            )
+            return agent
+        try:
+            agent.model = capturing_model_mod.CapturingModel(
+                wrapped=resolved,
+                agent_name=agent_name,
+            )
+        except (AttributeError, TypeError) as exc:
+            logs.log_event(
+                "agent_capture_wrap_skipped",
+                params={
+                    "agent_name": agent_name,
+                    "reason": f"{type(exc).__name__}: {exc}",
+                },
+            )
+            return agent
+        logs.log_event("agent_capture_wrap_attached", params={"agent_name": agent_name})
+        return agent
 
     # -- Support pipeline helpers --------------------------------------------
 

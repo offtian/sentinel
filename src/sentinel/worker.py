@@ -204,6 +204,7 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     alert_payload = alert.model_dump(mode="json")
     input_hash = pipeline_queries.canonical_input_hash(payload=alert_payload)
     model_ids = _collect_model_ids(settings, "alert_classifier_llm", "root_cause_llm")
+    envelope = _envelope_for_job(payload)
 
     await et.start_pipeline(
         pipeline_type="investigation",
@@ -217,6 +218,10 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
         prompt_sha256=classifier_tpl.sha256,
         prompt_text=classifier_tpl.system_text,
         agent_prompts_json=agent_prompts,
+        # F4.7: open the ReplayBundle capture window for the worker leg.
+        # The graph guards against double-start, so this is the single owner.
+        envelope=envelope,
+        alert_payload=alert_payload,
     )
 
     async def _persist(reply: common.InvestigationReply) -> None:
@@ -244,7 +249,7 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     try:
         result = await investigation.investigate_alert(
             alert=alert,
-            envelope=_envelope_for_job(payload),
+            envelope=envelope,
             agent_for=cfg.agent_for,
             holmes=holmes,
             pagerduty_client=pd_client,
@@ -256,7 +261,13 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
             challenger_adapter=challenger_adapter,
         )
     except Exception:
-        await et.complete_pipeline(status="failed", error_message="pipeline raised")
+        # F4.7: pass runbook fields (None for now — F6 wires real values).
+        await et.complete_pipeline(
+            status="failed",
+            error_message="pipeline raised",
+            runbook_id=None,
+            runbook_version_sha=None,
+        )
         raise
 
     result_data = json.loads(result.model_dump_json())
@@ -264,6 +275,8 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
         status="completed",
         output_data=result_data,
         final_reply=result_data,
+        runbook_id=None,
+        runbook_version_sha=None,
     )
 
     return result.model_dump_json()
@@ -296,6 +309,7 @@ async def _run_support_review(payload: dict[str, object]) -> str:
     ticket_payload = ticket.model_dump(mode="json")
     input_hash = pipeline_queries.canonical_input_hash(payload=ticket_payload)
     model_ids = _collect_model_ids(settings, "ticket_reviewer_llm", "response_drafter_llm")
+    envelope = _envelope_for_job(payload)
 
     await et.start_pipeline(
         pipeline_type="support_review",
@@ -309,6 +323,9 @@ async def _run_support_review(payload: dict[str, object]) -> str:
         prompt_sha256=reviewer_tpl.sha256,
         prompt_text=reviewer_tpl.system_text,
         agent_prompts_json=agent_prompts,
+        # F4.7: open the ReplayBundle capture window for the worker leg.
+        envelope=envelope,
+        alert_payload=ticket_payload,
     )
 
     async def _persist(reply: common.SupportReply) -> None:
@@ -330,7 +347,7 @@ async def _run_support_review(payload: dict[str, object]) -> str:
     try:
         result = await support_review.review_ticket(
             ticket=ticket,
-            envelope=_envelope_for_job(payload),
+            envelope=envelope,
             agent_for=cfg.agent_for,
             document_searcher=cfg.build_document_searcher(),
             ticket_searcher=cfg.build_ticket_searcher(),
@@ -340,7 +357,13 @@ async def _run_support_review(payload: dict[str, object]) -> str:
             drafter_toolsets=(cfg.build_support_search_toolset(), *shared_mcp),
         )
     except Exception:
-        await et.complete_pipeline(status="failed", error_message="pipeline raised")
+        # F4.7: support has no runbook concept — both ids stay None permanently.
+        await et.complete_pipeline(
+            status="failed",
+            error_message="pipeline raised",
+            runbook_id=None,
+            runbook_version_sha=None,
+        )
         raise
 
     result_data = json.loads(result.model_dump_json())
@@ -348,6 +371,8 @@ async def _run_support_review(payload: dict[str, object]) -> str:
         status="completed",
         output_data=result_data,
         final_reply=result_data,
+        runbook_id=None,
+        runbook_version_sha=None,
     )
 
     return result.model_dump_json()
