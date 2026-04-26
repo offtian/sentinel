@@ -116,8 +116,11 @@ services:
   # Observability stack (Grafana + Prometheus + Loki + Tempo)
   # ---------------------------------------------------------------------------
 
+  # Grafana stack is opt-in. Default `docker compose up` skips it.
+  # Bring it up with: docker compose --profile grafana up -d
   prometheus:
     image: prom/prometheus:v3.4.1
+    profiles: ["grafana"]
     ports:
       - "9090:9090"
     volumes:
@@ -131,6 +134,7 @@ services:
 
   loki:
     image: grafana/loki:3.5.0
+    profiles: ["grafana"]
     ports:
       - "3100:3100"
     volumes:
@@ -140,6 +144,7 @@ services:
 
   tempo:
     image: grafana/tempo:2.7.2
+    profiles: ["grafana"]
     ports:
       - "3200:3200"   # Tempo HTTP API
       - "4317:4317"   # OTLP gRPC receiver
@@ -151,6 +156,7 @@ services:
 
   grafana:
     image: grafana/grafana:11.6.0
+    profiles: ["grafana"]
     ports:
       - "3000:3000"
     environment:
