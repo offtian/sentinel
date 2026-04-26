@@ -66,6 +66,7 @@ from sentinel.interfaces.graphs.agents import (
     root_cause_analyser,
     ticket_reviewer,
 )
+from sentinel.interfaces.workflows import support_review as workflows_support_review
 from tests import factories
 from tests.functional.conftest import (
     EmptyDocumentSearcher,
@@ -165,11 +166,21 @@ def _build_sre_only_app() -> fastapi.FastAPI:
     return app
 
 
-def _build_support_only_app() -> fastapi.FastAPI:
-    """Return a minimal app wiring just the middleware and support router."""
+def _build_support_only_app(
+    *,
+    graph: object | None = None,
+) -> fastapi.FastAPI:
+    """Return a minimal app wiring just the middleware and support router.
+
+    The post-T17 webhook reads the compiled graph off
+    ``app.state.support_review_graph``; tests pass a sentinel object
+    here to satisfy the not-None check while leaving the actual graph
+    invocation to the patched entrypoint fixture.
+    """
     app = fastapi.FastAPI()
     app.add_middleware(middleware_mod.RequestIdMiddleware)
     app.include_router(support_router_mod.router, prefix="/api")
+    app.state.support_review_graph = graph if graph is not None else mock.MagicMock()
     return app
 
 
@@ -320,12 +331,19 @@ def patched_sre_router(monkeypatch, captured_run):
 @pytest.fixture
 def patched_support_router(monkeypatch, captured_run):
     """
-    Patch the support router's enqueue / settings / config to drive the pipeline.
+    Patch the support router's synchronous review_ticket entrypoint to
+    drive the pipeline in-process and capture the envelope.
 
-    Mirrors ``patched_sre_router`` for the support side.
+    Post-T17 the support webhook reads the compiled graph off
+    ``app.state.support_review_graph`` and calls
+    ``workflows.support_review.review_ticket`` synchronously. This
+    fixture replaces that entrypoint with a fake that captures the
+    envelope and runs the legacy support pipeline (still serving
+    request_id propagation coverage until the legacy module is moved
+    to ``_archive/`` in T21).
     """
 
-    async def fake_enqueue(ticket, *, requested_by, priority=2, envelope=None):
+    async def fake_review_ticket(*, ticket, envelope, graph):
         captured_run["envelope"] = envelope
         captured_run["ticket"] = ticket
 
@@ -347,16 +365,25 @@ def patched_support_router(monkeypatch, captured_run):
                 ticket_searcher=EmptyPastTicketSearcher(),
             )
 
-        return fastapi.responses.JSONResponse(
-            status_code=202,
-            content={
-                "status": "accepted",
-                "job_id": str(uuid.uuid4()),
-                "ticket_key": ticket.key,
-            },
+        return workflows_support_review.ReviewOutcome(
+            request_id=envelope.request_id,
+            response_suggestion=None,
+            confidence=None,
+            needs_approval=False,
+            interrupt_payload=None,
+            approval_decision=None,
         )
 
-    monkeypatch.setattr(support_router_mod, "_enqueue_ticket", fake_enqueue)
+    async def fake_persist(**kwargs):
+        return uuid.uuid4()
+
+    monkeypatch.setattr(
+        support_router_mod.workflows_support_review,
+        "review_ticket",
+        fake_review_ticket,
+    )
+    monkeypatch.setattr(support_router_mod.support_ops, "persist_ticket_review", fake_persist)
+    monkeypatch.setattr(support_router_mod.async_db, "get_db", lambda: mock.MagicMock())
     monkeypatch.setattr(support_router_mod, "get_settings", lambda: _build_settings_stub())
     monkeypatch.setattr(support_router_mod, "get_config", lambda: _build_config_stub(strict=False))
 
@@ -667,7 +694,7 @@ class TestJiraSupportWebhookVariant:
         # Then the response echoes the request id, the envelope carries
         # the lowercased project key as tenant_id, and the support
         # pipeline span captures all six envelope attrs
-        assert response.status_code == 202
+        assert response.status_code == 200
         assert response.headers["X-Request-Id"] == _VALID_REQUEST_ID
         envelope = captured_run["envelope"]
         assert str(envelope.request_id) == _VALID_REQUEST_ID

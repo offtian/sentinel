@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import databases
 
+from sentinel.data import _dsn
 from sentinel.settings import get_settings
 
 
@@ -29,9 +30,8 @@ def get_db() -> databases.Database:
             raise RuntimeError(
                 "DATABASE_URL is not configured. Set the DATABASE_URL environment variable."
             )
-        # The databases library expects postgresql:// not postgresql+asyncpg://
-        clean_url = url.replace("+asyncpg", "")
-        _db = databases.Database(clean_url)
+        # The databases library expects libpq URLs, not the SQLAlchemy +asyncpg form.
+        _db = databases.Database(_dsn.to_libpq(url))
     return _db
 
 

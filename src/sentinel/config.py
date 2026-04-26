@@ -217,6 +217,18 @@ class BaseConfiguration(BaseModel):
     def chart_max_retries(self) -> int:
         return self.settings.k8s_chart_max_retries
 
+    @property
+    def require_approval_below_confidence(self) -> float:
+        """
+        Return the confidence threshold below which a workflow run
+        requires human approval before publishing.
+
+        Surfacing this on ``BaseConfiguration`` keeps domain-layer code
+        pointed at config rather than at ``Settings`` directly, per
+        the layered-architecture rule in ``application.md``.
+        """
+        return self.settings.require_approval_below_confidence
+
     # -- Agent registry ------------------------------------------------------
 
     def set_agents(self, agents: dict[str, Any]) -> None:

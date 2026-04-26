@@ -69,6 +69,8 @@ dependencies = [
     "opentelemetry-instrumentation-system-metrics>=0.48b0",
     "logfire",
     "prometheus-client>=0.21",
+    "langgraph>=1.1.9",
+    "langgraph-checkpoint-postgres>=3.0.3,<4",
 ]
 
 [project.optional-dependencies]
@@ -310,4 +312,8 @@ filterwarnings = [
     "error::DeprecationWarning",
     "ignore:.*asyncio.iscoroutinefunction.*:DeprecationWarning",
     "error::pytest.PytestCollectionWarning",
+    # langchain-core pulls in pydantic.v1 which warns on Python 3.14+. The
+    # warning surfaces when importing langgraph-checkpoint-postgres; nothing
+    # in our code uses pydantic.v1 directly. Track upstream for compat.
+    "ignore:.*Pydantic V1 functionality isn't compatible.*:UserWarning",
 ]

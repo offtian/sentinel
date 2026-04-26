@@ -130,6 +130,12 @@ class Settings(LLMSettings, SRESettings, K8sChartSettings, SupportSettings):
     environment: str = "production"
     database_url: str = ""
 
+    # LangGraph checkpointer DSN. Unset = defaults to ``database_url`` (after
+    # stripping the SQLAlchemy ``+asyncpg`` driver suffix) at bootstrap time.
+    # The ``langgraph-checkpoint-postgres`` saver speaks plain libpq, so the
+    # SQLAlchemy-flavoured URL is not directly usable here.
+    langgraph_checkpoint_dsn: str | None = None
+
     # Cloud / cluster identity context (RFC §3.1) — populated onto the
     # Envelope so every span and DB row carries cluster + region scope.
     # Empty values fall back to the "unknown" sentinel at envelope time.
