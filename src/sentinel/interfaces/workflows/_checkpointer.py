@@ -36,6 +36,7 @@ from typing import Any, Protocol
 import psycopg
 import psycopg_pool
 from langgraph.checkpoint.postgres import aio as lg_postgres_aio
+from langgraph.checkpoint.serde import jsonplus as lg_serde
 from psycopg import rows as psycopg_rows
 
 from sentinel.data import _dsn
@@ -120,6 +121,15 @@ async def build_checkpointer(
         )
     )
     await pool.open(wait=True)
-    saver = lg_postgres_aio.AsyncPostgresSaver(conn=pool)
+    # ``pickle_fallback=True`` lets the serde round-trip our attrs.frozen
+    # primitives (Envelope, ConfidenceScore, etc.) that ride inside the
+    # SupportReviewState TypedDict. ormsgpack on its own only knows
+    # Pydantic v1/v2, namedtuples, and a handful of stdlib types; attrs
+    # classes fall through to the pickle path. The checkpointer DB is
+    # internal, written only by trusted workflow code, so the pickle
+    # security trade-off is acceptable at this stage. Revisit if/when
+    # the checkpointer table is exposed to a less-trusted boundary.
+    serde = lg_serde.JsonPlusSerializer(pickle_fallback=True)
+    saver = lg_postgres_aio.AsyncPostgresSaver(conn=pool, serde=serde)
     await saver.setup()
     return saver, pool.close

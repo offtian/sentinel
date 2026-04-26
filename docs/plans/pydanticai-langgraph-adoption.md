@@ -115,26 +115,26 @@ Three concerns, three stores. None subsumes the others.
 
 The detailed TDD step list lives in [`docs/superpowers/plans/2026-04-26-pydanticai-langgraph-adoption.md`](../superpowers/plans/2026-04-26-pydanticai-langgraph-adoption.md). High-level checkboxes mirror that plan's task list:
 
-- [ ] **T1** Spike — verify `AsyncPostgresSaver` + `interrupt()` + `Command(resume=...)` round-trip in a scratch integration test
-- [ ] **T2** Add deps (`langgraph`, `langgraph-checkpoint-postgres`) to `pyproject.toml`; `uv lock`
-- [ ] **T3** Settings additions: `langgraph_checkpoint_dsn` field on `Settings`; `.env.default` entry
-- [ ] **T4** Scaffold `src/sentinel/interfaces/workflows/` package (`__init__.py` only)
-- [ ] **T5** `_envelope.py` — `with_envelope` decorator (TDD)
-- [ ] **T6** `_checkpointer.py` — `build_checkpointer()` (TDD)
-- [ ] **T7** `support_state.py` — `SupportReviewState` TypedDict
-- [ ] **T8** Port `classify_ticket` node as async function (TDD)
-- [ ] **T9** Port `search_documentation` node as async function (TDD)
-- [ ] **T10** Port `draft_response` node as async function (TDD)
-- [ ] **T11** Port `determine_confidence` node — adds `needs_approval` flag (TDD)
-- [ ] **T12** New `wait_for_human` node using `interrupt()` (TDD)
-- [ ] **T13** `_route_after_confidence` conditional edge (TDD)
-- [ ] **T14** `build_support_review_graph()` — composes the StateGraph (TDD)
-- [ ] **T15** App lifespan: build checkpointer + compiled graph; expose on `app.state`
-- [ ] **T16** New `review_ticket(...)` entrypoint in `workflows/support_review.py` that wraps `graph.ainvoke` (TDD)
-- [ ] **T17** Update Jira webhook handler in `interfaces/api/routers/support/router.py` to call the new entrypoint
-- [ ] **T18** New approval endpoints: `POST /approve`, `POST /reject`, `GET /approval-status` under `interfaces/api/routers/support/`
-- [ ] **T19** Functional E2E test: webhook → high-confidence path → END
-- [ ] **T20** Functional E2E test: webhook → low-confidence interrupt → approve endpoint → resume → END
+- [x] **T1** Spike — verify `AsyncPostgresSaver` + `interrupt()` + `Command(resume=...)` round-trip in a scratch integration test
+- [x] **T2** Add deps (`langgraph`, `langgraph-checkpoint-postgres`) to `pyproject.toml`; `uv lock`
+- [x] **T3** Settings additions: `langgraph_checkpoint_dsn` field on `Settings`; `.env.default` entry
+- [x] **T4** Scaffold `src/sentinel/interfaces/workflows/` package (`__init__.py` only)
+- [x] **T5** `_envelope.py` — `with_envelope` decorator (TDD)
+- [x] **T6** `_checkpointer.py` — `build_checkpointer()` (TDD)
+- [x] **T7** `support_state.py` — `SupportReviewState` TypedDict
+- [x] **T8** Port `classify_ticket` node as async function (TDD)
+- [x] **T9** Port `search_documentation` node as async function (TDD)
+- [x] **T10** Port `draft_response` node as async function (TDD)
+- [x] **T11** Port `determine_confidence` node — adds `needs_approval` flag (TDD)
+- [x] **T12** New `wait_for_human` node using `interrupt()` (TDD)
+- [x] **T13** `_route_after_confidence` conditional edge (TDD)
+- [x] **T14** `build_support_review_graph()` — composes the StateGraph (TDD)
+- [x] **T15** App lifespan: build checkpointer + compiled graph; expose on `app.state`
+- [x] **T16** New `review_ticket(...)` entrypoint in `workflows/support_review.py` that wraps `graph.ainvoke` (TDD)
+- [x] **T17** Update Jira webhook handler in `interfaces/api/routers/support/router.py` to call the new entrypoint
+- [x] **T18** New approval endpoints: `POST /approve`, `POST /reject`, `GET /approval-status` under `interfaces/api/routers/support/`
+- [x] **T19** Functional E2E test: webhook → high-confidence path → END
+- [x] **T20** Functional E2E test: webhook → low-confidence interrupt → approve endpoint → resume → END
 - [ ] **T21** Move `interfaces/graphs/support_review.py` to `interfaces/graphs/_archive/support_review.py`
 - [ ] **T22** Delete archived-code tests under `tests/integration/interfaces/graphs/test_support_*.py` and `tests/functional/test_support_review.py`
 - [ ] **T23** Add import-linter contracts: forbid imports from `_archive/`; forbid `workflows` importing from legacy active sibling DAGs
@@ -151,6 +151,7 @@ The detailed TDD step list lives in [`docs/superpowers/plans/2026-04-26-pydantic
 | Date | What changed | Why |
 |------|-------------|-----|
 | 2026-04-26 | Initial draft | Brainstorm decisions ratified per `docs/superpowers/specs/2026-04-26-pydanticai-langgraph-adoption-design.md` |
+| 2026-04-26 | T15–T20 landed (lifespan wiring, entrypoints, hard-cut webhook, approval endpoints, E2E coverage) | Phase 3 of the plan: support workflow now serves traffic end-to-end on LangGraph |
 
 ## Outcome
 
