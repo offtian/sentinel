@@ -438,7 +438,7 @@ pipeline_runs (trace_id, pipeline_type, status, duration_ms)
 
 **Domain types:** `data/tracing_models.py` defines `PipelineRunRecord`, `NodeExecutionRecord`, `AgentCallRecord`.
 
-**ExecutionTracer** (`domain/pipeline/tracer.py`) — DB-backed tracer that records pipeline runs, node executions, and agent calls with prompt version metadata. Each `AgentCallRecord` captures `prompt_version` (git SHA + filename) and `prompt_sha256` for regulatory traceability. `ReplayBundle` (`domain/pipeline/types.py`) aggregates the full snapshot (model, prompts, MCP servers, skills, input payload) for reproducibility via `python -m sentinel.replay`.
+**ExecutionTracer** (`domain/pipeline/tracer.py`) — DB-backed tracer that records pipeline runs, node executions, and agent calls with prompt version metadata. Each `AgentCallRecord` captures `prompt_version` (git SHA + filename) and `prompt_sha256` for regulatory traceability. The legacy `ReplayBundle` (`domain/pipeline/types.py`) aggregates run-level metadata; the F4.5+ RFC §3.8 `ReplayBundle` (`utils/replay_bundle.py`) layers tool I/O + LLM I/O + canonical SHA on top for bit-for-bit replay via `python -m sentinel.replay <run_id> --replay`. See §Replay below.
 
 ## Observability
 
@@ -491,6 +491,61 @@ Sentinel api ── OTLPSpanExporter ──► langfuse-web:3000/api/public/otel
 ```
 
 The existing Tempo / Logfire-OTLP exporter remains live in parallel — Langfuse is additive, and unsetting `LANGFUSE_HOST` falls back cleanly to the prior console / Tempo path.
+
+## Replay
+
+The RFC §3.8 ReplayBundle (`src/sentinel/utils/replay_bundle.py`) is the per-run reproducibility contract. Every pipeline run that opts into capture (`cfg.enable_replay_bundle`, default true) persists a frozen, canonical-JSON snapshot to `pipeline_runs.replay_bundle_json` plus a SHA-256 over its canonical encoding to `pipeline_runs.replay_bundle_sha`. Replay re-executes the pipeline against recorded substitutes and exits non-zero on any drift.
+
+### Bundle shape
+
+| Field | Source | Purpose |
+|-------|--------|---------|
+| `envelope` | Ingress (RFC §3.1) | `request_id`, `tenant_id`, `cluster_id`, `region`, `pii_class`, `received_at` — replay reuses the original envelope verbatim so spans correlate. |
+| `alert_payload` | Webhook payload | The raw alert/ticket dict the pipeline ran against. |
+| `runbook_id` / `runbook_version_sha` | F6 (pinned later) | Identifies which runbook drove the run; runbook edits invalidate replay by changing the SHA. Currently `None` everywhere; F6 wires real values. |
+| `tool_io` | `ReplayCapturingToolset` (`plugins/toolsets/_runtime.py:46`) | Every tool invocation in invocation order: `tool_name`, `inputs`, `outputs`, `evidence_object_id`, `at`. |
+| `llm_io` | `CapturingModel` (`plugins/models/capturing.py`) | Every LLM agent invocation in invocation order: `agent_name`, `model_id`, `inputs`, `outputs`, `token_usage`, `at`. |
+| `final_outputs` | Pipeline reply | The final `InvestigationReply` / `SupportReply` dict. |
+| `bundle_sha` (derived) | `to_canonical_json` + SHA-256 | Sorted-keys, no-whitespace canonical JSON of every other field; identical inputs always produce identical SHA. |
+
+### Capture flow
+
+1. Worker / graph entry calls `et.start_pipeline(envelope=..., alert_payload=...)`. The tracer creates a `ReplayBundleBuilder` and binds it to a `ContextVar` so per-asyncio-task isolation is automatic — concurrent runs under `asyncio.gather` see only their own builder.
+2. `CommonConfiguration.load_agents()` wraps each registered agent's `.model` with `CapturingModel`; each `agent.run()` call records an `LLMIOEntry` into the active builder via `runtime.record_llm_call()`.
+3. Toolsets are wrapped with `ReplayCapturingToolset`; each `call_tool` records a `ToolIOEntry` via `runtime.record_tool_call()`.
+4. `et.complete_pipeline(...)` flushes the builder via `runtime.flush_replay_capture(...)`, builds the immutable bundle, serialises via `to_canonical_json`, and persists `replay_bundle_json` + `replay_bundle_sha` to the run row. The `ContextVar` token is always released (try/finally) so a persist failure cannot leak the binding to the next task.
+
+### Replay flow
+
+```
+python -m sentinel.replay <run_id>              # print canonical bundle JSON + sha
+python -m sentinel.replay <run_id> --replay     # re-execute against recorded I/O
+python -m sentinel.replay <run_id> --diff       # re-execute and diff vs original
+```
+
+`fetch_recorded_replay_bundle()` (`domain/pipeline/queries.py`) loads the row, reconstructs the frozen `ReplayBundle`, recomputes `bundle_sha`, and asserts equality with the stored SHA. Mismatch raises `ReplayBundleSHAMismatchError` (exit code 4) — the canary for canonicalisation regressions or DB corruption.
+
+The CLI swaps every registered agent's `.model` for a single shared `RecordedModel` (`plugins/models/recorded.py`) and every toolset slot for a single shared `RecordedToolset` (`plugins/toolsets/recorded.py`). Both are strict on order; `RecordedToolset` additionally asserts on `tool_name` and `inputs`. Drift raises `RecordedReplayMismatchError` (exit code 5) with a `kind` discriminator (`tool` / `tool_name` / `tool_args` / `llm`).
+
+### Determinism guarantee
+
+`tests/integration/test_replay_determinism.py` (F4.8) drives the full SRE graph against a synthetic crashloop bundle 30 times against fresh `RecordedModel` / `RecordedToolset` instances per iteration and asserts every output is byte-identical to `bundle.final_outputs`. The 30-run loop guards three regression classes:
+
+1. Iterator-state leak in `RecordedModel` / `RecordedToolset` queues across runs.
+2. `to_canonical_json` drift (sort order, separator, default coercion).
+3. Pipeline-level non-determinism in graph nodes (hash randomisation, dict ordering, asyncio race).
+
+R-AG-4 (RFC §14.7) names 100 runs; foundations CI does 30 to keep wall time bounded; the week-5 nightly job extends to 100. Marked `@pytest.mark.slow` and wired into `just test-integration` via the default glob.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Inspection / replay match |
+| 1 | No recorded bundle for `run_id` (pre-F4.7 row or capture disabled) |
+| 3 | `--diff` drift — outputs differ |
+| 4 | Bundle SHA mismatch (canonicalisation regression / DB corruption) |
+| 5 | Replay drift mid-run (`RecordedReplayMismatchError`) |
 
 ## Deployment
 
