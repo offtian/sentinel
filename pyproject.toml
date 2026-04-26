@@ -290,6 +290,9 @@ pythonpath = ["src"]
 asyncio_mode = "auto"
 asyncio_default_test_loop_scope = "session"
 asyncio_default_fixture_loop_scope = "session"
+markers = [
+    "slow: marks tests that exercise expensive paths (e.g. F4.8 30-run determinism); kept on by default in test-integration",
+]
 
 env = [
     "PYTHONBREAKPOINT=ipdb.set_trace",
