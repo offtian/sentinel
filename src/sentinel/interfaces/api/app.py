@@ -18,7 +18,7 @@ from sentinel.interfaces.api.routers.support.router import router as support_rou
 from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.workflows import _checkpointer as workflows_checkpointer
 from sentinel.interfaces.workflows import support_review as workflows_support_review
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 from sentinel.utils import logs
 
 
@@ -29,7 +29,6 @@ async def lifespan(app: fastapi.FastAPI) -> AsyncGenerator[None]:
     cfg.load_agents(agent_module=agent_module)
     bootstrap_otel.init_otel()
 
-    settings = get_settings()
     saver_close: Callable[[], Awaitable[None]] | None = None
     app.state.support_review_graph = None
     app.state.support_review_checkpointer_close = None

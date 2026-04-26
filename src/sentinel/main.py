@@ -12,7 +12,7 @@ from sentinel.interfaces.slack import (
     event_handlers as _event_handlers,  # noqa: F401 — registers @app decorators
 )
 from sentinel.interfaces.slack.app import app as slack_app
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 
 
 async def _run_api() -> None:
@@ -27,7 +27,7 @@ async def _run_api() -> None:
 
 
 async def _run_slack() -> None:
-    handler = AsyncSocketModeHandler(slack_app, get_settings().slack_app_token)
+    handler = AsyncSocketModeHandler(slack_app, settings.slack_app_token)
     await handler.start_async()  # type: ignore[no-untyped-call]
 
 
@@ -38,7 +38,7 @@ async def _main() -> None:
     cfg = config_mod.get_config()
     cfg.load_agents(agent_module=agent_module)
 
-    if get_settings().slack_app_token:
+    if settings.slack_app_token:
         await asyncio.gather(_run_api(), _run_slack())
     else:
         await _run_api()

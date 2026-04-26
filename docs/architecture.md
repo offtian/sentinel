@@ -326,7 +326,8 @@ traffic to a half-wired proxy.
 Three layers, top to bottom:
 
 - **`settings.py`** — Pydantic `Settings` class. The only module that
-  reads env vars; `get_settings()` returns a process-wide singleton.
+  reads env vars; exposes a module-level `settings = Settings()`
+  instance that consumers import directly.
 - **`config.py`** — `BaseConfiguration` (Pydantic). Carries the
   layered configuration fields with firm-wide defaults
   (`investigation_loop_cap`, `investigation_timeout_seconds`,

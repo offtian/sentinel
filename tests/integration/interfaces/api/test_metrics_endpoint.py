@@ -30,7 +30,7 @@ def _mock_db_lifespan():
             "sentinel.interfaces.api.app.workflows_support_review.build_support_review_graph"
         ),
         mock.patch(
-            "sentinel.interfaces.api.app.get_settings",
+            "sentinel.interfaces.api.app.settings",
             return_value=mock.Mock(
                 database_url="fake", otel_metrics_enabled=True, otel_service_name="sentinel-test"
             ),

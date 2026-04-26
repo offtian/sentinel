@@ -17,7 +17,7 @@ class TestInitOtel:
 
     def test_no_op_when_metrics_disabled(self):
         # Given metrics are disabled in settings
-        with mock.patch.object(bootstrap_otel, "get_settings") as mock_settings:
+        with mock.patch.object(bootstrap_otel, "settings") as mock_settings:
             mock_settings.return_value.otel_metrics_enabled = False
             mock_settings.return_value.otel_service_name = "sentinel"
 
@@ -30,7 +30,7 @@ class TestInitOtel:
     def test_initialises_meter_when_enabled(self):
         # Given metrics are enabled
         with (
-            mock.patch.object(bootstrap_otel, "get_settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
             mock.patch.object(bootstrap_otel, "HTTPXClientInstrumentor"),
             mock.patch.object(bootstrap_otel, "SystemMetricsInstrumentor"),
         ):
@@ -45,7 +45,7 @@ class TestInitOtel:
 
     def test_swallows_exceptions(self):
         # Given an init that raises
-        with mock.patch.object(bootstrap_otel, "get_settings") as mock_settings:
+        with mock.patch.object(bootstrap_otel, "settings") as mock_settings:
             mock_settings.return_value.otel_metrics_enabled = True
             mock_settings.side_effect = RuntimeError("boom")
 
@@ -63,7 +63,7 @@ class TestInitTraces:
     def test_no_op_when_traces_disabled(self):
         # Given traces are disabled in settings
         with (
-            mock.patch.object(bootstrap_otel, "get_settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
             mock.patch.object(bootstrap_otel, "logs") as mock_logs,
         ):
             mock_settings.return_value.otel_traces_enabled = False
@@ -78,7 +78,7 @@ class TestInitTraces:
     def test_no_op_when_no_endpoint(self):
         # Given traces enabled but no endpoint configured
         with (
-            mock.patch.object(bootstrap_otel, "get_settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
             mock.patch.object(bootstrap_otel, "logs") as mock_logs,
         ):
             mock_settings.return_value.otel_traces_enabled = True
@@ -94,7 +94,7 @@ class TestInitTraces:
         # Given traces enabled with a valid endpoint
         mock_logfire = mock.MagicMock()
         with (
-            mock.patch.object(bootstrap_otel, "get_settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
             mock.patch.dict("sys.modules", {"logfire": mock_logfire}),
             mock.patch.object(bootstrap_otel, "os"),
             mock.patch.object(bootstrap_otel, "logs"),
@@ -116,7 +116,7 @@ class TestInitTraces:
         # Given traces enabled with a valid endpoint
         mock_logfire = mock.MagicMock()
         with (
-            mock.patch.object(bootstrap_otel, "get_settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
             mock.patch.dict("sys.modules", {"logfire": mock_logfire}),
             mock.patch.object(bootstrap_otel, "os") as patched_os,
             mock.patch.object(bootstrap_otel, "logs"),
@@ -137,7 +137,7 @@ class TestInitTraces:
         # Given traces already initialised
         mock_logfire = mock.MagicMock()
         with (
-            mock.patch.object(bootstrap_otel, "get_settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
             mock.patch.dict("sys.modules", {"logfire": mock_logfire}),
             mock.patch.object(bootstrap_otel, "os"),
             mock.patch.object(bootstrap_otel, "logs"),
@@ -155,8 +155,8 @@ class TestInitTraces:
             mock_logfire.configure.assert_not_called()
 
     def test_swallows_exceptions(self):
-        # Given get_settings raises
-        with mock.patch.object(bootstrap_otel, "get_settings") as mock_settings:
+        # Given settings raises
+        with mock.patch.object(bootstrap_otel, "settings") as mock_settings:
             mock_settings.side_effect = RuntimeError("boom")
 
             # When init_traces is called — Then no exception escapes
@@ -196,7 +196,7 @@ class TestInitTracesLangfuseWiring:
         provider = mock.MagicMock()
         mock_logfire = mock.MagicMock()
         with (
-            mock.patch.object(bootstrap_otel, "get_settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
             mock.patch.dict("sys.modules", {"logfire": mock_logfire}),
             mock.patch.object(bootstrap_otel, "os"),
             mock.patch.object(bootstrap_otel, "logs"),
@@ -224,7 +224,7 @@ class TestInitTracesLangfuseWiring:
         exporter_instance = mock.MagicMock()
         batch_processor_instance = mock.MagicMock()
         with (
-            mock.patch.object(bootstrap_otel, "get_settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
             mock.patch.dict("sys.modules", {"logfire": mock_logfire}),
             mock.patch.object(bootstrap_otel, "os"),
             mock.patch.object(bootstrap_otel, "logs"),
@@ -261,7 +261,7 @@ class TestInitTracesLangfuseWiring:
         provider = mock.MagicMock()
         mock_logfire = mock.MagicMock()
         with (
-            mock.patch.object(bootstrap_otel, "get_settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
             mock.patch.dict("sys.modules", {"logfire": mock_logfire}),
             mock.patch.object(bootstrap_otel, "os"),
             mock.patch.object(bootstrap_otel, "logs"),
@@ -288,7 +288,7 @@ class TestInitTracesLangfuseWiring:
         mock_logfire = mock.MagicMock()
         exporter_instance = mock.MagicMock()
         with (
-            mock.patch.object(bootstrap_otel, "get_settings") as mock_settings,
+            mock.patch.object(bootstrap_otel, "settings") as mock_settings,
             mock.patch.dict("sys.modules", {"logfire": mock_logfire}),
             mock.patch.object(bootstrap_otel, "os"),
             mock.patch.object(bootstrap_otel, "logs"),

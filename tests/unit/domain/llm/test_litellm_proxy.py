@@ -48,8 +48,7 @@ def _install_settings(
 ) -> None:
     """Install a Settings instance behind the cached config singleton."""
     fake_settings = _build_settings(base_url=base_url, virtual_key=virtual_key)
-    monkeypatch.setattr(settings_module, "_settings", fake_settings, raising=False)
-    monkeypatch.setattr(settings_module, "get_settings", lambda: fake_settings)
+    monkeypatch.setattr(settings_module, "settings", fake_settings)
     # Bypass the config singleton — the helper only needs settings, not a
     # fully-loaded CommonConfiguration with vendor adapters.
     monkeypatch.setattr(config_module, "_config", None, raising=False)

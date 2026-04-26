@@ -42,7 +42,7 @@ from sentinel.domain.support import operations as support_ops
 from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.graphs import common, investigation, support_review
 from sentinel.interfaces.graphs.agents import k8s_runner
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 from sentinel.utils import llm_warmup, logs
 
 
@@ -175,7 +175,6 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     alert = alert_entities.Alert.model_validate(payload)
 
     cfg = config_mod.get_config()
-    settings = get_settings()
     holmes = cfg.build_holmes_adapter()
     pd_client = cfg.pagerduty_client if settings.pagerduty_api_key else None
     k8s_adapter = cfg.build_k8s_investigation_adapter(
@@ -286,7 +285,6 @@ async def _run_support_review(payload: dict[str, object]) -> str:
     """Execute the support review pipeline for a job payload."""
     ticket = support_entities.Ticket.model_validate(payload)
     cfg = config_mod.get_config()
-    settings = get_settings()
 
     db = _get_optional_db()
     et = pipeline_tracer.ExecutionTracer(db=db)
@@ -393,8 +391,8 @@ async def _run_scheduled_automation(payload: dict[str, object]) -> str:
 
 async def _poll_loop(*, worker_id: str) -> None:
     """Main poll loop: claim and execute jobs until shutdown is requested."""
-    poll_interval = get_settings().worker_poll_interval
-    job_timeout = get_settings().worker_job_timeout
+    poll_interval = settings.worker_poll_interval
+    job_timeout = settings.worker_job_timeout
 
     logs.log_event(
         "worker.started",
@@ -442,7 +440,7 @@ async def _poll_loop(*, worker_id: str) -> None:
 
 async def _run_once(*, worker_id: str) -> None:
     """Claim and execute a single job, then exit. Designed for CronJob usage."""
-    job_timeout = get_settings().worker_job_timeout
+    job_timeout = settings.worker_job_timeout
 
     logs.log_event(
         "worker.run_once_started",
@@ -487,7 +485,7 @@ async def _main() -> None:
 
     worker_id = os.environ.get("HOSTNAME", f"worker-{os.getpid()}")
 
-    if get_settings().database_url:
+    if settings.database_url:
         database.get_engine()
         await async_db.connect_db()
         logs.log_event("worker.database_initialised")
@@ -505,7 +503,7 @@ async def _main() -> None:
     finally:
         if not warmup_task.done():
             warmup_task.cancel()
-        if get_settings().database_url:
+        if settings.database_url:
             await async_db.disconnect_db()
         await database.close_engine()
 

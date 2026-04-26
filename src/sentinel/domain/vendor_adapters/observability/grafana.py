@@ -23,7 +23,7 @@ from typing import Any
 import httpx
 
 from sentinel.domain.vendor_adapters.observability.base import BaseObservabilityClient
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 from sentinel.utils import logs
 
 
@@ -45,12 +45,13 @@ class GrafanaClient(BaseObservabilityClient):
         loki_datasource_uid: str | None = None,
         tempo_datasource_uid: str | None = None,
     ) -> None:
-        s = get_settings()
-        self._grafana_url = (grafana_url or s.grafana_url).rstrip("/")
-        self._api_token = api_token or s.grafana_api_token
-        self._prometheus_uid = prometheus_datasource_uid or s.grafana_prometheus_datasource_uid
-        self._loki_uid = loki_datasource_uid or s.grafana_loki_datasource_uid
-        self._tempo_uid = tempo_datasource_uid or s.grafana_tempo_datasource_uid
+        self._grafana_url = (grafana_url or settings.grafana_url).rstrip("/")
+        self._api_token = api_token or settings.grafana_api_token
+        self._prometheus_uid = (
+            prometheus_datasource_uid or settings.grafana_prometheus_datasource_uid
+        )
+        self._loki_uid = loki_datasource_uid or settings.grafana_loki_datasource_uid
+        self._tempo_uid = tempo_datasource_uid or settings.grafana_tempo_datasource_uid
 
     @property
     def is_configured(self) -> bool:

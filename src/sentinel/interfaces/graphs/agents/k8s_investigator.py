@@ -9,6 +9,7 @@ at runtime via toolsets.
 from __future__ import annotations
 
 import dataclasses
+from typing import Any
 
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
@@ -54,16 +55,21 @@ def _build_k8s_context(ctx: RunContext[Dependencies]) -> str:
 
 
 def build_agent(
-    *, model: str | None = None, skills: tuple[str, ...] = ()
+    *, model: Any | None = None, skills: tuple[str, ...] = ()
 ) -> Agent[Dependencies, K8sInvestigationOutput]:
     """
     Build the K8s investigator agent with configured skills baked in.
+
+    :param model: PydanticAI ``Model`` instance, model identifier string,
+        or ``None``. ``CommonConfiguration._build_agent_model`` resolves
+        the proxy-routing OpenAIChatModel; passing ``None`` falls back to
+        the ``"test"`` placeholder for unit tests.
     """
     system_prompt = utils.compose_system_prompt(
         base_prompt=_PROMPT_TEMPLATE.system_text, skill_names=skills
     )
     agent_instance: Agent[Dependencies, K8sInvestigationOutput] = Agent(
-        utils.resolve_agent_model(model or "test"),
+        model if model is not None else "test",
         deps_type=Dependencies,
         output_type=K8sInvestigationOutput,
         system_prompt=system_prompt,

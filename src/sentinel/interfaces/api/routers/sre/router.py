@@ -16,7 +16,7 @@ from sentinel.domain.investigations import queries as sre_queries
 from sentinel.domain.jobs import operations as job_ops
 from sentinel.interfaces.api.dependencies import require_database
 from sentinel.interfaces.webhooks import envelope_factory, pagerduty
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 from sentinel.utils import logs
 
 
@@ -86,7 +86,6 @@ def _build_webhook_envelope(
     raises ``EnvelopeIngressError`` when on and tenant_id cannot be derived.
     """
     request_id = request.state.request_id
-    settings = get_settings()
     config = get_config()
     builder = _SOURCE_TO_ENVELOPE_BUILDER[source]
     return builder(
@@ -145,7 +144,7 @@ async def _handle_webhook(
     except envelope_factory.EnvelopeIngressError as exc:
         return _envelope_ingress_failure_response(exc)
 
-    if not get_settings().sre_auto_investigate:
+    if not settings.sre_auto_investigate:
         return fastapi.responses.JSONResponse(
             status_code=200,
             content={"status": "received", "alert_id": alert.id, "auto_investigate": False},
@@ -216,7 +215,7 @@ async def trigger_investigation(
 
     envelope = envelope_factory.envelope_for_manual(
         request_id=request.state.request_id,
-        settings=get_settings(),
+        settings=settings,
     )
     return await _enqueue_alert(alert, requested_by="api:manual", envelope=envelope)
 

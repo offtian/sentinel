@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from slack_sdk.web.async_client import AsyncWebClient
 
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 from sentinel.utils import logs
 
 
@@ -20,8 +20,8 @@ def _get_client() -> AsyncWebClient | None:
     Return a cached Slack client, or None if no token is configured.
     """
     global _client  # noqa: PLW0603
-    if _client is None and get_settings().slack_bot_token:
-        _client = AsyncWebClient(token=get_settings().slack_bot_token)
+    if _client is None and settings.slack_bot_token:
+        _client = AsyncWebClient(token=settings.slack_bot_token)
     return _client
 
 
@@ -40,7 +40,7 @@ async def post_investigation_summary(
 
     Uses Slack Web API to send a formatted message with investigation results.
     """
-    target_channel = channel or get_settings().sre_slack_channel
+    target_channel = channel or settings.sre_slack_channel
     client = _get_client()
     if not target_channel or not client:
         logs.log_event(
@@ -82,7 +82,7 @@ async def post_support_suggestion(
     category: str | None,
 ) -> None:
     """Post a support response suggestion to a Slack channel."""
-    target_channel = channel or get_settings().support_slack_channel
+    target_channel = channel or settings.support_slack_channel
     client = _get_client()
     if not target_channel or not client:
         logs.log_event(
@@ -184,7 +184,7 @@ async def post_approval_request(
 
     Return the message timestamp (``ts``) for tracking, or None if posting was skipped.
     """
-    target_channel = channel or get_settings().sre_slack_channel
+    target_channel = channel or settings.sre_slack_channel
     client = _get_client()
     if not target_channel or not client:
         logs.log_event(

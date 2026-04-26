@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 
 
 _engine: AsyncEngine | None = None
@@ -21,7 +21,7 @@ def get_engine() -> AsyncEngine:
     global _engine  # noqa: PLW0603
     if _engine is None:
         _engine = create_async_engine(
-            get_settings().database_url,
+            settings.database_url,
             echo=False,
             pool_pre_ping=True,
             pool_size=5,

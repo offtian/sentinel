@@ -4,7 +4,8 @@ import os
 
 import litellm
 
-from sentinel import bootstrap_otel, settings
+from sentinel import bootstrap_otel
+from sentinel.settings import settings
 from sentinel.utils import logs
 
 
@@ -31,12 +32,10 @@ def _configure_llm_env() -> None:
     LiteLLM SDK settings (``drop_params``, ``request_timeout``) are kept
     so any direct ``litellm.completion(...)`` calls still behave well.
     """
-    cfg = settings.get_settings()
-
     litellm.drop_params = True  # Ignore unsupported params per provider
     litellm.request_timeout = 300  # type: ignore[attr-defined]  # Local models can be slow
 
-    ollama_url = cfg.ollama_base_url.rstrip("/")
+    ollama_url = settings.ollama_base_url.rstrip("/")
     if not ollama_url.endswith("/v1"):
         ollama_url = f"{ollama_url}/v1"
 
@@ -50,25 +49,19 @@ def _configure_llm_env() -> None:
 def _log_litellm_proxy_state() -> None:
     """
     Emit a structured-log event recording whether the LiteLLM proxy is wired
-    (RFC §2.4, ADR 0007).
+    (RFC §2.4, ADR 0007). The virtual key is never logged.
 
-    - ``litellm_base_url`` unset -> WARNING ``litellm_proxy_disabled`` with a
-      ``fallback=in_process_sdk`` marker. This is the local-dev path.
-    - ``litellm_base_url`` set -> INFO ``litellm_proxy_enabled`` with the
-      proxy host. The virtual key is NEVER logged.
+    Both ``litellm_base_url`` and ``litellm_virtual_key`` must be set; partial
+    config falls into ``litellm.proxy.disabled`` so bootstrap matches the
+    helper's fail-safe semantics. Bootstrap reads the fields directly rather
+    than calling into ``domain.llm.litellm_proxy`` to respect the
+    import-linter layering contract (bootstrap may not import domain).
     """
-    cfg = settings.get_settings()
-    if cfg.litellm_base_url is None:
-        logs.get_logger().warning(
-            "litellm_proxy_disabled",
-            fallback="in_process_sdk",
-        )
+    if settings.litellm_base_url is None or settings.litellm_virtual_key is None:
+        logs.log_event("litellm.proxy.disabled", params={"fallback": "in_process_sdk"})
         return
 
-    logs.log_event(
-        "litellm_proxy_enabled",
-        params={"host": str(cfg.litellm_base_url)},
-    )
+    logs.log_event("litellm.proxy.enabled", params={"host": str(settings.litellm_base_url)})
 
 
 def initialise() -> None:

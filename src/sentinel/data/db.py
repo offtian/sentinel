@@ -11,7 +11,7 @@ from __future__ import annotations
 import databases
 
 from sentinel.data import _dsn
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 
 
 _db: databases.Database | None = None
@@ -25,7 +25,7 @@ def get_db() -> databases.Database:
     """
     global _db  # noqa: PLW0603
     if _db is None:
-        url = get_settings().database_url
+        url = settings.database_url
         if not url:
             raise RuntimeError(
                 "DATABASE_URL is not configured. Set the DATABASE_URL environment variable."

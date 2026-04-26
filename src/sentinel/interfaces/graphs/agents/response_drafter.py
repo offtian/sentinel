@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+from typing import Any
 
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
@@ -72,16 +73,21 @@ def _inject_response_pattern_skills(ctx: RunContext[Dependencies]) -> str:
 
 
 def build_agent(
-    *, model: str | None = None, skills: tuple[str, ...] = ()
+    *, model: Any | None = None, skills: tuple[str, ...] = ()
 ) -> Agent[Dependencies, DraftedResponse]:
     """
     Build the response drafter agent with configured skills baked in.
+
+    :param model: PydanticAI ``Model`` instance, model identifier string,
+        or ``None``. ``CommonConfiguration._build_agent_model`` resolves
+        the proxy-routing OpenAIChatModel; passing ``None`` falls back to
+        the ``"test"`` placeholder for unit tests.
     """
     system_prompt = utils.compose_system_prompt(
         base_prompt=_PROMPT_TEMPLATE.system_text, skill_names=skills
     )
     agent_instance: Agent[Dependencies, DraftedResponse] = Agent(
-        utils.resolve_agent_model(model or "test"),
+        model if model is not None else "test",
         deps_type=Dependencies,
         output_type=DraftedResponse,
         system_prompt=system_prompt,

@@ -2051,7 +2051,6 @@ classDiagram
     +HttpUrl langfuse_host
     +HttpUrl otel_collector_endpoint
     +Path runbooks_root
-    +get_settings() Settings$
   }
 
   class BaseConfig {
@@ -2316,10 +2315,7 @@ class Settings(BaseSettings):
     enable_self_consistency: bool = False         # expensive; enable selectively
 
 
-@lru_cache(maxsize=1)
-def get_settings() -> Settings:
-    """Singleton settings. Test code calls .cache_clear() to force a reload."""
-    return Settings()  # type: ignore[call-arg]   # pydantic-settings reads env at instantiation
+settings = Settings()
 ```
 
 Notes:
@@ -2352,7 +2348,7 @@ from attrs import field, frozen
 from sentinel.plugins.common.approval import ApprovalPolicy
 from sentinel.plugins.common.output import OutputChannel
 from sentinel.plugins.common.redaction import RedactionPolicy
-from sentinel.settings import Settings, get_settings
+from sentinel.settings import Settings, settings
 
 if TYPE_CHECKING:
     from sentinel.plugins.teams import TeamConfig
@@ -2462,7 +2458,7 @@ def get_config() -> "TeamConfig":
     env vars, or constructs a *TeamConfig directly to inject test-specific
     values without touching the env layer at all.
     """
-    return build_team_config(get_settings())
+    return build_team_config(settings)
 ```
 
 **Why `team_id` is the only `@abstractmethod`**: it's the discriminator. Every other field has a sensible-or-explicitly-empty default, so a partial subclass would still construct. `team_id` is what tells the rest of the system which profile this is, and there's no sane default — so we force every concrete config to declare it.

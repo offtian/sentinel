@@ -2,7 +2,7 @@
 
 **Status:** in-progress
 **Created:** 2026-04-26
-**Last updated:** 2026-04-26
+**Last updated:** 2026-04-26 (post /simplify review)
 
 ## Goal
 
@@ -59,13 +59,15 @@ decision (Pydantic Graph vs LangGraph) as ADR 0007 — default position is
 
 ## Steps
 
-- [x] **F5.1** Author `docs/adrs/0007-orchestration-framework.md` — Pydantic Graph vs LangGraph; default position stay on Pydantic Graph for foundations.
-- [ ] **F5.2** Create `src/sentinel/domain/llm/litellm_proxy.py` helper + unit tests; audit existing `litellm.*` call sites.
-- [ ] **F5.3** Update 5 PydanticAI agent factories to pass proxy kwargs via the helper when configured; unit tests per factory.
-- [ ] **F5.4** Local-dev fallback + startup structured-log warning (`litellm_proxy_disabled` / `litellm_proxy_enabled`).
-- [ ] **F5.5** Integration test `tests/integration/test_litellm_proxy.py` with mocked proxy.
-- [ ] **F5.6** Update `.env.default` and `docs/architecture.md` §LLM.
-- [ ] **F5.7** Skip-marked acceptance-test scaffold for R-OB-1 egress block.
+- [x] **F5.1** Author `docs/adrs/0007-orchestration-framework.md` — Pydantic Graph vs LangGraph; default position stay on Pydantic Graph for foundations. *(commit `da4cb9b`)*
+- [x] **F5.2** Create `src/sentinel/domain/llm/litellm_proxy.py` helper + unit tests; audit existing `litellm.*` call sites. *(commit `29619fc`; audit confirmed zero direct `litellm.completion`/`acompletion` model-call sites — all routed through PydanticAI's `litellm:` prefix)*
+- [x] **F5.3** Update 5 PydanticAI agent factories to pass proxy kwargs via the helper when configured; unit tests per factory. *(commit `33fbcf4`; supersedes by layering refactor below)*
+- [x] **F5.4** Local-dev fallback + startup structured-log warning (`litellm_proxy_disabled` / `litellm_proxy_enabled`). *(commit `8f34595`)*
+- [ ] **F5.5** Integration test `tests/integration/test_litellm_proxy.py` with mocked proxy. *(blocked on layering refactor; will use `httpx.MockTransport` since neither `pytest-httpx` nor `respx` is in dev deps)*
+- [x] **F5.6** Update `.env.default` and `docs/architecture.md` §LLM. *(commit `a1e7166`)*
+- [x] **F5.7** Skip-marked acceptance-test scaffold for R-OB-1 egress block. *(commit `3e1ad18`)*
+- [ ] **Layering refactor** Lift LiteLLM Model construction + prompt template loading out of `interfaces/graphs/agents/` and into `CommonConfiguration` per `application.md` ("Vendor adapters, agents, and infra clients live on CommonConfiguration"). Drop `utils.resolve_agent_model`. Factories take `system_prompt: str`, `prompt_sha256: str`, and `model: Model | str`. Add `BaseConfiguration.prompt_sha_for(name)` parallel to `agent_for(name)`. *(in flight on `f5-layering` teammate)*
+- [ ] **Code-review fixes** Apply convergent findings from /simplify pass (see Changes log).
 - [ ] Run `just lint && just test` clean; check off umbrella plan items in `sentinel-hedgefund-foundations.md` §F5.
 - [ ] Open PR; update `docs/plans/INDEX.md` after merge.
 
@@ -74,6 +76,8 @@ decision (Pydantic Graph vs LangGraph) as ADR 0007 — default position is
 | Date | What changed | Why |
 |------|-------------|-----|
 | 2026-04-26 | Plan created | Branch hook requires plan file before code edits |
+| 2026-04-26 | Added "Layering refactor" step | User flagged that proxy-aware Model construction + prompt template loading should live at the config layer, not in `interfaces/graphs/agents/`. f5-layering teammate dispatched. F5.5 integration test blocked on this so the test targets the final config-layer surface. |
+| 2026-04-26 | /simplify reviews captured findings | Convergent across reuse + quality + efficiency reviews: (a) bootstrap split-brain — `_log_litellm_proxy_state` checks `litellm_base_url` only while helper requires both fields, so bootstrap logs `enabled` for partial config while helper falls back; (b) asymmetric logging APIs in bootstrap (`logs.get_logger().warning` vs `logs.log_event`) inconsistent with project pattern (see `utils/llm_warmup.py` for canonical dotted-event style); (c) `is_proxy_configured()` + `get_proxy_kwargs()` dual API doubles settings reads and only emits the partial-config warning from the second call. Fixes (a) + (b) apply now to files outside f5-layering's territory; (c) deferred until after f5-layering lands so the helper API change doesn't conflict with their WIP. |
 
 ## Outcome
 

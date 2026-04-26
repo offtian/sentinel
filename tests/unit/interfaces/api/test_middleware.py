@@ -251,10 +251,14 @@ class TestRequestIdMiddlewareResponseHeader:
 class TestRequestIdMiddlewareWiring:
     """Tests that the middleware is registered on the production app."""
 
-    def test_main_app_health_check_echoes_request_id(self):
+    def test_main_app_health_check_echoes_request_id(self, patch_settings):
         # Given the production FastAPI app with the DB and LangGraph
         # checkpointer lifespan steps stubbed so the test does not need
         # a live database
+        fake = patch_settings(api_app)
+        fake.database_url = "fake"
+        fake.otel_metrics_enabled = False
+        fake.otel_service_name = "sentinel-test"
         saver_close = mock.AsyncMock()
         with (
             mock.patch("sentinel.interfaces.api.app.async_db.connect_db"),
@@ -268,14 +272,6 @@ class TestRequestIdMiddlewareWiring:
             ),
             mock.patch(
                 "sentinel.interfaces.api.app.workflows_support_review.build_support_review_graph"
-            ),
-            mock.patch(
-                "sentinel.interfaces.api.app.get_settings",
-                return_value=mock.Mock(
-                    database_url="fake",
-                    otel_metrics_enabled=False,
-                    otel_service_name="sentinel-test",
-                ),
             ),
             TestClient(api_app.app) as client,
         ):

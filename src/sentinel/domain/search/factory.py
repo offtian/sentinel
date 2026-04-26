@@ -12,7 +12,7 @@ from sentinel.domain.search.mock_searchers import (
 from sentinel.domain.vendor_adapters.confluence import ConfluenceClient
 from sentinel.domain.vendor_adapters.jira import JiraClient
 from sentinel.domain.vendor_adapters.observability import DatadogClient
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 
 
 def build_document_searcher() -> searcher_module.BaseDocumentSearcher | None:
@@ -24,7 +24,7 @@ def build_document_searcher() -> searcher_module.BaseDocumentSearcher | None:
       "mock"        — returns static canned results; safe for local/offline dev
       anything else — returns None (document search is skipped in the pipeline)
     """
-    backend = get_settings().document_searcher
+    backend = settings.document_searcher
 
     if backend == "mock":
         return MockDocumentSearcher()
@@ -34,9 +34,7 @@ def build_document_searcher() -> searcher_module.BaseDocumentSearcher | None:
         if not client.is_configured:
             return None
 
-        space_keys = [
-            k.strip() for k in get_settings().confluence_space_keys.split(",") if k.strip()
-        ]
+        space_keys = [k.strip() for k in settings.confluence_space_keys.split(",") if k.strip()]
         return ConfluenceDocumentSearcher(client=client, space_keys=space_keys or None)
 
     # "bedrock_knowledge_base" or any unrecognised value: skip doc search
@@ -50,14 +48,14 @@ def build_ticket_searcher() -> searcher_module.BasePastTicketSearcher | None:
     When DOCUMENT_SEARCHER=mock the ticket searcher is also mocked so local dev
     gets a fully self-contained pipeline without needing real Jira credentials.
     """
-    if get_settings().document_searcher == "mock":
+    if settings.document_searcher == "mock":
         return MockPastTicketSearcher()
 
     client = JiraClient()
     if not client.is_configured:
         return None
 
-    project_keys = [k.strip() for k in get_settings().jira_project_keys.split(",") if k.strip()]
+    project_keys = [k.strip() for k in settings.jira_project_keys.split(",") if k.strip()]
     return JiraPastTicketSearcher(client=client, project_keys=project_keys or None)
 
 
@@ -66,7 +64,7 @@ def build_metrics_searcher() -> searcher_module.BaseMetricsSearcher | None:
     Return a DatadogMetricsSearcher if Datadog is configured, a mock if in mock mode,
     otherwise None.
     """
-    if get_settings().document_searcher == "mock":
+    if settings.document_searcher == "mock":
         return MockMetricsSearcher()
 
     client = DatadogClient()

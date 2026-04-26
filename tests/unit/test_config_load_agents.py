@@ -20,10 +20,10 @@ from unittest import mock
 import pytest
 
 from sentinel import config as config_mod
-from sentinel import settings as settings_mod
 from sentinel.domain import skills as skills_mod
 from sentinel.interfaces.graphs import agents
 from sentinel.plugins.common import config as plugin_config_mod
+from sentinel.settings import settings
 
 
 _ALL_AGENT_MODULES = (
@@ -65,7 +65,7 @@ def stub_factories() -> dict[str, mock.MagicMock]:
 
 
 def _make_config() -> plugin_config_mod.CommonConfiguration:
-    return plugin_config_mod.CommonConfiguration(settings=settings_mod.get_settings())
+    return plugin_config_mod.CommonConfiguration(settings=settings)
 
 
 class TestLoadAgents:

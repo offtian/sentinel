@@ -64,7 +64,7 @@ def _inject_runbook_skills(ctx: RunContext[Dependencies]) -> str:
 
 
 def build_agent(
-    *, model: str | None = None, skills: tuple[str, ...] = ()
+    *, model: Any | None = None, skills: tuple[str, ...] = ()
 ) -> Agent[Dependencies, RootCauseAnalysis]:
     """
     Build the root cause analyser agent with configured skills baked in.
@@ -73,12 +73,17 @@ def build_agent(
     configured static skills via the ``@agent.system_prompt`` hook, so the
     operator can declare a base runbook set in ``config.load_agents()``
     and let the classifier output add category-specific skills at runtime.
+
+    :param model: PydanticAI ``Model`` instance, model identifier string,
+        or ``None``. ``CommonConfiguration._build_agent_model`` resolves
+        the proxy-routing OpenAIChatModel; passing ``None`` falls back to
+        the ``"test"`` placeholder for unit tests.
     """
     system_prompt = utils.compose_system_prompt(
         base_prompt=_PROMPT_TEMPLATE.system_text, skill_names=skills
     )
     agent_instance: Agent[Dependencies, RootCauseAnalysis] = Agent(
-        utils.resolve_agent_model(model or "test"),
+        model if model is not None else "test",
         deps_type=Dependencies,
         output_type=RootCauseAnalysis,
         system_prompt=system_prompt,

@@ -8,7 +8,7 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore", UserWarning)
     from pdpyras import APISession
 
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 from sentinel.utils import logs
 
 
@@ -20,7 +20,7 @@ class PagerDutyClient:
     """
 
     def __init__(self, *, api_key: str | None = None) -> None:
-        self._api_key = api_key if api_key is not None else get_settings().pagerduty_api_key
+        self._api_key = api_key if api_key is not None else settings.pagerduty_api_key
 
     @property
     def is_configured(self) -> bool:

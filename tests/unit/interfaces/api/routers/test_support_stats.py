@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from sentinel.interfaces.api import app as api_app
+from sentinel.interfaces.api import dependencies as api_dependencies
 
 
 @pytest.fixture
@@ -14,17 +15,15 @@ def client():
 
 
 @pytest.fixture
-def _database_configured(monkeypatch):
-    from sentinel.settings import get_settings
-
-    monkeypatch.setattr(get_settings(), "database_url", "postgresql+asyncpg://fake/db")
+def _database_configured(patch_settings):
+    fake = patch_settings(api_dependencies)
+    fake.database_url = "postgresql+asyncpg://fake/db"
 
 
 @pytest.fixture
-def _database_not_configured(monkeypatch):
-    from sentinel.settings import get_settings
-
-    monkeypatch.setattr(get_settings(), "database_url", "")
+def _database_not_configured(patch_settings):
+    fake = patch_settings(api_dependencies)
+    fake.database_url = ""
 
 
 class TestGetSupportStats:

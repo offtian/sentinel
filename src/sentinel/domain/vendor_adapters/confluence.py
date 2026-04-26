@@ -6,7 +6,7 @@ from typing import Any
 
 from atlassian import Confluence
 
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 from sentinel.utils import logs
 
 
@@ -24,9 +24,9 @@ class ConfluenceClient:
         api_token: str | None = None,
         user_email: str | None = None,
     ) -> None:
-        self._base_url = base_url if base_url is not None else get_settings().confluence_base_url
-        self._api_token = api_token if api_token is not None else get_settings().jira_api_token
-        self._user_email = user_email if user_email is not None else get_settings().jira_user_email
+        self._base_url = base_url if base_url is not None else settings.confluence_base_url
+        self._api_token = api_token if api_token is not None else settings.jira_api_token
+        self._user_email = user_email if user_email is not None else settings.jira_user_email
 
     @property
     def is_configured(self) -> bool:
