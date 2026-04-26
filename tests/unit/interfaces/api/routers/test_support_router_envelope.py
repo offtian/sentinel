@@ -20,16 +20,20 @@ from fastapi.testclient import TestClient
 
 from sentinel.interfaces.api import middleware as middleware_mod
 from sentinel.interfaces.api.routers.support import router as support_router_mod
+from sentinel.interfaces.workflows import support_review as workflows_support_review
+from tests import factories
 
 
 _VALID_REQUEST_ID = "12345678-1234-5678-1234-567812345678"
+_REQUEST_UUID = uuid.UUID(_VALID_REQUEST_ID)
 
 
-def _build_app() -> fastapi.FastAPI:
-    """Wire only the support router and the request-id middleware."""
+def _build_app(*, graph: mock.MagicMock | None = None) -> fastapi.FastAPI:
+    """Wire only the support router; optionally stash a graph on app.state."""
     app = fastapi.FastAPI()
     app.add_middleware(middleware_mod.RequestIdMiddleware)
     app.include_router(support_router_mod.router, prefix="/api")
+    app.state.support_review_graph = graph
     return app
 
 
@@ -58,8 +62,17 @@ def captured_enqueue() -> dict[str, Any]:
 
 @pytest.fixture
 def patched_router(monkeypatch, captured_enqueue):
-    """Patch _enqueue_ticket plus get_settings/get_config in soft-fail mode."""
+    """Patch the synchronous webhook entrypoint plus the manual queue path.
+
+    The Jira webhook (post-T17) calls ``workflows.support_review.review_ticket``
+    synchronously; the manual ``/review`` endpoint still rides the queue
+    via ``_enqueue_ticket``. Both paths capture their inbound envelope
+    onto ``captured_enqueue["envelope"]`` so the same fixture covers
+    both endpoints' envelope wiring.
+    """
     fake_job_id = uuid.uuid4()
+    suggestion = factories.make_response_suggestion(ticket_id="200")
+    confidence = factories.make_confidence_score(total=0.85)
 
     async def fake_enqueue(ticket, *, requested_by, priority=2, envelope=None):
         captured_enqueue["ticket"] = ticket
@@ -73,7 +86,31 @@ def patched_router(monkeypatch, captured_enqueue):
             },
         )
 
+    async def fake_review_ticket(*, ticket, envelope, graph):
+        captured_enqueue["ticket"] = ticket
+        captured_enqueue["envelope"] = envelope
+        captured_enqueue["graph"] = graph
+        return workflows_support_review.ReviewOutcome(
+            request_id=envelope.request_id,
+            response_suggestion=suggestion,
+            confidence=confidence,
+            needs_approval=False,
+            interrupt_payload=None,
+            approval_decision=None,
+        )
+
+    async def fake_persist(**kwargs):
+        captured_enqueue["persist"] = kwargs
+        return uuid.uuid4()
+
     monkeypatch.setattr(support_router_mod, "_enqueue_ticket", fake_enqueue)
+    monkeypatch.setattr(
+        support_router_mod.workflows_support_review,
+        "review_ticket",
+        fake_review_ticket,
+    )
+    monkeypatch.setattr(support_router_mod.support_ops, "persist_ticket_review", fake_persist)
+    monkeypatch.setattr(support_router_mod.async_db, "get_db", lambda: mock.MagicMock())
     monkeypatch.setattr(support_router_mod, "get_settings", lambda: _build_settings_stub())
     monkeypatch.setattr(support_router_mod, "get_config", lambda: _build_config_stub(strict=False))
 
@@ -86,11 +123,12 @@ def patched_router(monkeypatch, captured_enqueue):
 class TestJiraWebhookEnvelopeWiring:
     """Tests that the Jira webhook routes envelope identity into the queue."""
 
-    def test_passes_envelope_with_project_tenant_to_enqueue(
+    def test_passes_envelope_with_project_tenant_to_review_ticket(
         self, patched_router, captured_enqueue
     ):
-        # Given a Jira webhook payload carrying a project key
-        client = TestClient(_build_app())
+        # Given a Jira webhook payload carrying a project key and a
+        # graph stashed on app.state by the lifespan
+        client = TestClient(_build_app(graph=mock.MagicMock(name="SupportGraph")))
         payload = {
             "webhookEvent": "jira:issue_created",
             "issue": {
@@ -114,8 +152,9 @@ class TestJiraWebhookEnvelopeWiring:
             headers={"X-Request-Id": _VALID_REQUEST_ID},
         )
 
-        # Then the envelope tenant_id is the lowercased project key
-        assert response.status_code == 202
+        # Then the envelope passed into review_ticket carries the
+        # lowercased project key as the tenant id
+        assert response.status_code == 200
         envelope = captured_enqueue["envelope"]
         assert envelope is not None
         assert envelope.tenant_id == "support"
@@ -123,7 +162,7 @@ class TestJiraWebhookEnvelopeWiring:
 
     def test_falls_back_to_unknown_when_no_project_key(self, patched_router, captured_enqueue):
         # Given a Jira payload with no project field
-        client = TestClient(_build_app())
+        client = TestClient(_build_app(graph=mock.MagicMock(name="SupportGraph")))
         payload = {
             "webhookEvent": "jira:issue_created",
             "issue": {
@@ -140,8 +179,9 @@ class TestJiraWebhookEnvelopeWiring:
             headers={"X-Request-Id": _VALID_REQUEST_ID},
         )
 
-        # Then the enqueue still happens with tenant_id="unknown"
-        assert response.status_code == 202
+        # Then review_ticket still runs with tenant_id="unknown" rather
+        # than the request being rejected
+        assert response.status_code == 200
         envelope = captured_enqueue["envelope"]
         assert envelope is not None
         assert envelope.tenant_id == "unknown"
