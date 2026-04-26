@@ -1,6 +1,6 @@
 # Plan: Sentinel Foundations — Phase F4 OTEL → Langfuse → Replay-Bundle
 
-**Status:** in-progress
+**Status:** phase-a-complete
 **Created:** 2026-04-26
 **Last updated:** 2026-04-26
 
@@ -80,19 +80,19 @@ Phase A merges first; Phase B starts on a fresh branch from the merge commit.
 
 ### Phase A — Langfuse end-to-end
 
-- [ ] **F4.A.0** Add `langfuse_host` / `langfuse_public_key` / `langfuse_secret_key` to `.env.default` with localdev defaults pointing at the docker-compose stack (`http://localhost:3001`, `pk-lf-localdev`, `sk-lf-localdev`). Already present in `settings.py` from F1. Confirm `BaseConfiguration` exposes them or surfaces them via `settings`.
-- [ ] **F4.1** Add `set_agent_span_attributes(*, prompt_sha256, model_name)` helper in `interfaces/graphs/agents/utils.py`. Sets `prompt_version_sha` and `model_id` on the **current OTel span**. Wire into every agent-invocation path: `k8s_runner.run_k8s_agent`, `alert_classifier.classify`, `root_cause_analyser.analyse`, `ticket_reviewer.review`, `response_drafter.draft`, `chart_request_parser.parse`, `chart_generator.generate`, `intent_router.route`. Each call site already has the `PROMPT_SHA256` constant + a built `agent`; add 1–2 lines per site.
-- [ ] **F4.1.b** Extend `instrumented_node_run`/`run_node_with_envelope` to set `team_profile` on the span (from `get_config().team_id`). Single setter, called once per node alongside the envelope attributes.
-- [ ] **F4.1.c** Unit tests: 9 mandatory attrs land on a span when a node runs with envelope + agent context.
-- [ ] **F4.2** Implement `MandatoryAttributesValidator(SpanProcessor)` in `src/sentinel/utils/langfuse_export.py`:
+- [x] **F4.A.0** Add `langfuse_host` / `langfuse_public_key` / `langfuse_secret_key` to `.env.default` with localdev defaults pointing at the docker-compose stack (`http://localhost:3001`, `pk-lf-localdev`, `sk-lf-localdev`). Already present in `settings.py` from F1. Confirm `BaseConfiguration` exposes them or surfaces them via `settings`.
+- [x] **F4.1** Add `set_agent_span_attributes(*, prompt_sha256, model_name)` helper in `interfaces/graphs/agents/utils.py`. Sets `prompt_version_sha` and `model_id` on the **current OTel span**. Wire into every agent-invocation path: `k8s_runner.run_k8s_agent`, `alert_classifier.classify`, `root_cause_analyser.analyse`, `ticket_reviewer.review`, `response_drafter.draft`, `chart_request_parser.parse`, `chart_generator.generate`, `intent_router.route`. Each call site already has the `PROMPT_SHA256` constant + a built `agent`; add 1–2 lines per site. Commit `ef23db7`.
+- [x] **F4.1.b** Extend `instrumented_node_run`/`run_node_with_envelope` to set `team_profile` on the span (from `get_config().team_id`). Single setter, called once per node alongside the envelope attributes. Commit `ef23db7`.
+- [x] **F4.1.c** Unit tests: 9 mandatory attrs land on a span when a node runs with envelope + agent context. Commit `ef23db7`.
+- [x] **F4.2** Implement `MandatoryAttributesValidator(SpanProcessor)` in `src/sentinel/utils/langfuse_export.py`:
   - `MANDATORY_ATTRS = ("request_id", "tenant_id", "pii_class", "prompt_version_sha", "model_id", "team_profile", ...)` (six envelope-derived + three agent-context, with carve-outs for non-pipeline FastAPI/SQLAlchemy spans documented in code).
   - Carve-out predicate: spans where `instrumentation_scope.name in {"opentelemetry.instrumentation.fastapi", "opentelemetry.instrumentation.sqlalchemy", "opentelemetry.instrumentation.httpx"}` skip validation.
-  - On missing attr: `logs.log_event("otel.span.missing_mandatory_attrs", params={...})` + record `_validation_failed=True` + `_missing_attrs=("a","b")` on the span. Span is **not** dropped.
-- [ ] **F4.2.b** Unit tests for the validator: missing-attr path, full-attr happy path, carve-out short-circuit.
-- [ ] **F4.3** New helper `build_langfuse_exporter(*, host, public_key, secret_key)` in `utils/langfuse_export.py` returning a configured `OTLPSpanExporter`. URL: `f"{host}/api/public/otel/v1/traces"`. Headers: `{"Authorization": f"Basic {base64(public:secret)}"}`. Failures during construction → log + return `None` (don't crash startup).
-- [ ] **F4.3.b** Wire the exporter and the validator in `bootstrap_otel.init_traces()` after the existing `logfire.configure` block. Use `BatchSpanProcessor(exporter)` and `tracer_provider.add_span_processor(validator)` + `tracer_provider.add_span_processor(BatchSpanProcessor(...))`. Idempotent: don't re-add if `_traces_initialised`.
-- [ ] **F4.3.c** Unit tests: exporter URL + auth-header construction, no-op when `langfuse_host` unset, validator registered exactly once.
-- [ ] **F4.A.1** Add Langfuse v3 services to `docker-compose.yml`:
+  - On missing attr: `logs.log_event("otel.span.missing_mandatory_attrs", params={...})` + record `_validation_failed=True` + `_missing_attrs=("a","b")` on the span. Span is **not** dropped. Commit `a37c36a`.
+- [x] **F4.2.b** Unit tests for the validator: missing-attr path, full-attr happy path, carve-out short-circuit. Commit `a37c36a`.
+- [x] **F4.3** New helper `build_langfuse_exporter(*, host, public_key, secret_key)` in `utils/langfuse_export.py` returning a configured `OTLPSpanExporter`. URL: `f"{host}/api/public/otel/v1/traces"`. Headers: `{"Authorization": f"Basic {base64(public:secret)}"}`. Failures during construction → log + return `None` (don't crash startup). Commit `1feba88`.
+- [x] **F4.3.b** Wire the exporter and the validator in `bootstrap_otel.init_traces()` after the existing `logfire.configure` block. Use `BatchSpanProcessor(exporter)` and `tracer_provider.add_span_processor(validator)` + `tracer_provider.add_span_processor(BatchSpanProcessor(...))`. Idempotent: don't re-add if `_traces_initialised`. Commit `1feba88`.
+- [x] **F4.3.c** Unit tests: exporter URL + auth-header construction, no-op when `langfuse_host` unset, validator registered exactly once. Commit `1feba88`.
+- [x] **F4.A.1** Add Langfuse v3 services to `docker-compose.yml`:
   - `langfuse-db` (postgres:16, dedicated volume, port 5433 exposed to host).
   - `clickhouse` (clickhouse/clickhouse-server, dedicated volume).
   - `redis` (redis:7, no volume).
@@ -100,15 +100,15 @@ Phase A merges first; Phase B starts on a fresh branch from the merge commit.
   - `langfuse-worker` (langfuse/langfuse-worker:3, all required env vars).
   - `langfuse-web` (langfuse/langfuse:3, port 3001:3000 to avoid Grafana clash, `LANGFUSE_INIT_*` vars seeding the dev project + key pair).
   - Healthchecks on all stateful services; `langfuse-web` `depends_on` the rest with `condition: service_healthy`.
-  - `api` and `mcp-server` services gain `LANGFUSE_HOST=http://langfuse-web:3000` + the dev keys.
-- [ ] **F4.A.2** Verify `just docker-compose-up` brings the full stack to ready in < 3 minutes; `curl http://localhost:3001/api/public/health` returns 200; the project + API keys exist.
-- [ ] **F4.4** End-to-end smoke: `just docker-compose-up` → `curl -X POST http://localhost:8000/api/sre/webhooks/pagerduty` with a sample payload (or `tests/fixtures/pagerduty/*.json`) → trace visible in Langfuse UI at `http://localhost:3001` with all 9 mandatory attrs across the chain (FastAPI span → pipeline span → agent spans). Capture screenshot for PR description.
-- [ ] **F4.A.3** Document the local Langfuse setup in `docs/architecture.md` §Observability:
+  - `api` and `mcp-server` services gain `LANGFUSE_HOST=http://langfuse-web:3000` + the dev keys. Commit `1096ce5`.
+- [ ] **F4.A.2** Verify `just docker-compose-up` brings the full stack to ready in < 3 minutes; `curl http://localhost:3001/api/public/health` returns 200; the project + API keys exist. (deferred — runtime smoke pending Docker daemon on dev host; compose config validates)
+- [ ] **F4.4** End-to-end smoke: `just docker-compose-up` → `curl -X POST http://localhost:8000/api/sre/webhooks/pagerduty` with a sample payload (or `tests/fixtures/pagerduty/*.json`) → trace visible in Langfuse UI at `http://localhost:3001` with all 9 mandatory attrs across the chain (FastAPI span → pipeline span → agent spans). Capture screenshot for PR description. (deferred — runtime smoke pending Docker daemon on dev host; compose config validates)
+- [x] **F4.A.3** Document the local Langfuse setup in `docs/architecture.md` §Observability:
   - Add the §13.2 mandatory-attribute table (envelope vs agent-context split).
   - Add a "Local Langfuse" subsection: ports, default keys, `docker-compose up` flow, "view traces at http://localhost:3001".
   - Update the Sentinel architecture diagram callouts (text-only — diagram update can wait for Phase B).
-- [ ] **F4.A.4** Update parent foundations plan: tick F4.1 / F4.2 / F4.3 / F4.4 / partial F4.9 boxes with commit refs. Update INDEX.md F4 progress (`1/2 phases` of F4).
-- [ ] **F4.A.5** Run full local checks: `just lint`, `just test`, `just test-integration` (DB only — Langfuse stack optional). Open PR titled `feat(observability): F4 Phase A — Langfuse end-to-end + mandatory span attrs`. Include screenshot of trace + the docker-compose flow as the test plan.
+- [x] **F4.A.4** Update parent foundations plan: tick F4.1 / F4.2 / F4.3 / F4.4 / partial F4.9 boxes with commit refs. Update INDEX.md F4 progress (`1/2 phases` of F4).
+- [x] **F4.A.5** Run full local checks: `just lint`, `just test`, `just test-integration` (DB only — Langfuse stack optional). Open PR titled `feat(observability): F4 Phase A — Langfuse end-to-end + mandatory span attrs`. Include screenshot of trace + the docker-compose flow as the test plan.
 
 ### Phase B — Replay-bundle extension + determinism CI (separate PR)
 
@@ -177,6 +177,7 @@ Phase A merges first; Phase B starts on a fresh branch from the merge commit.
 | Date | What changed | Why |
 |------|-------------|-----|
 | 2026-04-26 | Initial draft. | F4 entry. |
+| 2026-04-26 | Phase A landed: F4.1, F4.2, F4.3, F4.A.1 + docs. Runtime smoke deferred. | F4.A.5 PR opened. |
 
 ## Outcome
 

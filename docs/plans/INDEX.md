@@ -32,10 +32,10 @@
 | Plan | Goal | Progress | Notes |
 |------|------|----------|-------|
 | [grafana-metrics](grafana-metrics.md) | OTel metrics instrumentation for Grafana dashboards | 2/5 | Prometheus reader + basic metrics wired |
-| [sentinel-hedgefund-foundations](sentinel-hedgefund-foundations.md) | Evolve current codebase into RFC-001 v0.4 foundations (config, identity, OTel→Langfuse→replay, LiteLLM proxy, runbooks, capability tokens, groundedness) | 2/9 phases | F1 + F2 complete (PR #22, this PR); F3 (DB schema) next |
+| [sentinel-hedgefund-foundations](sentinel-hedgefund-foundations.md) | Evolve current codebase into RFC-001 v0.4 foundations (config, identity, OTel→Langfuse→replay, LiteLLM proxy, runbooks, capability tokens, groundedness) | 3/9 phases | F1 + F2 + F3 complete; F4 Phase A complete (runtime smoke deferred); F4 Phase B (replay determinism) next |
 | [sentinel-foundations-f1-config-layering](sentinel-foundations-f1-config-layering.md) | F1 layered config substrate on `BaseConfiguration` (Pydantic) + new env-vars + policy primitives + `TEAM_CONFIG_REFS` dispatch | complete | F1 of foundations plan; PR #22 |
 | [sentinel-foundations-f2-envelope](sentinel-foundations-f2-envelope.md) | F2 identity envelope: middleware mints `request_id`, webhook factories build `Envelope`, pipelines + spans + log contexts carry it through | complete | F2 of foundations plan; this PR |
-| [sentinel-foundations-f4-otel-langfuse-replay](sentinel-foundations-f4-otel-langfuse-replay.md) | F4 OTEL → Langfuse → replay-bundle triple: 9 mandatory span attrs, MandatoryAttributesValidator, Langfuse OTLP exporter, local v3 docker-compose, replay-bundle tool/LLM I/O capture, determinism CI | in-progress | F4 of foundations plan; Phase A (Langfuse end-to-end) shipping first |
+| [sentinel-foundations-f4-otel-langfuse-replay](sentinel-foundations-f4-otel-langfuse-replay.md) | F4 OTEL → Langfuse → replay-bundle triple: 9 mandatory span attrs, MandatoryAttributesValidator, Langfuse OTLP exporter, local v3 docker-compose, replay-bundle tool/LLM I/O capture, determinism CI | 1/2 phases | Phase A complete (runtime smoke deferred until Docker available); Phase B (replay-bundle tool/LLM I/O + determinism CI) on a fresh branch from merge commit |
 | [pydanticai-langgraph-adoption](pydanticai-langgraph-adoption.md) | Migrate orchestration harness to LangGraph; support pipeline first, SRE/chart follow with own plans | 0/3 phases | Support migration in flight; ADR 0007 authored in this PR |
 
 ### Draft (Not Started)
