@@ -23,7 +23,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from sentinel.data.primitives import policies
-from sentinel.settings import Settings, get_settings
+from sentinel.settings import Settings, settings
 
 
 TeamId = Literal["sre", "devops", "ace"]
@@ -335,7 +335,6 @@ _config: BaseConfiguration | None = None
 
 def _build_default_config() -> BaseConfiguration:
     """Resolve the team-specific concrete configuration and load vendors."""
-    settings = get_settings()
     if settings.team_profile not in TEAM_CONFIG_REFS:
         raise NotImplementedError(
             f"team profile {settings.team_profile!r} not yet wired — "

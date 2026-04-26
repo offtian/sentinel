@@ -19,7 +19,7 @@ from sentinel.domain.support.entities import ReviewStatus
 from sentinel.interfaces.api.dependencies import require_database
 from sentinel.interfaces.webhooks import envelope_factory
 from sentinel.interfaces.workflows import support_review as workflows_support_review
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 from sentinel.utils import logs
 
 
@@ -136,13 +136,13 @@ async def handle_jira_webhook(
         envelope = envelope_factory.envelope_from_jira(
             payload=payload,
             request_id=request.state.request_id,
-            settings=get_settings(),
+            settings=settings,
             strict=get_config().envelope_strict_mode,
         )
     except envelope_factory.EnvelopeIngressError as exc:
         return _envelope_ingress_failure_response(exc)
 
-    if not get_settings().support_auto_draft:
+    if not settings.support_auto_draft:
         return fastapi.responses.JSONResponse(
             status_code=200,
             content={"status": "received", "ticket_key": ticket.key, "auto_draft": False},
@@ -255,7 +255,7 @@ async def trigger_review(
 
     envelope = envelope_factory.envelope_for_manual(
         request_id=request.state.request_id,
-        settings=get_settings(),
+        settings=settings,
     )
     return await _enqueue_ticket(ticket, requested_by="api:manual", envelope=envelope)
 

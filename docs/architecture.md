@@ -296,12 +296,38 @@ The `GrafanaClient` queries Prometheus (metrics), Loki (logs), and Tempo (traces
 
 All agents are defined with `model="test"` at module level to avoid import-time validation. The actual model is injected at runtime via PydanticAI's `litellm:` model prefix, which delegates to LiteLLM SDK for in-process provider routing (e.g., `litellm:openai/gpt-4.1-mini`).
 
+### LiteLLM: proxy vs in-process SDK
+
+LLM traffic has two routes, selected at startup by `LITELLM_BASE_URL` (RFC §2.4, [ADR 0007](adrs/0007-orchestration-framework.md)):
+
+- **In-process SDK fallback** (`LITELLM_BASE_URL` unset). Every agent calls
+  the LiteLLM SDK in-process; the SDK reaches provider APIs directly using
+  per-provider env vars (`OPENAI_API_KEY`, etc.). This is the `just run-api`
+  / local-dev path. Bootstrap emits `litellm_proxy_disabled` at WARNING
+  level so the fallback is visible in startup logs.
+- **Proxy path** (`LITELLM_BASE_URL` + `LITELLM_VIRTUAL_KEY` both set). Every
+  agent factory feeds `api_base` + `api_key` kwargs into PydanticAI's
+  `LiteLLMProvider`, so the resulting `OpenAIChatModel` points at the
+  firm-shared proxy with the operator's virtual key. The proxy enforces
+  tenant routing, rate limits, and budget; direct egress to provider
+  endpoints is blocked at the network layer (R-OB-1 enforcement is wk5
+  Helm work). Bootstrap emits `litellm_proxy_enabled` at INFO level with
+  the proxy host (never the virtual key).
+
+Plumbing lives in `src/sentinel/domain/llm/litellm_proxy.py` — a single
+helper exposes `is_proxy_configured()` and `get_proxy_kwargs()`, which the
+five agent factories call uniformly. Partial configurations (one of the
+two env vars set) fail safe back to unconfigured and emit a
+`litellm_proxy_partial_config` warning rather than sending unauthenticated
+traffic to a half-wired proxy.
+
 ## Configuration
 
 Three layers, top to bottom:
 
 - **`settings.py`** — Pydantic `Settings` class. The only module that
-  reads env vars; `get_settings()` returns a process-wide singleton.
+  reads env vars; exposes a module-level `settings = Settings()`
+  instance that consumers import directly.
 - **`config.py`** — `BaseConfiguration` (Pydantic). Carries the
   layered configuration fields with firm-wide defaults
   (`investigation_loop_cap`, `investigation_timeout_seconds`,
@@ -335,7 +361,8 @@ Key env-var groups (see `.env.default` for the full list):
 - **Environment** — `ENVIRONMENT` (`localdev`/`production`),
   `DATABASE_URL`, `TEAM_PROFILE` (`sre`/`devops`/`ace`).
 - **LiteLLM proxy** — `LITELLM_BASE_URL`, `LITELLM_VIRTUAL_KEY`
-  (unset = in-process SDK fallback).
+  (unset = in-process SDK fallback; see *LiteLLM: proxy vs in-process SDK*
+  above and [ADR 0007](adrs/0007-orchestration-framework.md)).
 - **Langfuse** — `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`,
   `LANGFUSE_SECRET_KEY` (unset = OTel console exporter fallback).
 - **OTel collector** — `OTEL_COLLECTOR_ENDPOINT` (firm-shared,

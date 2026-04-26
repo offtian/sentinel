@@ -9,7 +9,7 @@ import asyncio
 
 import httpx
 
-from sentinel import settings as settings_mod
+from sentinel.settings import settings
 from sentinel.utils import logs
 
 
@@ -20,13 +20,13 @@ _WARMUP_KEEP_ALIVE = "10m"
 _WARMUP_TIMEOUT_SECONDS = 60.0
 
 
-def _ollama_models_from_settings(cfg: settings_mod.Settings) -> tuple[str, ...]:
+def _ollama_models_from_settings() -> tuple[str, ...]:
     candidates = (
-        cfg.alert_classifier_llm,
-        cfg.root_cause_llm,
-        cfg.ticket_reviewer_llm,
-        cfg.response_drafter_llm,
-        cfg.k8s_investigator_llm,
+        settings.alert_classifier_llm,
+        settings.root_cause_llm,
+        settings.ticket_reviewer_llm,
+        settings.response_drafter_llm,
+        settings.k8s_investigator_llm,
     )
     seen: list[str] = []
     for raw in candidates:
@@ -69,13 +69,12 @@ async def warm_ollama_models() -> None:
     Best-effort POST ``/api/generate`` against every configured Ollama
     model so subsequent pipeline runs skip the model-load latency.
     """
-    cfg = settings_mod.get_settings()
-    base_url = (cfg.ollama_base_url or "").rstrip("/")
+    base_url = (settings.ollama_base_url or "").rstrip("/")
     if not base_url:
         logs.log_event("llm.warmup.disabled", params={"reason": "ollama_base_url unset"})
         return
 
-    models = _ollama_models_from_settings(cfg)
+    models = _ollama_models_from_settings()
     if not models:
         logs.log_event("llm.warmup.disabled", params={"reason": "no ollama models configured"})
         return

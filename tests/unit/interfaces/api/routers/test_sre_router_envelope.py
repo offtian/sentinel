@@ -38,16 +38,15 @@ def _build_app() -> fastapi.FastAPI:
     return app
 
 
-def _build_settings_stub(
+def _populate_settings(
+    fake,
     *,
     cluster_name: str = "prod-eu-west-1",
     region: str = "eu-west-1",
-) -> mock.MagicMock:
-    settings_stub = mock.MagicMock()
-    settings_stub.sre_auto_investigate = True
-    settings_stub.k8s_cluster_name = cluster_name
-    settings_stub.region = region
-    return settings_stub
+) -> None:
+    fake.sre_auto_investigate = True
+    fake.k8s_cluster_name = cluster_name
+    fake.region = region
 
 
 def _build_config_stub(*, strict: bool = False) -> mock.MagicMock:
@@ -63,8 +62,8 @@ def captured_enqueue() -> dict[str, Any]:
 
 
 @pytest.fixture
-def patched_router(monkeypatch, captured_enqueue):
-    """Patch _enqueue_alert plus get_settings/get_config in soft-fail mode."""
+def patched_router(monkeypatch, captured_enqueue, patch_settings):
+    """Patch _enqueue_alert plus settings/get_config in soft-fail mode."""
     fake_job_id = uuid.uuid4()
 
     async def fake_enqueue(alert, *, requested_by, priority=1, envelope=None):
@@ -82,7 +81,8 @@ def patched_router(monkeypatch, captured_enqueue):
         )
 
     monkeypatch.setattr(sre_router_mod, "_enqueue_alert", fake_enqueue)
-    monkeypatch.setattr(sre_router_mod, "get_settings", lambda: _build_settings_stub())
+    fake = patch_settings(sre_router_mod)
+    _populate_settings(fake)
     monkeypatch.setattr(sre_router_mod, "get_config", lambda: _build_config_stub(strict=False))
 
 
@@ -231,13 +231,12 @@ class TestManualInvestigateEnvelopeWiring:
 class TestPagerDutyWebhookStrictMode:
     """Tests that strict mode hard-fails when tenant_id cannot be derived."""
 
-    def test_returns_422_when_strict_mode_enabled_and_tenant_unknown(self, monkeypatch):
+    def test_returns_422_when_strict_mode_enabled_and_tenant_unknown(
+        self, monkeypatch, patch_settings
+    ):
         # Given strict mode is on and the payload has no tenant identifiers
-        monkeypatch.setattr(
-            sre_router_mod,
-            "get_settings",
-            lambda: _build_settings_stub(cluster_name="", region=""),
-        )
+        fake = patch_settings(sre_router_mod)
+        _populate_settings(fake, cluster_name="", region="")
         monkeypatch.setattr(sre_router_mod, "get_config", lambda: _build_config_stub(strict=True))
         client = TestClient(_build_app())
         payload = {

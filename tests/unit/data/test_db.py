@@ -11,47 +11,41 @@ from sentinel.data import db
 
 
 class TestGetDb:
-    def test_returns_database_instance(self) -> None:
+    def test_returns_database_instance(self, patch_settings) -> None:
         # Given a configured database URL
-        mock_settings = mock.MagicMock()
-        mock_settings.database_url = "postgresql+asyncpg://user:pass@localhost/sentinel"
+        fake = patch_settings(db)
+        fake.database_url = "postgresql+asyncpg://user:pass@localhost/sentinel"
+        db._db = None  # Reset singleton
 
-        with mock.patch.object(db, "get_settings", return_value=mock_settings):
-            db._db = None  # Reset singleton
+        # When get_db is called
+        result = db.get_db()
 
-            # When get_db is called
-            result = db.get_db()
+        # Then it returns a databases.Database instance
+        assert isinstance(result, databases.Database)
 
-            # Then it returns a databases.Database instance
-            assert isinstance(result, databases.Database)
-
-    def test_returns_same_instance_on_second_call(self) -> None:
+    def test_returns_same_instance_on_second_call(self, patch_settings) -> None:
         # Given get_db has been called once
-        mock_settings = mock.MagicMock()
-        mock_settings.database_url = "postgresql+asyncpg://user:pass@localhost/sentinel"
+        fake = patch_settings(db)
+        fake.database_url = "postgresql+asyncpg://user:pass@localhost/sentinel"
+        db._db = None
+        first = db.get_db()
 
-        with mock.patch.object(db, "get_settings", return_value=mock_settings):
-            db._db = None
-            first = db.get_db()
+        # When get_db is called again
+        second = db.get_db()
 
-            # When get_db is called again
-            second = db.get_db()
+        # Then the same instance is returned
+        assert first is second
 
-            # Then the same instance is returned
-            assert first is second
-
-    def test_raises_when_no_database_url(self) -> None:
+    def test_raises_when_no_database_url(self, patch_settings) -> None:
         # Given no database URL is configured
-        mock_settings = mock.MagicMock()
-        mock_settings.database_url = ""
+        fake = patch_settings(db)
+        fake.database_url = ""
+        db._db = None
 
-        with mock.patch.object(db, "get_settings", return_value=mock_settings):
-            db._db = None
-
-            # When get_db is called
-            # Then it raises RuntimeError
-            with pytest.raises(RuntimeError, match="DATABASE_URL"):
-                db.get_db()
+        # When get_db is called
+        # Then it raises RuntimeError
+        with pytest.raises(RuntimeError, match="DATABASE_URL"):
+            db.get_db()
 
 
 class TestConnectDb:

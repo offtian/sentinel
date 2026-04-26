@@ -30,14 +30,14 @@ class TestJiraClientIsConfigured:
         # Then it reports as not configured
         assert client.is_configured is False
 
-    def test_not_configured_when_all_defaults(self):
+    def test_not_configured_when_all_defaults(self, patch_settings):
         # Given a JiraClient with no config (all env defaults empty)
         # When checking is_configured (assuming env vars not set)
-        with patch("sentinel.domain.vendor_adapters.jira.get_settings") as mock_gs:
-            mock_gs.return_value.jira_base_url = ""
-            mock_gs.return_value.jira_api_token = ""
-            mock_gs.return_value.jira_user_email = ""
-            client = jira.JiraClient()
+        fake = patch_settings(jira)
+        fake.jira_base_url = ""
+        fake.jira_api_token = ""
+        fake.jira_user_email = ""
+        client = jira.JiraClient()
 
         # Then it reports as not configured
         assert client.is_configured is False

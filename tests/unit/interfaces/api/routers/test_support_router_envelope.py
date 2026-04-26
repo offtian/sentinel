@@ -37,16 +37,15 @@ def _build_app(*, graph: mock.MagicMock | None = None) -> fastapi.FastAPI:
     return app
 
 
-def _build_settings_stub(
+def _populate_settings(
+    fake,
     *,
     cluster_name: str = "prod-eu-west-1",
     region: str = "eu-west-1",
-) -> mock.MagicMock:
-    settings_stub = mock.MagicMock()
-    settings_stub.support_auto_draft = True
-    settings_stub.k8s_cluster_name = cluster_name
-    settings_stub.region = region
-    return settings_stub
+) -> None:
+    fake.support_auto_draft = True
+    fake.k8s_cluster_name = cluster_name
+    fake.region = region
 
 
 def _build_config_stub(*, strict: bool = False) -> mock.MagicMock:
@@ -61,7 +60,7 @@ def captured_enqueue() -> dict[str, Any]:
 
 
 @pytest.fixture
-def patched_router(monkeypatch, captured_enqueue):
+def patched_router(monkeypatch, captured_enqueue, patch_settings):
     """Patch the synchronous webhook entrypoint plus the manual queue path.
 
     The Jira webhook (post-T17) calls ``workflows.support_review.review_ticket``
@@ -111,7 +110,8 @@ def patched_router(monkeypatch, captured_enqueue):
     )
     monkeypatch.setattr(support_router_mod.support_ops, "persist_ticket_review", fake_persist)
     monkeypatch.setattr(support_router_mod.async_db, "get_db", lambda: mock.MagicMock())
-    monkeypatch.setattr(support_router_mod, "get_settings", lambda: _build_settings_stub())
+    fake = patch_settings(support_router_mod)
+    _populate_settings(fake)
     monkeypatch.setattr(support_router_mod, "get_config", lambda: _build_config_stub(strict=False))
 
 
@@ -231,13 +231,12 @@ class TestManualReviewEnvelopeWiring:
 class TestJiraWebhookStrictMode:
     """Tests that strict mode hard-fails when tenant_id cannot be derived."""
 
-    def test_returns_422_when_strict_mode_enabled_and_tenant_unknown(self, monkeypatch):
+    def test_returns_422_when_strict_mode_enabled_and_tenant_unknown(
+        self, monkeypatch, patch_settings
+    ):
         # Given strict mode is on and the payload has no project key
-        monkeypatch.setattr(
-            support_router_mod,
-            "get_settings",
-            lambda: _build_settings_stub(cluster_name="", region=""),
-        )
+        fake = patch_settings(support_router_mod)
+        _populate_settings(fake, cluster_name="", region="")
         monkeypatch.setattr(
             support_router_mod, "get_config", lambda: _build_config_stub(strict=True)
         )

@@ -41,12 +41,10 @@ _VALID_REQUEST_ID = "12345678-1234-5678-1234-567812345678"
 _REQUEST_UUID = uuid.UUID(_VALID_REQUEST_ID)
 
 
-def _settings_stub(*, auto_draft: bool = True) -> mock.MagicMock:
-    settings_stub = mock.MagicMock()
-    settings_stub.support_auto_draft = auto_draft
-    settings_stub.k8s_cluster_name = "prod-eu-west-1"
-    settings_stub.region = "eu-west-1"
-    return settings_stub
+def _populate_settings(fake, *, auto_draft: bool = True) -> None:
+    fake.support_auto_draft = auto_draft
+    fake.k8s_cluster_name = "prod-eu-west-1"
+    fake.region = "eu-west-1"
 
 
 def _config_stub() -> mock.MagicMock:
@@ -88,11 +86,11 @@ def captured_call() -> dict[str, Any]:
 
 
 @pytest.fixture
-def patched_settings(monkeypatch: pytest.MonkeyPatch) -> mock.MagicMock:
-    settings = _settings_stub()
-    monkeypatch.setattr(support_router_mod, "get_settings", lambda: settings)
+def patched_settings(monkeypatch: pytest.MonkeyPatch, patch_settings):
+    fake = patch_settings(support_router_mod)
+    _populate_settings(fake)
     monkeypatch.setattr(support_router_mod, "get_config", _config_stub)
-    return settings
+    return fake
 
 
 @pytest.fixture
@@ -246,11 +244,11 @@ class TestJiraWebhookAutoDraftDisabled:
         self,
         monkeypatch: pytest.MonkeyPatch,
         captured_call: dict[str, Any],
+        patch_settings,
     ) -> None:
         # Given the support_auto_draft toggle is off
-        monkeypatch.setattr(
-            support_router_mod, "get_settings", lambda: _settings_stub(auto_draft=False)
-        )
+        fake = patch_settings(support_router_mod)
+        _populate_settings(fake, auto_draft=False)
         monkeypatch.setattr(support_router_mod, "get_config", _config_stub)
         review_calls: list[Any] = []
 
@@ -318,9 +316,11 @@ class TestJiraWebhookSkippedEvents:
         self,
         monkeypatch: pytest.MonkeyPatch,
         captured_call: dict[str, Any],
+        patch_settings,
     ) -> None:
         # Given an event type the handler does not act on
-        monkeypatch.setattr(support_router_mod, "get_settings", lambda: _settings_stub())
+        fake = patch_settings(support_router_mod)
+        _populate_settings(fake)
         monkeypatch.setattr(support_router_mod, "get_config", _config_stub)
         review_calls: list[Any] = []
 

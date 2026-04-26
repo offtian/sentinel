@@ -20,12 +20,16 @@ from kubernetes_asyncio import client as k8s_async_client
 from pydantic import ConfigDict, PrivateAttr
 from pydantic_ai import models as pydantic_ai_models
 from pydantic_ai.mcp import MCPServerSSE
+from pydantic_ai.models import Model as PydanticAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.litellm import LiteLLMProvider
 from pydantic_ai.toolsets import AbstractToolset
 
 from sentinel import config as base_config_mod
 from sentinel.config import BaseConfiguration
 from sentinel.domain.investigations import adapters, holmes_adapter, k8s_native_agent
 from sentinel.domain.investigations import kagent_adapter as kagent_adapter_mod
+from sentinel.domain.llm import litellm_proxy
 from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
 from sentinel.domain.search import factory as search_factory
 from sentinel.domain.search import searcher
@@ -340,6 +344,43 @@ class CommonConfiguration(BaseConfiguration):
 
     # -- Agent registry ------------------------------------------------------
 
+    def _build_agent_model(self, model_name: str | None) -> PydanticAIModel | str | None:
+        """
+        Return the model handle each PydanticAI agent factory feeds into ``Agent(...)``.
+
+        When the firm-shared LiteLLM proxy is configured (RFC §2.4), returns
+        an :class:`OpenAIChatModel` whose :class:`LiteLLMProvider` points at
+        the proxy URL with the operator's virtual key. Otherwise returns
+        ``model_name`` unchanged so PydanticAI follows its existing
+        in-process LiteLLM SDK path — keeping ``just run-api`` working
+        without a proxy.
+
+        Special cases preserved verbatim from the previous
+        ``interfaces/graphs/agents/utils.resolve_agent_model`` location so
+        the placeholder paths unit tests rely on still fire:
+
+        * ``None`` -> ``None`` so the factory's ``"test"`` fallback applies.
+        * ``"test"`` -> ``"test"`` for the same reason — production never
+          passes the placeholder; unit tests do.
+
+        :param model_name: The model identifier resolved by
+            :func:`sentinel.config._normalise_model_name`
+            (e.g. ``"litellm:openai/gpt-4.1-mini"``), ``None``, or
+            ``"test"``.
+        """
+        if model_name is None or model_name == "test":
+            return model_name
+
+        proxy_kwargs = litellm_proxy.get_proxy_kwargs()
+        if proxy_kwargs is None:
+            return model_name
+        # Strip the ``litellm:`` prefix when present — ``LiteLLMProvider``
+        # already sets ``system="litellm"`` on the resulting OpenAIChatModel,
+        # and the bare ``provider/model`` form is what its API expects.
+        bare_model_name = model_name.removeprefix("litellm:")
+        provider = LiteLLMProvider(**proxy_kwargs)
+        return OpenAIChatModel(bare_model_name, provider=provider)
+
     def load_agents(self, *, agent_module: Any) -> None:
         """
         Build every pipeline agent with its configured skills baked in.
@@ -357,19 +398,19 @@ class CommonConfiguration(BaseConfiguration):
         """
         agents = {
             "alert_classifier": agent_module.alert_classifier.build_agent(
-                model=self.classifier_model,
+                model=self._build_agent_model(self.classifier_model),
                 skills=base_config_mod.SKILLS_BY_AGENT.get("alert_classifier", ()),
             ),
             "root_cause_analyser": agent_module.root_cause_analyser.build_agent(
-                model=self.analyser_model,
+                model=self._build_agent_model(self.analyser_model),
                 skills=base_config_mod.SKILLS_BY_AGENT.get("root_cause_analyser", ()),
             ),
             "ticket_reviewer": agent_module.ticket_reviewer.build_agent(
-                model=self.reviewer_model,
+                model=self._build_agent_model(self.reviewer_model),
                 skills=base_config_mod.SKILLS_BY_AGENT.get("ticket_reviewer", ()),
             ),
             "response_drafter": agent_module.response_drafter.build_agent(
-                model=self.drafter_model,
+                model=self._build_agent_model(self.drafter_model),
                 skills=base_config_mod.SKILLS_BY_AGENT.get("response_drafter", ()),
             ),
             "chart_generator": agent_module.chart_generator.build_agent(
@@ -385,7 +426,7 @@ class CommonConfiguration(BaseConfiguration):
                 skills=base_config_mod.SKILLS_BY_AGENT.get("intent_router", ()),
             ),
             "k8s_investigator": agent_module.k8s_investigator.build_agent(
-                model=self.k8s_investigator_model,
+                model=self._build_agent_model(self.k8s_investigator_model),
                 skills=base_config_mod.SKILLS_BY_AGENT.get("k8s_investigator", ()),
             ),
         }

@@ -30,7 +30,7 @@ from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 # surface lets unit tests patch it via ``mock.patch.object``.
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 from sentinel.utils import langfuse_export, logs
 from sentinel.utils import metrics as sentinel_metrics
 
@@ -46,7 +46,6 @@ def init_otel() -> None:
     """
     global _initialised  # noqa: PLW0603
     try:
-        settings = get_settings()
         if not settings.otel_metrics_enabled:
             logs.log_event("otel.disabled")
             return
@@ -108,7 +107,6 @@ def init_traces() -> None:
     """
     global _traces_initialised  # noqa: PLW0603
     try:
-        settings = get_settings()
         if not settings.otel_traces_enabled or not settings.otel_traces_endpoint:
             logs.log_event("otel.traces.disabled")
             return

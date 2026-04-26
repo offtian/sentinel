@@ -30,7 +30,6 @@ from sqlalchemy import select
 from sqlmodel import col
 
 from sentinel import config as config_mod
-from sentinel import settings as settings_mod
 from sentinel.data.sql import tracing
 from sentinel.domain.alerts import entities as alert_entities
 from sentinel.domain.pipeline import errors as pipeline_errors
@@ -40,6 +39,7 @@ from sentinel.interfaces.graphs import investigation, support_review
 from sentinel.interfaces.graphs.agents import k8s_runner
 from sentinel.plugins.models import recorded as recorded_model_mod
 from sentinel.plugins.toolsets import recorded as recorded_toolset_mod
+from sentinel.settings import settings
 from sentinel.utils import replay_bundle as bundle_mod
 
 
@@ -62,7 +62,7 @@ async def _print_bundle(*, run_id: uuid.UUID) -> None:
     sha256 digest on the final line so the output is both human-readable
     and scriptable.
     """
-    db_url = settings_mod.get_settings().database_url
+    db_url = settings.database_url
     db = databases.Database(str(db_url))
     await db.connect()
     try:
@@ -106,7 +106,7 @@ async def _replay_pipeline(*, run_id: uuid.UUID, show_diff: bool) -> None:
     :raises pipeline_errors.ReplayBundleSHAMismatchError: if the stored
         sha disagrees with the recomputed bundle sha.
     """
-    db_url = settings_mod.get_settings().database_url
+    db_url = settings.database_url
     db = databases.Database(str(db_url))
     await db.connect()
     try:

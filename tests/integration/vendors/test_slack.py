@@ -9,7 +9,7 @@ class TestPostInvestigationSummary:
     async def test_skips_when_no_channel_configured(self):
         # Given no Slack channel or token configured
         # When posting an investigation summary
-        with patch("sentinel.vendors.slack.get_settings") as mock_gs:
+        with patch("sentinel.vendors.slack.settings") as mock_gs:
             mock_gs.return_value.sre_slack_channel = ""
             mock_gs.return_value.slack_bot_token = ""
             with patch("sentinel.vendors.slack.logs") as mock_logs:
@@ -34,7 +34,7 @@ class TestPostInvestigationSummary:
 
         with (
             patch.object(slack, "_client", None),
-            patch("sentinel.vendors.slack.get_settings") as mock_gs,
+            patch("sentinel.vendors.slack.settings") as mock_gs,
             patch("sentinel.vendors.slack.logs"),
             patch("sentinel.vendors.slack.AsyncWebClient", return_value=mock_slack_client),
         ):
@@ -64,7 +64,7 @@ class TestPostInvestigationSummary:
 
         with (
             patch.object(slack, "_client", None),
-            patch("sentinel.vendors.slack.get_settings") as mock_gs,
+            patch("sentinel.vendors.slack.settings") as mock_gs,
             patch("sentinel.vendors.slack.logs"),
             patch("sentinel.vendors.slack.AsyncWebClient", return_value=mock_slack_client),
         ):
@@ -93,7 +93,7 @@ class TestPostInvestigationSummary:
 
         with (
             patch.object(slack, "_client", None),
-            patch("sentinel.vendors.slack.get_settings") as mock_gs,
+            patch("sentinel.vendors.slack.settings") as mock_gs,
             patch("sentinel.vendors.slack.logs") as mock_logs,
             patch("sentinel.vendors.slack.AsyncWebClient", return_value=mock_slack_client),
         ):
@@ -117,7 +117,7 @@ class TestPostSupportSuggestion:
     async def test_skips_when_no_token_configured(self):
         # Given no Slack token configured
         # When posting a support suggestion
-        with patch("sentinel.vendors.slack.get_settings") as mock_gs:
+        with patch("sentinel.vendors.slack.settings") as mock_gs:
             mock_gs.return_value.support_slack_channel = "#support"
             mock_gs.return_value.slack_bot_token = ""
             with patch("sentinel.vendors.slack.logs") as mock_logs:
@@ -139,7 +139,7 @@ class TestPostSupportSuggestion:
 
         with (
             patch.object(slack, "_client", None),
-            patch("sentinel.vendors.slack.get_settings") as mock_gs,
+            patch("sentinel.vendors.slack.settings") as mock_gs,
             patch("sentinel.vendors.slack.logs"),
             patch("sentinel.vendors.slack.AsyncWebClient", return_value=mock_slack_client),
         ):

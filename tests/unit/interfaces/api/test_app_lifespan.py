@@ -97,12 +97,14 @@ class TestSupportReviewLifespan:
     async def test_skips_graph_when_database_url_unset(
         self,
         monkeypatch: pytest.MonkeyPatch,
+        patch_settings,
     ) -> None:
         # Given a Settings instance with database_url unset (the
         # graceful-degradation branch where the engine is not connected)
         infra = _LifespanInfra(monkeypatch)
-        settings_stub = mock.MagicMock(database_url="", langgraph_checkpoint_dsn=None)
-        monkeypatch.setattr(app_module, "get_settings", lambda: settings_stub)
+        fake = patch_settings(app_module)
+        fake.database_url = ""
+        fake.langgraph_checkpoint_dsn = None
         fresh_app = fastapi.FastAPI()
 
         # When the lifespan runs

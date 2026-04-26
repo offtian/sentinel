@@ -22,7 +22,7 @@ just test tests/unit/path/test_file.py::TestClass # Single test class
 ## Architecture (non-obvious)
 
 - Layer boundaries enforced by import-linter contracts in `pyproject.toml` — lower layers cannot import higher layers
-- `settings.py` → env vars (singleton via `get_settings()`), `config.py` → wires adapters (singleton via `get_config()`)
+- `settings.py` → env vars (module-level `settings = Settings()` singleton, imported directly), `config.py` → wires adapters (singleton via `get_config()`)
 - Vendor adapters no-op when unconfigured (missing API keys) via `is_configured` property
 - All LLM agents route through LiteLLM SDK (in-process) via PydanticAI's `litellm:` model prefix — no external proxy
 - Agents use `Agent("test", ...)` placeholder model, overridden at runtime via `.run(model=...)`

@@ -6,7 +6,6 @@ from unittest import mock
 import httpx
 import pytest
 
-from sentinel import settings as settings_mod
 from sentinel.utils import llm_warmup
 from sentinel.utils import logs as logs_mod
 
@@ -39,7 +38,8 @@ class TestOllamaModelsFromSettings:
         cfg = _settings_with_models()
 
         # When the helper extracts ollama models
-        models = llm_warmup._ollama_models_from_settings(cfg)
+        with mock.patch.object(llm_warmup, "settings", cfg):
+            models = llm_warmup._ollama_models_from_settings()
 
         # Then only the ollama/* entries are returned, prefix-stripped,
         # in declaration order
@@ -54,7 +54,8 @@ class TestOllamaModelsFromSettings:
         )
 
         # When the helper extracts models
-        models = llm_warmup._ollama_models_from_settings(cfg)
+        with mock.patch.object(llm_warmup, "settings", cfg):
+            models = llm_warmup._ollama_models_from_settings()
 
         # Then the duplicate is collapsed to a single entry
         assert models == ("qwen3:8b",)
@@ -68,7 +69,8 @@ class TestOllamaModelsFromSettings:
         )
 
         # When the helper extracts ollama models
-        models = llm_warmup._ollama_models_from_settings(cfg)
+        with mock.patch.object(llm_warmup, "settings", cfg):
+            models = llm_warmup._ollama_models_from_settings()
 
         # Then the result is empty
         assert models == ()
@@ -99,7 +101,7 @@ class TestWarmOllamaModels:
 
         # When warmup is called under patched HTTP and log sinks
         with (
-            mock.patch.object(settings_mod, "get_settings", return_value=cfg),
+            mock.patch.object(llm_warmup, "settings", cfg),
             mock.patch.object(httpx, "AsyncClient") as patched_client,
             mock.patch.object(logs_mod, "log_event") as patched_log,
         ):
@@ -136,7 +138,7 @@ class TestWarmOllamaModels:
 
         # When warmup runs
         with (
-            mock.patch.object(settings_mod, "get_settings", return_value=cfg),
+            mock.patch.object(llm_warmup, "settings", cfg),
             mock.patch.object(httpx, "AsyncClient", _StubClient),
         ):
             await llm_warmup.warm_ollama_models()
@@ -171,7 +173,7 @@ class TestWarmOllamaModels:
 
         # When warmup runs under patched logging
         with (
-            mock.patch.object(settings_mod, "get_settings", return_value=cfg),
+            mock.patch.object(llm_warmup, "settings", cfg),
             mock.patch.object(httpx, "AsyncClient", _StubClient),
             mock.patch.object(logs_mod, "log_exception") as patched_log_exc,
             mock.patch.object(logs_mod, "log_event") as patched_log_event,

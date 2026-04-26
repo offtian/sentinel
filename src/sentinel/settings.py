@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import HttpUrl, SecretStr
+from pydantic import HttpUrl, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -155,6 +155,25 @@ class Settings(LLMSettings, SRESettings, K8sChartSettings, SupportSettings):
     otel_collector_endpoint: HttpUrl | None = None
     runbooks_root: Path = _PACKAGE_ROOT / "domain" / "runbooks"
 
+    @field_validator(
+        "litellm_base_url",
+        "langfuse_host",
+        "otel_collector_endpoint",
+        "litellm_virtual_key",
+        "langfuse_public_key",
+        "langfuse_secret_key",
+        mode="before",
+    )
+    @classmethod
+    def _empty_string_to_none(cls, value: object) -> object:
+        # Why: .env ships these knobs commented-as-empty (LITELLM_BASE_URL=)
+        # which pydantic-settings reads as "" and HttpUrl/SecretStr validation
+        # rejects. Treat empty string as "unset" so optional URL/secret fields
+        # follow their None-default fallback path.
+        if isinstance(value, str) and value == "":
+            return None
+        return value
+
     @property
     def is_local(self) -> bool:
         """Return True when running in local development (docker-compose or local K8s)."""
@@ -180,12 +199,4 @@ class Settings(LLMSettings, SRESettings, K8sChartSettings, SupportSettings):
     worker_metrics_port: int = 8001
 
 
-_settings: Settings | None = None
-
-
-def get_settings() -> Settings:
-    """Return the cached settings singleton, creating it on first call."""
-    global _settings  # noqa: PLW0603
-    if _settings is None:
-        _settings = Settings()
-    return _settings
+settings = Settings()

@@ -18,7 +18,7 @@ from datadog_api_client.v2.model.spans_query_filter import SpansQueryFilter
 from datadog_api_client.v2.model.spans_sort import SpansSort
 
 from sentinel.domain.vendor_adapters.observability.base import BaseObservabilityClient
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 from sentinel.utils import logs
 
 
@@ -35,8 +35,8 @@ class DatadogClient(BaseObservabilityClient):
         api_key: str | None = None,
         app_key: str | None = None,
     ) -> None:
-        self._api_key = api_key if api_key is not None else get_settings().datadog_api_key
-        self._app_key = app_key if app_key is not None else get_settings().datadog_app_key
+        self._api_key = api_key if api_key is not None else settings.datadog_api_key
+        self._app_key = app_key if app_key is not None else settings.datadog_app_key
 
     @property
     def is_configured(self) -> bool:

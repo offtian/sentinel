@@ -38,7 +38,7 @@ from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.graphs import chart_generation, common, investigation, support_review
 from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
 from sentinel.interfaces.graphs.agents import utils as agent_utils
-from sentinel.settings import get_settings
+from sentinel.settings import settings
 
 
 def _envelope_for_chat() -> envelope_mod.Envelope:
@@ -111,7 +111,7 @@ def _fetch_ollama_models() -> tuple[str, ...]:
     Returns a tuple of model names (e.g. ``("qwen3:8b", "qwen3-coder:30b")``).
     Results are cached for 30 seconds to avoid hammering the API on every rerun.
     """
-    gateway_url = get_settings().ollama_base_url.rstrip("/")
+    gateway_url = settings.ollama_base_url.rstrip("/")
     try:
         resp = httpx.get(f"{gateway_url}/api/tags", timeout=5)
         resp.raise_for_status()
@@ -213,7 +213,7 @@ async def _run_sre(
         alert=alert,
         envelope=_envelope_for_chat(),
         agent_for=cfg.agent_for,
-        holmes=holmes_adapter.HolmesAdapter(enabled=get_settings().holmesgpt_enabled),
+        holmes=holmes_adapter.HolmesAdapter(enabled=settings.holmesgpt_enabled),
         status_update_client=status_client,
         post_to_slack=False,
         trace_collector=trace_collector,
@@ -775,7 +775,6 @@ def _render_sidebar() -> None:
         st.divider()
         st.header("Model Selection")
 
-        settings = get_settings()
         available = _fetch_ollama_models()
 
         if not available:

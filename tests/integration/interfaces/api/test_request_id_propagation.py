@@ -324,7 +324,7 @@ def patched_sre_router(monkeypatch, captured_run):
         )
 
     monkeypatch.setattr(sre_router_mod, "_enqueue_alert", fake_enqueue)
-    monkeypatch.setattr(sre_router_mod, "get_settings", lambda: _build_settings_stub())
+    monkeypatch.setattr(sre_router_mod, "settings", _build_settings_stub())
     monkeypatch.setattr(sre_router_mod, "get_config", lambda: _build_config_stub(strict=False))
 
 
@@ -384,7 +384,7 @@ def patched_support_router(monkeypatch, captured_run):
     )
     monkeypatch.setattr(support_router_mod.support_ops, "persist_ticket_review", fake_persist)
     monkeypatch.setattr(support_router_mod.async_db, "get_db", lambda: mock.MagicMock())
-    monkeypatch.setattr(support_router_mod, "get_settings", lambda: _build_settings_stub())
+    monkeypatch.setattr(support_router_mod, "settings", _build_settings_stub())
     monkeypatch.setattr(support_router_mod, "get_config", lambda: _build_config_stub(strict=False))
 
 
@@ -622,7 +622,7 @@ class TestEnvelopeStructlogContextBinding:
             )
 
         monkeypatch.setattr(sre_router_mod, "_enqueue_alert", fake_enqueue)
-        monkeypatch.setattr(sre_router_mod, "get_settings", lambda: _build_settings_stub())
+        monkeypatch.setattr(sre_router_mod, "settings", _build_settings_stub())
         monkeypatch.setattr(sre_router_mod, "get_config", lambda: _build_config_stub(strict=False))
         client = TestClient(_build_sre_only_app())
 
@@ -725,7 +725,7 @@ class TestStrictModeRejection:
         # and the payload has no tenant identifiers
         monkeypatch.setattr(
             sre_router_mod,
-            "get_settings",
+            "settings",
             lambda: _build_settings_stub(cluster_name="", region=""),
         )
         monkeypatch.setattr(
@@ -807,7 +807,7 @@ class TestSoftModeFallback:
         monkeypatch.setattr(sre_router_mod, "_enqueue_alert", fake_enqueue)
         monkeypatch.setattr(
             sre_router_mod,
-            "get_settings",
+            "settings",
             lambda: _build_settings_stub(cluster_name="", region=""),
         )
         monkeypatch.setattr(
