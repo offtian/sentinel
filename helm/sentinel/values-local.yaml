@@ -86,7 +86,8 @@ service:
 # Environment variables for local development
 env:
   ENVIRONMENT: localdev
-  DATABASE_URL: "postgresql+asyncpg://postgres:postgres@sentinel-postgres:5432/sentinel"
+  DATABASE_URL: "postgresql+asyncpg://sentinel-postgres:5432/sentinel"
+  PGUSER: "postgres"
   OLLAMA_BASE_URL: "http://ollama:11434"
   # LLM models routed through Ollama (override to match your pulled models)
   INTENT_ROUTER_LLM: "ollama/qwen3:8b"

@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: sentinel
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5432:5432"
     volumes:
@@ -20,7 +20,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/sentinel
+      DATABASE_URL: postgresql+asyncpg://db:5432/sentinel
+      PGUSER: postgres
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       ENVIRONMENT: localdev
       # Grafana stack (auto-selected when ENVIRONMENT=localdev)
@@ -52,7 +53,8 @@ services:
     ports:
       - "8811:8811"
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/sentinel
+      DATABASE_URL: postgresql+asyncpg://db:5432/sentinel
+      PGUSER: postgres
       ENVIRONMENT: localdev
       MCP_SERVER_PORT: "8811"
       MCP_SERVER_API_KEY: ${MCP_SERVER_API_KEY:-}
