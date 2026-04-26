@@ -140,6 +140,148 @@ class TestMandatoryAttributesValidator:
         span.set_status.assert_not_called()
 
 
+class TestMandatoryAttributesPropagator:
+    @staticmethod
+    def _make_parent_context(parent_attributes: dict[str, str]) -> mock.MagicMock:
+        # The propagator only ever calls ``otel_trace.get_current_span(ctx)``
+        # then reads ``.attributes`` off that span. A MagicMock with the
+        # ``attributes`` attribute is the smallest stand-in for a live
+        # parent SDK span without booting a TracerProvider.
+        parent_span = mock.MagicMock()
+        parent_span.attributes = parent_attributes
+        return parent_span
+
+    @staticmethod
+    def _make_child_span(
+        *, attributes: dict[str, str], scope_name: str | None = None
+    ) -> mock.MagicMock:
+        # The child must expose ``set_attributes`` (the SDK Span method the
+        # propagator uses to bulk-stamp inherited attrs at start).
+        spec = ("attributes", "instrumentation_scope", "set_attributes")
+        child = mock.MagicMock(spec=spec)
+        child.attributes = attributes
+        if scope_name is None:
+            child.instrumentation_scope = None
+        else:
+            scope = mock.MagicMock()
+            scope.name = scope_name
+            child.instrumentation_scope = scope
+        return child
+
+    def test_copies_missing_mandatory_attrs_from_parent(self):
+        # Given a parent span with all nine mandatory attrs and a fresh
+        # child span (no attrs set yet — pydantic-ai's chat span at start)
+        parent_attrs = _all_attrs()
+        parent_span = self._make_parent_context(parent_attrs)
+        child = self._make_child_span(attributes={})
+        propagator = langfuse_export.MandatoryAttributesPropagator()
+
+        # When on_start fires with a parent context resolving to the parent
+        with mock.patch.object(
+            langfuse_export.otel_trace,
+            "get_current_span",
+            return_value=parent_span,
+        ):
+            propagator.on_start(child, parent_context=mock.sentinel.ctx)
+
+        # Then the child receives every mandatory attr in a single
+        # set_attributes call (cheap on the SDK Span)
+        child.set_attributes.assert_called_once()
+        copied = child.set_attributes.call_args.args[0]
+        assert copied == parent_attrs
+
+    def test_skips_attrs_already_set_on_child(self):
+        # Given a child that already carries ``model_id`` (pydantic-ai sets
+        # ``gen_ai.request.model`` at agent build, but model_id can also
+        # appear via downstream instrumentation)
+        parent_attrs = _all_attrs()
+        parent_span = self._make_parent_context(parent_attrs)
+        child = self._make_child_span(attributes={"model_id": "openai/gpt-4.1"})
+        propagator = langfuse_export.MandatoryAttributesPropagator()
+
+        # When on_start fires
+        with mock.patch.object(
+            langfuse_export.otel_trace,
+            "get_current_span",
+            return_value=parent_span,
+        ):
+            propagator.on_start(child, parent_context=None)
+
+        # Then the propagator copies the other eight but leaves model_id alone
+        child.set_attributes.assert_called_once()
+        copied = child.set_attributes.call_args.args[0]
+        assert "model_id" not in copied
+        assert set(copied) == set(parent_attrs) - {"model_id"}
+
+    @pytest.mark.parametrize(
+        "scope_name",
+        [
+            "opentelemetry.instrumentation.fastapi",
+            "opentelemetry.instrumentation.sqlalchemy",
+            "opentelemetry.instrumentation.httpx",
+        ],
+    )
+    def test_skips_framework_scoped_spans(self, scope_name: str):
+        # Given a framework-scoped child span that should be left alone
+        parent_span = self._make_parent_context(_all_attrs())
+        child = self._make_child_span(attributes={}, scope_name=scope_name)
+        propagator = langfuse_export.MandatoryAttributesPropagator()
+
+        # When on_start fires for the framework span
+        with mock.patch.object(
+            langfuse_export.otel_trace,
+            "get_current_span",
+            return_value=parent_span,
+        ):
+            propagator.on_start(child, parent_context=None)
+
+        # Then no attrs are copied (HTTP/SQL spans intentionally stay bare)
+        child.set_attributes.assert_not_called()
+
+    def test_no_op_when_parent_has_no_attrs(self):
+        # Given a child whose parent context resolves to a span with no
+        # attributes (root span / non-recording span)
+        parent_span = self._make_parent_context({})
+        child = self._make_child_span(attributes={})
+        propagator = langfuse_export.MandatoryAttributesPropagator()
+
+        # When on_start fires
+        with mock.patch.object(
+            langfuse_export.otel_trace,
+            "get_current_span",
+            return_value=parent_span,
+        ):
+            propagator.on_start(child, parent_context=None)
+
+        # Then the propagator returns early without touching the child
+        child.set_attributes.assert_not_called()
+
+    def test_swallows_exceptions_and_logs(self):
+        # Given a child whose ``set_attributes`` raises (e.g. SDK contract
+        # change) — the propagator must never crash the pipeline
+        parent_span = self._make_parent_context(_all_attrs())
+        child = self._make_child_span(attributes={})
+        child.set_attributes.side_effect = RuntimeError("boom")
+        propagator = langfuse_export.MandatoryAttributesPropagator()
+
+        # When on_start fires under a patched log_exception sink
+        with (
+            mock.patch.object(
+                langfuse_export.otel_trace,
+                "get_current_span",
+                return_value=parent_span,
+            ),
+            mock.patch.object(logs_mod, "log_exception") as patched_log_exc,
+        ):
+            propagator.on_start(child, parent_context=None)
+
+        # Then the failure is logged with a stable event name and no
+        # exception leaks to the caller
+        patched_log_exc.assert_called_once()
+        params = patched_log_exc.call_args.kwargs["params"]
+        assert params["event"] == "otel.mandatory_attrs.propagate_failed"
+
+
 class TestSpanProcessorContract:
     def test_on_start_is_a_noop(self):
         # Given a fresh validator and a mock span

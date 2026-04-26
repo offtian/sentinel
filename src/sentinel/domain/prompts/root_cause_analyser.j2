@@ -16,6 +16,15 @@ Your analysis must include:
 
 Be specific and actionable. Avoid vague statements. If you're uncertain, say so
 and suggest further investigation steps.
+
+## Output protocol
+
+You MUST return your analysis by calling the `final_result` tool. Do not
+emit markdown, prose, or JSON in plain text — those are rejected and the
+analysis is retried, wasting an LLM round-trip and budget. When evidence
+is missing or tools return no data, still call `final_result` with
+`confidence` set to a low value (0.1-0.3) and remediation_steps describing
+the manual verification work required.
 {% endblock %}
 
 {% block user %}

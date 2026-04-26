@@ -43,7 +43,7 @@ from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.graphs import common, investigation, support_review
 from sentinel.interfaces.graphs.agents import k8s_runner
 from sentinel.settings import get_settings
-from sentinel.utils import logs
+from sentinel.utils import llm_warmup, logs
 
 
 def _collect_model_ids(settings: object, *attr_names: str) -> list[str]:
@@ -467,12 +467,19 @@ async def _main() -> None:
         await async_db.connect_db()
         logs.log_event("worker.database_initialised")
 
+    # Run warmup in the background so polling starts immediately. The task
+    # holds a reference for the lifetime of `_main` to keep it from being
+    # garbage-collected mid-flight; on shutdown we cancel it cleanly.
+    warmup_task = asyncio.create_task(llm_warmup.warm_ollama_models())
+
     try:
         if args.run_once:
             await _run_once(worker_id=worker_id)
         else:
             await _poll_loop(worker_id=worker_id)
     finally:
+        if not warmup_task.done():
+            warmup_task.cancel()
         if get_settings().database_url:
             await async_db.disconnect_db()
         await database.close_engine()

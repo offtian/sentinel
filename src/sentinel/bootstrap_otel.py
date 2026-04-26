@@ -117,7 +117,8 @@ def init_traces() -> None:
 
         import logfire
 
-        os.environ.setdefault("OTEL_EXPORTER_OTLP_ENDPOINT", settings.otel_traces_endpoint)
+        # Traces-specific to keep the metrics SDK from inheriting this endpoint.
+        os.environ.setdefault("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", settings.otel_traces_endpoint)
 
         logfire.configure(
             send_to_logfire=False,
@@ -139,8 +140,10 @@ def init_traces() -> None:
         # (no ``add_span_processor``); Logfire's ProxyTracerProvider and the
         # SDK ``TracerProvider`` both expose it, so we narrow via ``Any``.
         tracer_provider: Any = trace.get_tracer_provider()
-        validator = langfuse_export.MandatoryAttributesValidator()
-        tracer_provider.add_span_processor(validator)
+        # Propagator must run before the validator so on_end validation sees
+        # the post-propagation attribute set.
+        tracer_provider.add_span_processor(langfuse_export.MandatoryAttributesPropagator())
+        tracer_provider.add_span_processor(langfuse_export.MandatoryAttributesValidator())
 
         if settings.langfuse_host:
             public_key = (
