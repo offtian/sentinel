@@ -202,7 +202,11 @@ services:
     volumes:
       - clickhouse-data:/var/lib/clickhouse
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:8123/ping"]
+      # 127.0.0.1, not localhost: on Apple Silicon this image fails the IPv6
+      # listen with "Address family for hostname not supported" so it only
+      # binds 0.0.0.0; busybox wget resolves localhost to ::1 first and gets
+      # connection refused. Bypass the resolver.
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:8123/ping"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -279,7 +283,7 @@ services:
       LANGFUSE_INIT_USER_EMAIL: dev@sentinel.localdev
       LANGFUSE_INIT_USER_NAME: Dev
       # Dev-only — do not use in production.
-      LANGFUSE_INIT_USER_PASSWORD: devpass
+      LANGFUSE_INIT_USER_PASSWORD: devpass1
       LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-localdev
       # Dev-only — do not use in production.
       LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-localdev

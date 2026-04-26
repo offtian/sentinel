@@ -67,7 +67,7 @@ The API starts at `http://localhost:8000`. Health check at `GET /health`.
 | Service        | URL                          | Notes                                                                 |
 | -------------- | ---------------------------- | --------------------------------------------------------------------- |
 | Sentinel API   | `http://localhost:8000`      | Webhooks, manual triggers, health.                                    |
-| Langfuse UI    | `http://localhost:3001`      | Trace explorer. Sign in `dev@sentinel.localdev` / `devpass`.          |
+| Langfuse UI    | `http://localhost:3001`      | Trace explorer. Sign in `dev@sentinel.localdev` / `devpass1`.         |
 | MinIO console  | `http://localhost:9001`      | Object store backing Langfuse (`minio` / `miniosecret`).              |
 | Postgres (app) | `localhost:5432`             | Sentinel application database.                                        |
 | Postgres (lf)  | `localhost:5433`             | Langfuse's own database, isolated from the app DB.                    |
