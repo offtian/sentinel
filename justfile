@@ -188,6 +188,34 @@ kagent-dev-up:
 kagent-dev-down:
     kind delete cluster --name sentinel-dev
 
+# Real-pod investigation harness
+# ------------------------------
+#
+# Spin up a victim Pod inside the local Kind cluster, OOMKill it on
+# demand, and trigger a real SRE investigation against it. The
+# investigator (with K8S_INVESTIGATION_BACKEND=native) queries real
+# kubectl describe / events / logs.
+
+# Deploy a victim Pod with a 64Mi memory limit (default name: api-service)
+victim-up name="api-service":
+    ./scripts/setup-victim-pod.sh {{name}}
+
+# Tear down all victim Pods + namespace
+victim-down:
+    kubectl --context kind-sentinel-dev delete namespace sentinel-victims --ignore-not-found
+
+# Jam memory into the victim and trigger an OOMKilled event
+victim-jam name="api-service" mb="128":
+    ./scripts/jam-pod-memory.sh {{name}} {{mb}}
+
+# Trigger an investigation against an existing victim Pod (no jam)
+investigate-victim name="api-service":
+    ./scripts/trigger-investigation.sh --victim {{name}}
+
+# End-to-end demo: ensure victim is up, OOM it, then trigger investigation
+investigate-victim-oom name="api-service" mb="128":
+    ./scripts/trigger-investigation.sh --victim {{name}} --jam {{mb}}
+
 # Housekeeping
 # ------------
 
