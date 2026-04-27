@@ -286,6 +286,141 @@ async def post_approval_request(
         return None
 
 
+_DRIFT_SEVERITY_EMOJI: dict[str, str] = {
+    "high": ":red_circle:",
+    "medium": ":large_yellow_circle:",
+    "low": ":large_blue_circle:",
+}
+
+
+def is_slack_configured() -> bool:
+    """
+    Return True when a Slack bot token is present in settings.
+
+    Mirrors the vendor-adapter ``is_configured`` convention so callers
+    (notably :mod:`sentinel.application.runbooks._drift_notifier`) can
+    short-circuit before constructing payloads.
+    """
+    return bool(settings.slack_bot_token)
+
+
+async def post_drift_alert(
+    *,
+    channel: str,
+    runbook_id: str,
+    content_sha: str,
+    drift_type: str,
+    drift_severity: str,
+    suggested_fix: str,
+    resolution_pr_template_url: str,
+) -> None:
+    """
+    Post one runbook drift alert to ``channel``. Never raises.
+
+    Used by the F6.L drift-detection cron after persisting each
+    ``runbook_drift_history`` row. Returns silently when the Slack client
+    is unconfigured (per the vendor-adapter no-op convention) and on any
+    Slack API error (one drift's outage must never block the rest of the
+    sweep).
+    """
+    client = _get_client()
+    if not client or not channel:
+        logs.log_event(
+            "runbook_drift_slack_skipped",
+            params={
+                "reason": "No channel or token configured",
+                "runbook_id": runbook_id,
+                "drift_type": drift_type,
+            },
+        )
+        return
+
+    blocks = _build_drift_blocks(
+        runbook_id=runbook_id,
+        content_sha=content_sha,
+        drift_type=drift_type,
+        drift_severity=drift_severity,
+        suggested_fix=suggested_fix,
+        resolution_pr_template_url=resolution_pr_template_url,
+    )
+    fallback_text = f"Runbook drift: {drift_type} on {runbook_id} ({drift_severity})"
+
+    try:
+        await client.chat_postMessage(
+            channel=channel,
+            text=fallback_text,
+            blocks=blocks,
+        )
+        logs.log_event(
+            "runbook_drift_slack_posted",
+            params={
+                "channel": channel,
+                "runbook_id": runbook_id,
+                "drift_type": drift_type,
+                "drift_severity": drift_severity,
+            },
+        )
+    except Exception as exc:
+        logs.log_exception(
+            exc,
+            params={
+                "runbook_id": runbook_id,
+                "drift_type": drift_type,
+                "channel": channel,
+            },
+        )
+
+
+def _build_drift_blocks(
+    *,
+    runbook_id: str,
+    content_sha: str,
+    drift_type: str,
+    drift_severity: str,
+    suggested_fix: str,
+    resolution_pr_template_url: str,
+) -> list[dict[str, object]]:
+    severity_emoji = _DRIFT_SEVERITY_EMOJI.get(drift_severity, ":white_circle:")
+    blocks: list[dict[str, object]] = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"Runbook Drift: {drift_type}",
+            },
+        },
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*Runbook:* `{runbook_id}`"},
+                {"type": "mrkdwn", "text": f"*Content SHA:* `{content_sha}`"},
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Severity:* {severity_emoji} {drift_severity}",
+                },
+                {"type": "mrkdwn", "text": f"*Drift type:* {drift_type}"},
+            ],
+        },
+    ]
+    if suggested_fix:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*Suggested fix:*\n{suggested_fix}"},
+            }
+        )
+    blocks.append(
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"<{resolution_pr_template_url}|Open resolution PR template>",
+            },
+        }
+    )
+    return blocks
+
+
 def _build_support_blocks(
     *,
     ticket_key: str,
