@@ -11,6 +11,7 @@ Covers F2.5/F2.6/F2.7:
 
 from __future__ import annotations
 
+import contextlib
 from unittest import mock
 
 import pytest
@@ -209,6 +210,23 @@ class _SpyingSpan(otel_trace.NonRecordingSpan):
         self.attribute_calls.append(dict(attributes))
 
 
+class _SpyingTracer:
+    """Tracer stub that yields a single shared :class:`_SpyingSpan`.
+
+    The node helper resolves the tracer via :func:`_get_node_tracer` and
+    sets attributes on the span returned by ``start_as_current_span``;
+    routing every node through the same spy span lets the test count
+    attribute-setting calls across the whole pipeline run.
+    """
+
+    def __init__(self, span: _SpyingSpan) -> None:
+        self._span = span
+
+    @contextlib.contextmanager
+    def start_as_current_span(self, name, **kwargs):
+        yield self._span
+
+
 class TestInvestigateAlertSetsSpanAttributesOnEveryNode:
     @pytest.mark.asyncio
     async def test_every_node_invocation_calls_set_attributes_with_envelope(self) -> None:
@@ -256,11 +274,21 @@ class TestInvestigateAlertSetsSpanAttributesOnEveryNode:
         )
         envelope = factories.make_envelope()
 
-        # When the pipeline runs while only the node-helpers' OTel API is stubbed
-        with mock.patch.object(
-            _node_helpers.otel_trace,
-            "get_current_span",
-            return_value=spying_span,
+        # When the pipeline runs while the node-helpers' tracer is stubbed
+        # to yield the spying span (so envelope attributes flow there) and
+        # the OTel ``get_current_span`` is stubbed for the agent-invocation
+        # call sites that still write through the active span
+        with (
+            mock.patch.object(
+                _node_helpers,
+                "_NODE_TRACER",
+                _SpyingTracer(spying_span),
+            ),
+            mock.patch.object(
+                _node_helpers.otel_trace,
+                "get_current_span",
+                return_value=spying_span,
+            ),
         ):
             await investigation.investigate_alert(
                 alert=factories.make_alert(),

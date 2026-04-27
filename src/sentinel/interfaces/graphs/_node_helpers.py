@@ -33,8 +33,50 @@ def _team_profile_attribute() -> dict[str, otel_types.AttributeValue]:
         return {}
 
 
-_NODE_TRACER = otel_trace.get_tracer("sentinel.node")
-_PIPELINE_TRACER = otel_trace.get_tracer("sentinel.pipeline")
+# ``_NODE_TRACER`` / ``_PIPELINE_TRACER`` start out as ``None`` and are
+# resolved lazily via :func:`_get_node_tracer` / :func:`_get_pipeline_tracer`
+# at the point of use. Acquiring the tracer at module-import time bound the
+# helper to whatever ``TracerProvider`` was current then — typically the
+# global ``ProxyTracerProvider`` *before* ``bootstrap.initialise()`` ran
+# ``logfire.configure()``. The proxy lazily resolves to the real tracer on
+# first use, but only once: a tracer cached at module load can outlive a
+# subsequent test setup that swaps the provider, leaving Sentinel emitting
+# spans through a dead provider while pydantic-ai (which constructs its
+# ``InstrumentationSettings`` per-run) emits through the live one. The
+# observable symptom was agent ``... run`` spans drifting up to be siblings
+# of the graph's pipeline span instead of nesting under
+# ``investigation.classify_alert`` / ``... .analyse_root_cause``.
+#
+# These names remain module-level so unit tests can keep patching them via
+# ``mock.patch.object(_node_helpers, "_NODE_TRACER", fake_tracer)``; the
+# helpers honour a patched value when present and fall back to a live
+# ``get_tracer`` call otherwise.
+_NODE_TRACER: otel_trace.Tracer | None = None
+_PIPELINE_TRACER: otel_trace.Tracer | None = None
+
+
+def _get_node_tracer() -> otel_trace.Tracer:
+    """
+    Return the tracer used to open per-node spans, resolved at call time.
+
+    Honours a test-patched ``_NODE_TRACER`` so the existing unit tests still
+    intercept span creation, and otherwise calls ``otel_trace.get_tracer``
+    fresh on every invocation so the global ``TracerProvider`` installed by
+    ``bootstrap.init_traces`` is picked up regardless of import order.
+    """
+    if _NODE_TRACER is not None:
+        return _NODE_TRACER
+    return otel_trace.get_tracer("sentinel.node")
+
+
+def _get_pipeline_tracer() -> otel_trace.Tracer:
+    """
+    Return the tracer used to open the top-level pipeline span, resolved at
+    call time. See :func:`_get_node_tracer` for the rationale.
+    """
+    if _PIPELINE_TRACER is not None:
+        return _PIPELINE_TRACER
+    return otel_trace.get_tracer("sentinel.pipeline")
 
 
 def instrumented_node_run[T](
@@ -77,13 +119,15 @@ def instrumented_node_run[T](
         # leaving classifier/analyser agent spans floating as siblings of the
         # graph iteration span. Owning the node span here makes the parent
         # explicit regardless of pydantic-graph's behaviour.
+        #
+        # ``_get_node_tracer()`` resolves the tracer at call time so a global
+        # ``TracerProvider`` installed by ``bootstrap.init_traces`` after this
+        # module imported is picked up. Setting attributes on the span yielded
+        # by the context manager (rather than ``get_current_span()``) keeps
+        # them on our owned span even if the outer trace context is unusual.
         span_name = f"{pipeline}.{node}"
-        with _NODE_TRACER.start_as_current_span(span_name):
-            # Use ``get_current_span`` so callers patching the OTel API at
-            # the ``_node_helpers.otel_trace`` reference can observe the
-            # attribute set in unit tests; in production this returns the
-            # same span just opened above.
-            otel_trace.get_current_span().set_attributes(attributes)
+        with _get_node_tracer().start_as_current_span(span_name) as span:
+            span.set_attributes(attributes)
             start = time.perf_counter()
             status = "ok"
             try:
@@ -171,7 +215,7 @@ async def run_pipeline_with_envelope[T](
     attributes.update(envelope.to_span_attributes())
     attributes.update(_team_profile_attribute())
 
-    with _PIPELINE_TRACER.start_as_current_span(span_name, attributes=attributes) as span:
+    with _get_pipeline_tracer().start_as_current_span(span_name, attributes=attributes) as span:
         result = await fn()
         try:
             span.set_attribute("langfuse.observation.output", serialize_output(result))
