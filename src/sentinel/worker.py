@@ -175,7 +175,6 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     alert = alert_entities.Alert.model_validate(payload)
 
     cfg = config_mod.get_config()
-    holmes = cfg.build_holmes_adapter()
     pd_client = cfg.pagerduty_client if settings.pagerduty_api_key else None
     k8s_adapter = cfg.build_k8s_investigation_adapter(
         agent_runner=k8s_runner.run_k8s_agent,
@@ -250,12 +249,16 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
             alert=alert,
             envelope=envelope,
             agent_for=cfg.agent_for,
-            holmes=holmes,
             pagerduty_client=pd_client,
             persist_fn=_persist,
             trace_collector=et,
             classifier_toolsets=shared_mcp,
-            analyser_toolsets=(observability_toolset, *shared_mcp),
+            # F7: observability toolset moved from analyser to investigator —
+            # the investigator owns evidence gathering, the analyser owns
+            # synthesis. shared MCP stays on both so general tools (notion,
+            # confluence, etc.) remain reachable from either stage.
+            investigator_toolsets=(observability_toolset, *shared_mcp),
+            analyser_toolsets=shared_mcp,
             k8s_adapter=k8s_adapter,
             challenger_adapter=challenger_adapter,
         )

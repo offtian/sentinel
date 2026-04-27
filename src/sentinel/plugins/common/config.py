@@ -28,7 +28,7 @@ from pydantic_ai.toolsets import AbstractToolset
 
 from sentinel import config as base_config_mod
 from sentinel.config import BaseConfiguration
-from sentinel.domain.investigations import adapters, holmes_adapter, k8s_native_agent
+from sentinel.domain.investigations import adapters, k8s_native_agent
 from sentinel.domain.investigations import kagent_adapter as kagent_adapter_mod
 from sentinel.domain.llm import litellm_proxy
 from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
@@ -50,13 +50,16 @@ from sentinel.utils import logs
 from sentinel.vendors import kubernetes_client as k8s_client_mod
 
 
-try:
-    from holmes.core import tools as holmes_tools_mod
-    from holmes.plugins import toolsets as holmes_toolsets_mod
-
-    _HOLMES_SDK_AVAILABLE = True
-except ImportError:
-    _HOLMES_SDK_AVAILABLE = False
+# F7: HolmesGPT SDK imports archived. The investigator agent now owns
+# evidence-gathering via Sentinel-native toolsets (logs/metrics/traces),
+# so the holmes.core / holmes.plugins imports are no longer required.
+# Preserved as commented reference for the F7 stabilisation window.
+# try:
+#     from holmes.core import tools as holmes_tools_mod
+#     from holmes.plugins import toolsets as holmes_toolsets_mod
+#     _HOLMES_SDK_AVAILABLE = True
+# except ImportError:
+#     _HOLMES_SDK_AVAILABLE = False
 
 
 logger = logs.get_logger()
@@ -64,8 +67,11 @@ logger = logs.get_logger()
 _mcp_build_lock = threading.Lock()
 
 
-def _strip_wiki_suffix(url: str) -> str:
-    return url.rstrip("/").removesuffix("/wiki")
+# F7: _strip_wiki_suffix was only used by the archived
+# _build_holmes_sdk_toolsets — keep commented for parity with the
+# preserved Holmes block above.
+# def _strip_wiki_suffix(url: str) -> str:
+#     return url.rstrip("/").removesuffix("/wiki")
 
 
 # F6 runbook catalog: team-first ordering — the SRE-team runbooks override the
@@ -176,91 +182,39 @@ class CommonConfiguration(BaseConfiguration):
 
     # -- SRE pipeline helpers ------------------------------------------------
 
-    def build_holmes_adapter(self) -> holmes_adapter.BaseHolmesAdapter:
-        """
-        Build the appropriate Holmes adapter based on configuration.
-
-        When ``holmes_backend`` is ``"sdk"`` and the HolmesGPT SDK is
-        installed, return a ``HolmesAdapter`` that uses ``ToolCallingLLM``.
-        Otherwise (default ``"direct"``), return a ``DirectToolsetAdapter``
-        that queries vendor adapters directly.
-        """
-        if not self.settings.holmesgpt_enabled:
-            return holmes_adapter.HolmesAdapter(enabled=False)
-
-        if self.settings.holmes_backend == "sdk":
-            toolsets = self._build_holmes_sdk_toolsets()
-            return holmes_adapter.HolmesAdapter(
-                enabled=True,
-                model=self._normalise_model_name(self.settings.holmes_sdk_model),
-                api_key=None,
-                api_base=None,
-                toolsets=toolsets,
-            )
-
-        if self.observability_client is not None:
-            return holmes_adapter.DirectToolsetAdapter(
-                observability_client=self.observability_client,
-                circuit_breaker=self.observability_circuit_breaker,
-            )
-        return holmes_adapter.HolmesAdapter(enabled=False)
-
-    def _build_holmes_sdk_toolsets(self) -> tuple[Any, ...]:
-        """Wire HolmesGPT built-in toolsets from Sentinel settings (no-op when unconfigured)."""
-        if not _HOLMES_SDK_AVAILABLE:
-            logger.warning("holmes_sdk_not_installed")
-            return ()
-
-        settings = self.settings
-        raw_config: dict[str, dict[str, Any]] = {}
-        by_name: dict[str, Any] = {}
-
-        if settings.confluence_base_url and settings.jira_user_email and settings.jira_api_token:
-            confluence_toolset = holmes_toolsets_mod.ConfluenceToolset()
-            by_name[confluence_toolset.name] = confluence_toolset
-            raw_config[confluence_toolset.name] = {
-                "enabled": True,
-                "config": {
-                    "api_url": _strip_wiki_suffix(settings.confluence_base_url),
-                    "user": settings.jira_user_email,
-                    "api_key": settings.jira_api_token,
-                },
-            }
-
-        if settings.notion_token:
-            notion_toolset = holmes_toolsets_mod.NotionToolset()
-            by_name[notion_toolset.name] = notion_toolset
-            raw_config[notion_toolset.name] = {
-                "enabled": True,
-                "config": {
-                    "additional_headers": {
-                        "Authorization": f"Bearer {settings.notion_token}",
-                    },
-                },
-            }
-
-        enabled: list[Any] = []
-        if raw_config:
-            overrides = holmes_toolsets_mod.load_toolsets_from_config(
-                raw_config,
-                strict_check=False,
-            )
-            for override in overrides:
-                target = by_name.get(override.name)
-                if target is not None:
-                    target.override_with(override)
-
-            for toolset in by_name.values():
-                toolset.check_prerequisites(silent=True)
-                if toolset.status == holmes_tools_mod.ToolsetStatusEnum.ENABLED:
-                    enabled.append(toolset)
-
-        logger.info(
-            "holmes_sdk_toolsets_loaded",
-            configured=list(raw_config.keys()),
-            enabled=[ts.name for ts in enabled],
-        )
-        return tuple(enabled)
+    # F7: build_holmes_adapter and _build_holmes_sdk_toolsets archived.
+    # The HolmesGPT integration is replaced by the Sentinel-native
+    # investigator agent (registered via ``load_agents`` and consuming
+    # ``investigator_toolsets`` at run time). The original implementation
+    # is preserved as commented reference for the team to compare prompt
+    # behaviour during the F7 stabilisation window — delete in a follow-up
+    # cleanup PR once tests and call sites are settled.
+    #
+    # def build_holmes_adapter(self) -> holmes_adapter.BaseHolmesAdapter:
+    #     """
+    #     Build the appropriate Holmes adapter based on configuration.
+    #     """
+    #     if not self.settings.holmesgpt_enabled:
+    #         return holmes_adapter.HolmesAdapter(enabled=False)
+    #     if self.settings.holmes_backend == "sdk":
+    #         toolsets = self._build_holmes_sdk_toolsets()
+    #         return holmes_adapter.HolmesAdapter(
+    #             enabled=True,
+    #             model=self._normalise_model_name(self.settings.holmes_sdk_model),
+    #             api_key=None,
+    #             api_base=None,
+    #             toolsets=toolsets,
+    #         )
+    #     if self.observability_client is not None:
+    #         return holmes_adapter.DirectToolsetAdapter(
+    #             observability_client=self.observability_client,
+    #             circuit_breaker=self.observability_circuit_breaker,
+    #         )
+    #     return holmes_adapter.HolmesAdapter(enabled=False)
+    #
+    # def _build_holmes_sdk_toolsets(self) -> tuple[Any, ...]:
+    #     """Wire HolmesGPT built-in toolsets from Sentinel settings."""
+    #     ... (original implementation; see git history for full body)
 
     def _build_k8s_client(self) -> k8s_client_mod.KubernetesClient:
         """
@@ -417,6 +371,10 @@ class CommonConfiguration(BaseConfiguration):
             "alert_classifier": agent_module.alert_classifier.build_agent(
                 model=self._build_agent_model(self.classifier_model),
                 skills=base_config_mod.SKILLS_BY_AGENT.get("alert_classifier", ()),
+            ),
+            "investigator": agent_module.investigator.build_agent(
+                model=self._build_agent_model(self.investigator_model),
+                skills=base_config_mod.SKILLS_BY_AGENT.get("investigator", ()),
             ),
             "root_cause_analyser": agent_module.root_cause_analyser.build_agent(
                 model=self._build_agent_model(self.analyser_model),
