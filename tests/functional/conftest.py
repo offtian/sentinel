@@ -9,6 +9,7 @@ import pytest
 from sentinel.domain.search import searcher
 from sentinel.interfaces.graphs.agents import (
     alert_classifier,
+    investigator,
     response_drafter,
     root_cause_analyser,
     ticket_reviewer,
@@ -42,19 +43,6 @@ def _make_fake_agent(fake_run: Any) -> mock.MagicMock:
     agent = mock.MagicMock()
     agent.run = fake_run
     return agent
-
-
-def _build_fake_config(agent_overrides: dict[str, Any]) -> mock.MagicMock:
-    """
-    Build a mock config whose ``agent_for()`` returns fake agents.
-
-    Any agent name not in ``agent_overrides`` returns a default MagicMock.
-    """
-    cfg = mock.MagicMock()
-    cfg.agent_for = mock.MagicMock(
-        side_effect=lambda name: agent_overrides.get(name, mock.MagicMock())
-    )
-    return cfg
 
 
 # F7 (2026-04-27): mock_holmes fixture archived. The HolmesGPT adapter
@@ -104,6 +92,26 @@ async def _fake_root_cause_analyser_run(*, user_prompt, deps, **kwargs):
     )
 
 
+async def _fake_investigator_run(*, user_prompt, deps, **kwargs):
+    """Deterministic empty investigation findings.
+
+    Mirrors the alert_classifier / root_cause_analyser default-fake pattern.
+    Returns an empty ``InvestigationFindings`` (no summary, no sources, no
+    tool calls) so the F7 ``Investigate`` node lands on the ``status="empty"``
+    branch — the evidence floor still kicks in downstream, but the pipeline
+    completes the run cleanly and emits all envelope spans. Tests that need
+    populated findings should override the ``"investigator"`` key when
+    calling ``_build_fake_config``.
+    """
+    return FakeAgentResult(
+        investigator.InvestigationFindings(
+            summary="",
+            sources_queried=[],
+            tool_calls=[],
+        )
+    )
+
+
 async def _fake_ticket_reviewer_run(*, user_prompt, deps, **kwargs):
     """Deterministic ticket classification."""
     return FakeAgentResult(
@@ -139,6 +147,29 @@ async def _fake_response_drafter_run(*, user_prompt, deps, **kwargs):
             notes_for_agent="User may need IT admin involvement if SSO-managed.",
         )
     )
+
+
+def _build_fake_config(agent_overrides: dict[str, Any]) -> mock.MagicMock:
+    """
+    Build a mock config whose ``agent_for()`` returns fake agents.
+
+    Defaults are provided for the SRE-pipeline agents that the F7
+    ``Investigate`` node calls so tests that don't explicitly override them
+    still get an awaitable fake (a default ``MagicMock`` would raise
+    ``TypeError: object MagicMock can't be used in 'await' expression`` when
+    the node calls ``await agent.run(...)``). Any agent name not in
+    ``agent_overrides`` and not in the defaults still falls back to a plain
+    ``MagicMock`` for callers that only need ``.is_configured``-style access.
+    """
+    defaults: dict[str, Any] = {
+        "alert_classifier": _make_fake_agent(_fake_alert_classifier_run),
+        "root_cause_analyser": _make_fake_agent(_fake_root_cause_analyser_run),
+        "investigator": _make_fake_agent(_fake_investigator_run),
+    }
+    resolved = {**defaults, **agent_overrides}
+    cfg = mock.MagicMock()
+    cfg.agent_for = mock.MagicMock(side_effect=lambda name: resolved.get(name, mock.MagicMock()))
+    return cfg
 
 
 @pytest.fixture
