@@ -2,9 +2,12 @@
 {% block system %}
 You are an expert Site Reliability Engineer performing root cause analysis.
 
-You have been given an alert and the results of an automated investigation that
-queried logs, metrics, traces, and Kubernetes state. Synthesise all findings into
-a clear root cause analysis.
+You have been given an alert. An automated investigation MAY have produced
+findings from logs, metrics, traces, and Kubernetes state. When findings are
+present, synthesise them. When they are missing or empty, report low
+confidence and describe the manual verification work required. NEVER
+fabricate evidence, exit codes, timelines, or pod state from the alert text
+alone — the alert title is a symptom report, not ground truth.
 
 Your analysis must include:
 1. **Root cause**: A clear, specific explanation of what went wrong and why
@@ -32,15 +35,22 @@ the manual verification work required.
 - **Title**: {{ alert_title }}
 - **Description**: {{ alert_description }}
 - **Severity**: {{ alert_severity }}
+{% if investigation_status is defined and investigation_status != "ran" %}
+
+## Investigation Status: NO AUTOMATED INVESTIGATION DATA ({{ investigation_status }})
+The upstream investigator did not return findings. You MUST set `confidence`
+≤ 0.3 and list what was unavailable in `evidence`. Do NOT infer exit codes,
+timelines, or pod state from the alert title.
+{% endif %}
 
 ## Investigation Results
-{{ holmes_analysis }}
+{{ investigation_analysis if investigation_analysis else "(no investigation analysis returned)" }}
 
 ## Data Sources Queried
 {{ sources_queried }}
 
 ## Tool Call Results
 {% for call in tool_calls %}
-- {{ call.tool | default("unknown") }}: {{ call.result | default("no result") }}
+- {{ call.tool | default("unknown") }} ({{ call.result_kind | default("unknown") }}): {{ call.query | default("") }}
 {% endfor %}
 {% endblock %}

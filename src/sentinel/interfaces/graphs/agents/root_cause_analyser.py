@@ -25,9 +25,13 @@ class Dependencies:
     alert_title: str
     alert_description: str
     alert_severity: str
-    holmes_analysis: str
-    holmes_tool_calls: list[dict[str, Any]]
-    holmes_sources: list[str]
+    # F7: renamed from holmes_* — the upstream Investigate node is the
+    # Sentinel-native investigator agent (the HolmesGPT adapter is
+    # archived). The shape is unchanged: a narrative analysis string,
+    # a structured list of tool calls, and the list of sources queried.
+    investigation_analysis: str
+    investigation_tool_calls: list[dict[str, Any]]
+    investigation_sources: list[str]
     # Classifier-produced category, used for the optional second-layer
     # dynamic runbook skill injection (see inject_runbook_skills below).
     category: str = ""
@@ -36,6 +40,15 @@ class Dependencies:
     # _inject_runbook_body_quarantined (separate layer from skills). None
     # on no-match — the agent is told to flag confidence LOW.
     runbook: runbook_models.Runbook | None = None
+    # F7: outcome of the upstream Investigate node — one of "ran"
+    # (data produced), "skipped" (investigator agent not registered),
+    # "failed" (investigator raised), "empty" (every tool returned the
+    # documented empty-result pattern). Surfaced into the user prompt so
+    # the model is told explicitly when no investigation data exists,
+    # rather than inferring it from a blank "Investigation Results"
+    # section. The runtime evidence-floor in DetermineConfidence is the
+    # final guardrail; this prompt-side signal is the first one.
+    investigation_status: str = "ran"
 
 
 _PROMPT_TEMPLATE = prompts.load_template("root_cause_analyser")
@@ -47,11 +60,12 @@ def _build_investigation_context(ctx: RunContext[Dependencies]) -> str:
         alert_title=ctx.deps.alert_title,
         alert_description=ctx.deps.alert_description,
         alert_severity=ctx.deps.alert_severity,
-        holmes_analysis=ctx.deps.holmes_analysis,
+        investigation_analysis=ctx.deps.investigation_analysis,
         sources_queried=(
-            ", ".join(ctx.deps.holmes_sources) if ctx.deps.holmes_sources else "none"
+            ", ".join(ctx.deps.investigation_sources) if ctx.deps.investigation_sources else "none"
         ),
-        tool_calls=ctx.deps.holmes_tool_calls,
+        tool_calls=ctx.deps.investigation_tool_calls,
+        investigation_status=ctx.deps.investigation_status,
     )
 
 
@@ -128,4 +142,5 @@ def build_agent(
     )
     agent_instance.instructions(_build_investigation_context)
     agent_instance.system_prompt(_inject_runbook_skills)
+    agent_instance.system_prompt(_inject_runbook_body_quarantined)
     return agent_instance
