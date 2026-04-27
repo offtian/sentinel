@@ -3800,6 +3800,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pgvector"
+version = "0.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/25/6c/6d8b4b03b958c02fa8687ec6063c49d952a189f8c91ebbe51e877dfab8f7/pgvector-0.4.2.tar.gz", hash = "sha256:322cac0c1dc5d41c9ecf782bd9991b7966685dee3a00bc873631391ed949513a", size = 31354, upload-time = "2025-12-05T01:07:17.87Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5a/26/6cee8a1ce8c43625ec561aff19df07f9776b7525d9002c86bceb3e0ac970/pgvector-0.4.2-py3-none-any.whl", hash = "sha256:549d45f7a18593783d5eec609ea1684a724ba8405c4cb182a0b2b08aeff04e08", size = 27441, upload-time = "2025-12-05T01:07:16.536Z" },
+]
+
+[[package]]
 name = "pillow"
 version = "12.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -4830,6 +4842,18 @@ wheels = [
 ]
 
 [[package]]
+name = "python-frontmatter"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/96/de/910fa208120314a12f9a88ea63e03707261692af782c99283f1a2c8a5e6f/python-frontmatter-1.1.0.tar.gz", hash = "sha256:7118d2bd56af9149625745c58c9b51fb67e8d1294a0c76796dafdc72c36e5f6d", size = 16256, upload-time = "2024-01-16T18:50:04.052Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/49/87/3c8da047b3ec5f99511d1b4d7a5bc72d4b98751c7e78492d14dc736319c5/python_frontmatter-1.1.0-py3-none-any.whl", hash = "sha256:335465556358d9d0e6c98bbeb69b1c969f2a4a21360587b9873bfc3b213407c1", size = 9834, upload-time = "2024-01-16T18:50:00.911Z" },
+]
+
+[[package]]
 name = "python-fsutil"
 version = "0.16.1"
 source = { registry = "https://pypi.org/simple" }
@@ -5324,6 +5348,7 @@ dependencies = [
     { name = "environs" },
     { name = "fastapi", extra = ["standard"] },
     { name = "fastmcp" },
+    { name = "httpx" },
     { name = "invoke" },
     { name = "jinja2" },
     { name = "jira" },
@@ -5333,6 +5358,7 @@ dependencies = [
     { name = "langgraph-checkpoint-postgres" },
     { name = "litellm" },
     { name = "logfire" },
+    { name = "markdown" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-exporter-prometheus" },
@@ -5342,6 +5368,7 @@ dependencies = [
     { name = "opentelemetry-instrumentation-system-metrics" },
     { name = "opentelemetry-sdk" },
     { name = "pdpyras" },
+    { name = "pgvector" },
     { name = "prometheus-client" },
     { name = "psycopg2-binary" },
     { name = "pydantic-ai" },
@@ -5371,6 +5398,7 @@ dev = [
     { name = "pytest-mock" },
     { name = "pytest-postgresql" },
     { name = "pytest-xdist" },
+    { name = "python-frontmatter" },
     { name = "ruff" },
     { name = "types-aiofiles" },
     { name = "types-pyyaml" },
@@ -5395,6 +5423,7 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"] },
     { name = "fastmcp", specifier = ">=2.0" },
     { name = "holmesgpt", marker = "extra == 'holmes'", git = "https://github.com/offtian/holmesgpt.git?rev=httpx-compat" },
+    { name = "httpx" },
     { name = "import-linter", marker = "extra == 'dev'" },
     { name = "invoke" },
     { name = "ipdb", marker = "extra == 'dev'" },
@@ -5406,6 +5435,7 @@ requires-dist = [
     { name = "langgraph-checkpoint-postgres", specifier = ">=3.0.3,<4" },
     { name = "litellm", specifier = ">=1.60" },
     { name = "logfire" },
+    { name = "markdown", specifier = ">=3.10" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "opentelemetry-api", specifier = ">=1.27" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },
@@ -5416,6 +5446,7 @@ requires-dist = [
     { name = "opentelemetry-instrumentation-system-metrics", specifier = ">=0.48b0" },
     { name = "opentelemetry-sdk", specifier = ">=1.27" },
     { name = "pdpyras" },
+    { name = "pgvector", specifier = ">=0.3" },
     { name = "pre-commit", marker = "extra == 'dev'" },
     { name = "prometheus-client", specifier = ">=0.21" },
     { name = "psycopg2-binary" },
@@ -5428,6 +5459,7 @@ requires-dist = [
     { name = "pytest-mock", marker = "extra == 'dev'" },
     { name = "pytest-postgresql", marker = "extra == 'dev'" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.8.0" },
+    { name = "python-frontmatter", marker = "extra == 'dev'" },
     { name = "pyyaml" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "sentry-sdk", specifier = ">=2.35" },
