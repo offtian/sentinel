@@ -11,6 +11,11 @@ from sentinel.domain.investigations import adapters, holmes_adapter
 from sentinel.domain.resilience.circuit_breaker import CircuitBreaker
 
 
+# F7 (2026-04-27): DirectToolsetAdapter is archived alongside HolmesAdapter.
+# Skipping wholesale; see test_holmes_adapter.py for full rationale.
+pytestmark = pytest.mark.skip(reason="HolmesGPT integration archived in F7")
+
+
 @pytest.fixture
 def sample_alert():
     return alert_entities.Alert(

@@ -67,7 +67,6 @@ class TestClassifyAlertToolsets:
             alert=alert,
             envelope=factories.make_envelope(),
             agent_for=config.agent_for,
-            holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
             classifier_toolsets=(shared_toolset,),
         )
@@ -122,7 +121,6 @@ class TestAnalyseRootCauseToolsetOrdering:
             alert=alert,
             envelope=factories.make_envelope(),
             agent_for=config.agent_for,
-            holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
             analyser_toolsets=(per_agent_toolset, shared_mcp_toolset),
         )

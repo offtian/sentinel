@@ -135,7 +135,6 @@ async def _run_pipeline(
         alert=alert,
         envelope=factories.make_envelope(),
         agent_for=_agent_for,
-        holmes=factories.MockHolmesAdapter(),
         post_to_slack=False,
         classifier_toolsets=toolsets,
         analyser_toolsets=toolsets,

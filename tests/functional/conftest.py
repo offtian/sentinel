@@ -6,7 +6,6 @@ from unittest import mock
 
 import pytest
 
-from sentinel.domain.investigations import holmes_adapter
 from sentinel.domain.search import searcher
 from sentinel.interfaces.graphs.agents import (
     alert_classifier,
@@ -14,7 +13,6 @@ from sentinel.interfaces.graphs.agents import (
     root_cause_analyser,
     ticket_reviewer,
 )
-from tests import factories
 
 
 @dataclass(frozen=True)
@@ -59,28 +57,18 @@ def _build_fake_config(agent_overrides: dict[str, Any]) -> mock.MagicMock:
     return cfg
 
 
-@pytest.fixture
-def mock_holmes() -> factories.MockHolmesAdapter:
-    return factories.MockHolmesAdapter(
-        result=holmes_adapter.HolmesInvestigationResult(
-            analysis=(
-                "Datadog logs show a 5x spike in 5xx errors starting at 14:32 UTC. "
-                "Kubernetes pod api-service-7b8c was OOMKilled at 14:30 UTC. "
-                "Memory usage ramped from 512Mi to 2Gi over 10 minutes."
-            ),
-            tool_calls=[
-                {
-                    "tool": "datadog_query_logs",
-                    "result": "5xx errors: 250/min (baseline 50/min)",
-                },
-                {
-                    "tool": "kubernetes_get_pods",
-                    "result": "api-service-7b8c OOMKilled 14:30 UTC",
-                },
-            ],
-            sources_queried=["datadog_logs", "kubernetes"],
-        )
-    )
+# F7 (2026-04-27): mock_holmes fixture archived. The HolmesGPT adapter
+# is no longer wired into the investigation pipeline; tests requiring a
+# pre-canned investigator output should register a fake "investigator"
+# agent in their config (see tests/unit/interfaces/graphs/test_investigation_*
+# for patterns). Leaving the fixture commented out — and not removed —
+# so the test history remains traceable and the symbol survives a grep
+# during the F7 stabilisation window.
+# @pytest.fixture
+# def mock_holmes() -> factories.MockHolmesAdapter:
+#     return factories.MockHolmesAdapter(
+#         result=holmes_adapter.HolmesInvestigationResult(...)
+#     )
 
 
 async def _fake_alert_classifier_run(*, user_prompt, deps, **kwargs):

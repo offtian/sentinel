@@ -105,7 +105,6 @@ def _make_dependencies(
     return investigation.Dependencies(
         status_update_client=_FakeStatusUpdateClient(),
         agent_for=mock.MagicMock(),
-        holmes=factories.MockHolmesAdapter(),
         runbooks=runbooks,
     )
 
@@ -139,10 +138,10 @@ class TestMatchRunbookSoftDegrade:
         node = investigation.MatchRunbook()
         result = await node.run(ctx)
 
-        # Then the node short-circuits to InvestigateWithHolmes with
+        # Then the node short-circuits to Investigate with
         # state.runbook=None and requires_approval=True so the generic
         # frame is used downstream
-        assert isinstance(result, investigation.InvestigateWithHolmes)
+        assert isinstance(result, investigation.Investigate)
         assert state.runbook is None
         assert state.requires_approval is True
         assert state.runbook_match is None
@@ -169,7 +168,7 @@ class TestMatchRunbookSoftDegrade:
         result = await node.run(ctx)
 
         # Then the soft-degrade path applies (no_match + approval required)
-        assert isinstance(result, investigation.InvestigateWithHolmes)
+        assert isinstance(result, investigation.Investigate)
         assert state.runbook is None
         assert state.requires_approval is True
 
@@ -219,7 +218,7 @@ class TestMatchRunbookHappyPath:
 
         # Then state.runbook resolves to the matched runbook from the catalog
         # and requires_approval is False — the alert is on a known procedure
-        assert isinstance(result, investigation.InvestigateWithHolmes)
+        assert isinstance(result, investigation.Investigate)
         assert state.runbook is crashloop
         assert state.requires_approval is False
         assert state.runbook_match is match
@@ -266,7 +265,7 @@ class TestMatchRunbookNoMatch:
 
         # Then state.runbook is None (no procedure found) and approval is
         # required so the generic-playbook output goes through human review
-        assert isinstance(result, investigation.InvestigateWithHolmes)
+        assert isinstance(result, investigation.Investigate)
         assert state.runbook is None
         assert state.requires_approval is True
         assert state.runbook_match is no_match
@@ -290,7 +289,7 @@ class TestMatchRunbookStatusUpdate:
         await node.run(ctx)
 
         # Then exactly one matching-related status update is emitted before the
-        # node yields control to InvestigateWithHolmes
+        # node yields control to Investigate
         client = deps.status_update_client
         assert isinstance(client, _FakeStatusUpdateClient)
         assert client.updates == ["Matching runbook..."]

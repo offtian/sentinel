@@ -176,7 +176,8 @@ class TestWorkerK8sAdapterWiring:
         s.alert_classifier_llm = "openai/gpt-4.1-mini"
         s.root_cause_llm = "openai/gpt-4.1"
         s.sre_auto_investigate = True
-        s.holmesgpt_enabled = False
+        # F7: holmesgpt_enabled archived; field commented out in
+        # Settings. Stub no longer needs to set it.
         s.require_approval_below_confidence = 0.7
         s.approval_timeout_seconds = 0
         s.pagerduty_api_key = ""
@@ -193,7 +194,7 @@ class TestWorkerK8sAdapterWiring:
         cfg = mock.MagicMock()
         cfg.build_k8s_investigation_adapter.return_value = k8s_adapter
         cfg.build_challenger_adapter.return_value = challenger
-        cfg.build_holmes_adapter.return_value = mock.MagicMock()
+        # F7: build_holmes_adapter archived. Worker no longer calls it.
         cfg.build_mcp_toolsets.return_value = ()
         cfg.build_observability_toolset.return_value = mock.MagicMock()
         cfg.agent_for = mock.MagicMock()

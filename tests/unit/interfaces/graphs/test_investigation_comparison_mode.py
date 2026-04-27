@@ -21,7 +21,6 @@ class TestComparisonModeInPipeline:
         deps = investigation.Dependencies(
             status_update_client=mock.AsyncMock(),
             agent_for=_build_fake_config({}).agent_for,
-            holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
             challenger_adapter=challenger,
         )
@@ -29,7 +28,7 @@ class TestComparisonModeInPipeline:
         ctx.state = state
         ctx.deps = deps
 
-        node = investigation.InvestigateWithHolmes()
+        node = investigation.Investigate()
 
         # When the node runs
         await node.run(ctx)
@@ -47,14 +46,13 @@ class TestComparisonModeInPipeline:
         deps = investigation.Dependencies(
             status_update_client=mock.AsyncMock(),
             agent_for=_build_fake_config({}).agent_for,
-            holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
         )
         ctx = mock.MagicMock()
         ctx.state = state
         ctx.deps = deps
 
-        node = investigation.InvestigateWithHolmes()
+        node = investigation.Investigate()
 
         # When the node runs
         await node.run(ctx)
@@ -74,7 +72,6 @@ class TestComparisonModeInPipeline:
         deps = investigation.Dependencies(
             status_update_client=mock.AsyncMock(),
             agent_for=_build_fake_config({}).agent_for,
-            holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
             challenger_adapter=failing_challenger,
         )
@@ -82,7 +79,7 @@ class TestComparisonModeInPipeline:
         ctx.state = state
         ctx.deps = deps
 
-        node = investigation.InvestigateWithHolmes()
+        node = investigation.Investigate()
 
         # When the node runs
         next_node = await node.run(ctx)

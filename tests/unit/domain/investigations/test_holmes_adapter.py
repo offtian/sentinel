@@ -9,6 +9,15 @@ from sentinel.domain.investigations import holmes_adapter
 from tests import factories
 
 
+# F7 (2026-04-27): the HolmesGPT integration is archived. The adapter
+# module ships a placeholder stub for backwards-compatibility but the
+# concrete HolmesAdapter / DirectToolsetAdapter implementations have
+# been removed; these tests would only fail with AttributeError. Skip
+# the module wholesale rather than deleting it so the test history
+# remains traceable.
+pytestmark = pytest.mark.skip(reason="HolmesGPT integration archived in F7")
+
+
 @pytest.fixture
 def sample_alert():
     return alert_entities.Alert(

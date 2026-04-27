@@ -67,7 +67,6 @@ from sentinel.interfaces.graphs.agents import (
     ticket_reviewer,
 )
 from sentinel.interfaces.workflows import support_review as workflows_support_review
-from tests import factories
 from tests.functional.conftest import (
     EmptyDocumentSearcher,
     EmptyPastTicketSearcher,
@@ -310,7 +309,6 @@ def patched_sre_router(monkeypatch, captured_run):
                 alert=alert,
                 envelope=envelope,
                 agent_for=config_stub.agent_for,
-                holmes=factories.MockHolmesAdapter(),
                 post_to_slack=False,
             )
 
@@ -609,7 +607,6 @@ class TestEnvelopeStructlogContextBinding:
                 alert=alert,
                 envelope=elevated,
                 agent_for=config_stub.agent_for,
-                holmes=factories.MockHolmesAdapter(),
                 post_to_slack=False,
             )
             return fastapi.responses.JSONResponse(

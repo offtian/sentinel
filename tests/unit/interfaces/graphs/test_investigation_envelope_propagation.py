@@ -18,7 +18,11 @@ import structlog
 from opentelemetry import trace as otel_trace
 
 from sentinel.interfaces.graphs import _node_helpers, investigation
-from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser
+from sentinel.interfaces.graphs.agents import (
+    alert_classifier,
+    investigator,
+    root_cause_analyser,
+)
 from tests import factories
 from tests.functional.conftest import (
     FakeAgentResult,
@@ -85,7 +89,6 @@ class TestInvestigateAlertRequiresEnvelope:
             await investigation.investigate_alert(
                 alert=alert,
                 agent_for=config.agent_for,
-                holmes=factories.MockHolmesAdapter(),
                 post_to_slack=False,
             )  # type: ignore[call-arg]
 
@@ -138,7 +141,6 @@ class TestNodeBindsEnvelopeToStructlogContext:
             alert=factories.make_alert(),
             envelope=envelope,
             agent_for=config.agent_for,
-            holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
         )
 
@@ -187,7 +189,6 @@ class TestNodeBindsEnvelopeToStructlogContext:
             alert=factories.make_alert(),
             envelope=envelope,
             agent_for=config.agent_for,
-            holmes=factories.MockHolmesAdapter(),
             post_to_slack=False,
         )
 
@@ -237,9 +238,19 @@ class TestInvestigateAlertSetsSpanAttributesOnEveryNode:
                 )
             )
 
+        async def fake_investigate(*, user_prompt, deps, **kwargs):
+            return FakeAgentResult(
+                investigator.InvestigationFindings(
+                    summary="No real evidence — pipeline-shape test",
+                    sources_queried=[],
+                    tool_calls=[],
+                )
+            )
+
         config = _build_fake_config(
             {
                 "alert_classifier": _make_fake_agent(fake_classify),
+                "investigator": _make_fake_agent(fake_investigate),
                 "root_cause_analyser": _make_fake_agent(fake_analyse),
             },
         )
@@ -255,21 +266,22 @@ class TestInvestigateAlertSetsSpanAttributesOnEveryNode:
                 alert=factories.make_alert(),
                 envelope=envelope,
                 agent_for=config.agent_for,
-                holmes=factories.MockHolmesAdapter(),
                 post_to_slack=False,
             )
 
         # Then every node set the seven envelope-plus-team-profile attributes,
         # and each agent-invocation site additionally set the agent-context attrs.
         # Six envelope-binding nodes: ClassifyAlert, MatchRunbook (F6.F.1),
-        # InvestigateWithHolmes, AnalyseRootCause, DetermineConfidence,
-        # PublishFindings.
+        # Investigate, AnalyseRootCause, DetermineConfidence,
+        # PublishFindings. F7 added the investigator agent invocation, so
+        # the agent-call count is now 3 (classifier + investigator + analyser)
+        # rather than the pre-F7 count of 2.
         envelope_calls = [attrs for attrs in spying_span.attribute_calls if "request_id" in attrs]
         agent_calls = [
             attrs for attrs in spying_span.attribute_calls if "prompt_version_sha" in attrs
         ]
         assert len(envelope_calls) == 6
-        assert len(agent_calls) == 2
+        assert len(agent_calls) == 3
         expected_keys = {
             "request_id",
             "tenant_id",
