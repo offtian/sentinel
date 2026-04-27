@@ -1,0 +1,33 @@
+prescribed_checks:
+  - id: confirm_pod_state
+    description: Confirm pod is actually CrashLooping (not stale alert)
+    suggested_tools: [k8s_describe_pod]
+    required: true
+  - id: check_oom_events
+    description: Look for OOM events in the namespace
+    suggested_tools: [k8s_get_events]
+    required: true
+  - id: tail_recent_logs
+    description: Last 100 log lines before crash
+    suggested_tools: [k8s_get_pod_logs]
+    required: true
+  - id: correlate_recent_deploys
+    description: Look for Harness deploys in the last 30 minutes
+    suggested_tools: [harness_recent_deploys]
+    required: true
+  - id: check_resource_limits
+    description: Confirm CPU/memory limits and requests
+    suggested_tools: [k8s_describe_deployment]
+    required: false
+
+groundedness_rules:
+  - rule_id: every_finding_has_evidence
+    description: Every Finding MUST cite at least one evidence_ref pointing at a recorded tool_call
+  - rule_id: evidence_within_investigation
+    description: Every evidence_ref must match a tool_call.evidence_object_id within the same investigation
+
+body_sanitization:
+  reject_auto_rendered_urls: true
+  allowed_url_locations:
+    - canonical_sources
+    - frontmatter

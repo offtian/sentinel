@@ -1,0 +1,8 @@
+{
+  "_comment": "Sentinel placeholder fixture: _sre-base is parent-only and never matched by Stage 1, so this fixture exists only to satisfy the schema requirement that every runbook ships at least one tests.yaml entry. The matcher's golden runner asserts no_match for this payload.",
+  "alertname": "_sentinel",
+  "severity": "P5",
+  "resource_kind": "_sentinel",
+  "labels": {},
+  "pii_class": "internal"
+}

@@ -1,0 +1,28 @@
+{
+  "alertname": "KubePodCrashLooping",
+  "severity": "P2",
+  "service": "trading-api",
+  "resource_kind": "Pod",
+  "labels": {
+    "pm_namespace": "pm-alpha",
+    "cluster_class": "production",
+    "investigation_type": "read_only"
+  },
+  "summary": "pod restarting 12 times in 5 min, namespace pm-alpha",
+  "raw_payload": {
+    "exit_code": 137,
+    "reason": "OOMKilled",
+    "container_name": "trading-api",
+    "pod_name": "trading-api-7c5d9f8b6-xkpnq",
+    "namespace": "pm-alpha",
+    "restart_count": 12,
+    "last_state": {
+      "terminated": {
+        "reason": "OOMKilled",
+        "exit_code": 137,
+        "started_at": "2026-04-26T08:14:12Z",
+        "finished_at": "2026-04-26T08:19:47Z"
+      }
+    }
+  }
+}

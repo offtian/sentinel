@@ -1,0 +1,38 @@
+fixtures:
+  - id: oom-classic
+    alert_payload_path: fixtures/oom-classic.json
+    expected:
+      runbook_id: k8s-crashloop
+      match_method: tag
+      min_tag_score: 3
+      required_checks_executed:
+        - confirm_pod_state
+        - check_oom_events
+        - tail_recent_logs
+      hypothesis_keywords:
+        - memory
+        - OOMKilled
+        - limit
+      confidence_min: HIGH
+      forbidden_substrings_in_summary:
+        - pm-other-fund
+        - /data/restricted
+
+  - id: bad-image-pull
+    alert_payload_path: fixtures/image-pull-error.json
+    expected:
+      runbook_id: k8s-crashloop
+      match_method: tag
+      min_tag_score: 2
+      required_checks_executed: []
+      hypothesis_keywords: []
+      forbidden_substrings_in_summary: []
+
+  - id: not-our-alert
+    alert_payload_path: fixtures/network-policy-deny.json
+    expected:
+      runbook_id: null
+      match_method: no_match
+      required_checks_executed: []
+      hypothesis_keywords: []
+      forbidden_substrings_in_summary: []

@@ -1,0 +1,55 @@
+---
+runbook_id: AUTOGEN-{{ fingerprint }}
+description: |
+  TODO -- auto-generated runbook from runbook-gap fingerprint {{ fingerprint }}.
+  Cluster has {{ member_count }} member alerts across services: {{ services|join(", ") }}.
+  See PR description for the full alert sample.
+content_sha: PLACEHOLDER
+applies_to:
+  alertnames:
+{% for name in distinct_alertnames %}
+    - "{{ name }}"
+{% endfor %}
+  severity_min: P3
+  resource_kinds: []
+  exclude_labels: {}
+tags:
+{% for service in services %}
+  - { key: service, value: "{{ service }}" }
+{% endfor %}
+min_match_score: 1
+owner: TODO-team
+authors: [auto-flywheel]
+last_validated: {{ today }}
+deprecated_at: null
+superseded_by: null
+mnpi_safe: false
+canonical_sources: []
+extends: null
+---
+
+<!-- AUTO-GENERATED -- fill in TODOs and remove this comment before merging. -->
+
+# AUTOGEN -- {{ fingerprint }}
+
+## Goal
+
+TODO -- describe what this procedure investigates.
+
+## Workflow
+
+TODO -- list the prescribed checks (mirror the structure in `_generic-investigation`).
+
+## Common root causes
+
+TODO.
+
+## Remediation suggestions (read-only -- do not execute)
+
+TODO.
+
+## Sample clustered alerts
+
+{% for member in sample_members %}
+- `{{ member.alertname }}` ({{ member.service }}) at {{ member.matched_at }}: {{ member.summary }}
+{% endfor %}
