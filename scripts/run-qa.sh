@@ -7,6 +7,12 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
+echo "=== Asserting runbook content_sha matches frontmatter (F6.E.3) ==="
+if ! uv run python scripts/compute_runbook_shas.py --check 2>&1; then
+    echo "Runbook content_sha drift detected. Re-run 'uv run python scripts/compute_runbook_shas.py' locally and commit the refreshed shas." >&2
+    exit 2
+fi
+
 echo "=== Running lint checks ==="
 if ! just lint 2>&1; then
     echo "Lint failures found. Fix lint issues before marking work as done." >&2

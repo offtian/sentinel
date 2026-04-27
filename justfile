@@ -95,6 +95,22 @@ typecheck:
 check-imports:
     uv run lint-imports
 
+# Assert runbook content_sha frontmatter matches loader-computed sha (F6.E)
+check-runbook-shas:
+    uv run python scripts/compute_runbook_shas.py --check
+
+# Run the F6.M weekly fingerprint-clustering + auto-PR flywheel
+# (clusters last week's no-match runbook rows; opens draft PR per qualifying gap).
+# Pass --dry-run to inspect cluster output without writing rows or opening PRs.
+run-runbook-flywheel *ARGS:
+    uv run python scripts/runbook_gap_flywheel.py {{ ARGS }}
+
+# Run the F6.L daily drift-detection sweep (fixture replay + stale runbooks
+# + tools registry). Writes runbook_drift_history rows and posts one Slack
+# alert per fresh drift via the runbook-owner routing.
+check-runbook-drift:
+    uv run python scripts/runbook_drift_check.py
+
 # Database
 # --------
 

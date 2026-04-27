@@ -1,0 +1,21 @@
+# Pre-commit hooks for Sentinel.
+# Install via: uv run pre-commit install
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff-format
+        types_or: [python, pyi]
+      - id: ruff
+        args: [--fix]
+        types_or: [python, pyi]
+
+  - repo: local
+    hooks:
+      - id: compute-runbook-shas
+        name: Compute runbook content_sha
+        description: F6 - recomputes content_sha for any runbook quartet that changed
+        entry: uv run python scripts/compute_runbook_shas.py
+        language: system
+        pass_filenames: false
+        files: '^src/sentinel/plugins/(common|teams/[^/]+)/runbooks/[^/]+/(RUNBOOK\.md|tools\.yaml|checks\.yaml|tests\.yaml)$'

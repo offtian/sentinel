@@ -26,6 +26,7 @@ from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col
 
 from sentinel.data.sql import runbook_drift
 from sentinel.domain.runbooks import drift as drift_mod
@@ -62,10 +63,10 @@ async def is_open_drift_recorded(
     statement = (
         sa.select(sa.func.count())
         .select_from(record_cls)
-        .where(record_cls.runbook_id == event.runbook_id)
-        .where(record_cls.drift_type == event.drift_type)
-        .where(record_cls.resolved_at.is_(None))
-        .where(record_cls.drift_detail == event.drift_detail)
+        .where(col(record_cls.runbook_id) == event.runbook_id)
+        .where(col(record_cls.drift_type) == event.drift_type)
+        .where(col(record_cls.resolved_at).is_(None))
+        .where(col(record_cls.drift_detail) == event.drift_detail)
     )
     result = await session.execute(statement)
     return int(result.scalar_one()) > 0

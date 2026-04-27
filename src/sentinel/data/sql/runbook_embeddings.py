@@ -32,7 +32,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 import sqlalchemy as sa
-from pgvector.sqlalchemy import Vector
+from pgvector.sqlalchemy import Vector  # type: ignore[import-untyped]
 from sqlalchemy import CheckConstraint, Column, DateTime, Float, Index, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlmodel import Field, SQLModel

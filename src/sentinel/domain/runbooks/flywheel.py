@@ -40,7 +40,7 @@ from typing import Any
 import attrs
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
 from sentinel.data.sql import alert_requests as alert_requests_sql
 from sentinel.data.sql import runbook_gap_cluster as gap_sql
@@ -248,13 +248,13 @@ async def query_recent_no_matches(*, session: AsyncSession, since: datetime) -> 
         )
         .join(
             alert_requests_sql.AlertRequestRecord,
-            alert_requests_sql.AlertRequestRecord.request_id
-            == runbooks_sql.RunbookMatchRecord.request_id,
+            col(alert_requests_sql.AlertRequestRecord.request_id)
+            == col(runbooks_sql.RunbookMatchRecord.request_id),
             isouter=True,
         )
-        .where(runbooks_sql.RunbookMatchRecord.match_method == _NO_MATCH_METHOD)
-        .where(runbooks_sql.RunbookMatchRecord.matched_at >= since)
-        .order_by(runbooks_sql.RunbookMatchRecord.matched_at.asc())
+        .where(col(runbooks_sql.RunbookMatchRecord.match_method) == _NO_MATCH_METHOD)
+        .where(col(runbooks_sql.RunbookMatchRecord.matched_at) >= since)
+        .order_by(col(runbooks_sql.RunbookMatchRecord.matched_at).asc())
     )
     result = await session.execute(statement)
     members: list[GapMember] = []

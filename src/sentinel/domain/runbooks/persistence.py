@@ -33,6 +33,7 @@ from typing import Literal
 
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col
 
 from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.data.sql import runbooks as runbook_tables
@@ -193,10 +194,10 @@ async def list_no_match_request_ids(
         ascending so the flywheel can stream them in chronological order.
     """
     statement = (
-        select(runbook_tables.RunbookMatchRecord.request_id)
-        .where(runbook_tables.RunbookMatchRecord.match_method == "no_match")
-        .where(runbook_tables.RunbookMatchRecord.matched_at >= since)
-        .order_by(runbook_tables.RunbookMatchRecord.matched_at.asc())
+        select(col(runbook_tables.RunbookMatchRecord.request_id))
+        .where(col(runbook_tables.RunbookMatchRecord.match_method) == "no_match")
+        .where(col(runbook_tables.RunbookMatchRecord.matched_at) >= since)
+        .order_by(col(runbook_tables.RunbookMatchRecord.matched_at).asc())
     )
     result = await session.execute(statement)
     return [row for (row,) in result.all()]

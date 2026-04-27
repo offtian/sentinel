@@ -33,6 +33,7 @@ import attrs
 import litellm
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col
 
 from sentinel.data.sql import runbook_embeddings as rag_records
 from sentinel.domain.runbooks import models as runbook_models
@@ -202,11 +203,11 @@ async def _row_already_indexed(
 ) -> bool:
     """Return True when an embedding row already exists for the identity tuple."""
     stmt = sa.select(sa.literal(1)).where(
-        rag_records.RunbookEmbeddingRecord.runbook_id == runbook_id,
-        rag_records.RunbookEmbeddingRecord.content_sha == content_sha,
-        rag_records.RunbookEmbeddingRecord.embedding_section == section,
-        rag_records.RunbookEmbeddingRecord.embedding_model == model_id,
-        rag_records.RunbookEmbeddingRecord.embedding_model_ver == model_version,
+        col(rag_records.RunbookEmbeddingRecord.runbook_id) == runbook_id,
+        col(rag_records.RunbookEmbeddingRecord.content_sha) == content_sha,
+        col(rag_records.RunbookEmbeddingRecord.embedding_section) == section,
+        col(rag_records.RunbookEmbeddingRecord.embedding_model) == model_id,
+        col(rag_records.RunbookEmbeddingRecord.embedding_model_ver) == model_version,
     )
     result = await session.execute(stmt)
     return result.scalar_one_or_none() is not None
