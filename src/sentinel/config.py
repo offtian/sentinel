@@ -206,6 +206,62 @@ class BaseConfiguration(BaseModel):
         return _normalise_model_name(self.settings.response_drafter_llm)
 
     @property
+    def disambiguator_model(self) -> str:
+        """
+        Stage 2 runbook disambiguator model (F6).
+
+        Falls back to ``alert_classifier_llm`` when unset so deployments that
+        don't override get a small, fast model "for free".
+        """
+        chosen = self.settings.runbook_disambiguator_llm or self.settings.alert_classifier_llm
+        return _normalise_model_name(chosen)
+
+    @property
+    def enable_rag_fallback(self) -> bool:
+        """
+        Return whether the F6.J Stage 3 RAG fallback is enabled.
+
+        Surfaced from ``Settings.runbook_rag_fallback_enabled`` so domain-layer
+        callers (the matcher orchestrator + the application-layer reindex
+        daemon) consult the configuration contract rather than ``Settings``
+        directly. Defaults to False — the catalog ships RAG-disabled until an
+        operator opts in.
+        """
+        return self.settings.runbook_rag_fallback_enabled
+
+    @property
+    def embedder_model(self) -> str:
+        """
+        Return the normalised embedder model identifier for the F6.J Stage 3 path.
+
+        Routes through the same ``provider/model`` -> ``provider:model``
+        normalisation as the other LLM knobs so the embedder participates in
+        the same LiteLLM-proxy / Ollama-direct routing logic.
+        """
+        return _normalise_model_name(self.settings.runbook_embedder_llm)
+
+    @property
+    def rag_min_similarity(self) -> float:
+        """
+        Return the cosine-similarity threshold for Stage 3 candidate filtering.
+
+        Surfaced off ``BaseConfiguration`` rather than read directly off
+        ``Settings`` so domain-layer code respects the layered-config rule.
+        """
+        return self.settings.runbook_rag_min_similarity
+
+    @property
+    def rag_top_k(self) -> int:
+        """
+        Return the top-k retrieval depth for the F6.J Stage 3 path.
+
+        Surfaced off ``BaseConfiguration`` rather than read directly off
+        ``Settings`` so the audit trail's evidence-row depth is one config
+        knob, not two.
+        """
+        return self.settings.runbook_rag_top_k
+
+    @property
     def k8s_investigator_model(self) -> str:
         return _normalise_model_name(self.settings.k8s_investigator_llm)
 
@@ -236,6 +292,18 @@ class BaseConfiguration(BaseModel):
         the layered-architecture rule in ``application.md``.
         """
         return self.settings.require_approval_below_confidence
+
+    @property
+    def runbook_owners_channel(self) -> str:
+        """
+        Return the fallback Slack channel for runbook drift notifications.
+
+        Used by ``scripts/runbook_drift_check.py`` (F6.L) when a runbook's
+        frontmatter ``owner`` field does not map to a team-specific channel.
+        Empty string disables the fallback so drift on unowned runbooks is
+        logged only — no Slack noise to a channel that has no maintainers.
+        """
+        return self.settings.runbook_owners_channel
 
     # -- Agent registry ------------------------------------------------------
 

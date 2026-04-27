@@ -14,6 +14,7 @@ module directly.
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from typing import Any
 
 from kubernetes_asyncio import client as k8s_async_client
@@ -67,6 +68,17 @@ def _strip_wiki_suffix(url: str) -> str:
     return url.rstrip("/").removesuffix("/wiki")
 
 
+# F6 runbook catalog: team-first ordering — the SRE-team runbooks override the
+# common-tier baseline because the loader walks ``runbooks_paths`` first-wins.
+# Resolved off ``__file__`` so the defaults stay valid wherever the wheel is
+# installed (no reliance on cwd or env vars).
+_PLUGINS_DIR = Path(__file__).resolve().parent.parent
+_DEFAULT_RUNBOOKS_PATHS: tuple[Path, ...] = (
+    _PLUGINS_DIR / "teams" / "sre" / "runbooks",
+    _PLUGINS_DIR / "common" / "runbooks",
+)
+
+
 class CommonConfiguration(BaseConfiguration):
     """
     Full application configuration with domain and plugin wiring.
@@ -85,6 +97,11 @@ class CommonConfiguration(BaseConfiguration):
 
     # Resilience — populated by load_vendors()
     observability_circuit_breaker: CircuitBreaker | None = None
+
+    # F6 runbook catalog defaults — overrides the empty tuple on
+    # ``BaseConfiguration``. The loader iterates this tuple first-wins, so the
+    # SRE-team directory takes precedence over the common baseline.
+    runbooks_paths: tuple[Path, ...] = _DEFAULT_RUNBOOKS_PATHS
 
     # Memoised shared MCP toolsets — populated lazily by build_mcp_toolsets().
     _mcp_toolsets: tuple[Any, ...] | None = PrivateAttr(default=None)

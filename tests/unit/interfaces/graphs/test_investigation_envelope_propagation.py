@@ -260,12 +260,15 @@ class TestInvestigateAlertSetsSpanAttributesOnEveryNode:
             )
 
         # Then every node set the seven envelope-plus-team-profile attributes,
-        # and each agent-invocation site additionally set the agent-context attrs
+        # and each agent-invocation site additionally set the agent-context attrs.
+        # Six envelope-binding nodes: ClassifyAlert, MatchRunbook (F6.F.1),
+        # InvestigateWithHolmes, AnalyseRootCause, DetermineConfidence,
+        # PublishFindings.
         envelope_calls = [attrs for attrs in spying_span.attribute_calls if "request_id" in attrs]
         agent_calls = [
             attrs for attrs in spying_span.attribute_calls if "prompt_version_sha" in attrs
         ]
-        assert len(envelope_calls) == 5
+        assert len(envelope_calls) == 6
         assert len(agent_calls) == 2
         expected_keys = {
             "request_id",
