@@ -1,5 +1,10 @@
 """
 Unit tests for the replay CLI (sentinel.replay).
+
+Tests use the F4.7+ :class:`sentinel.utils.replay_bundle.ReplayBundle`
+shape (envelope + alert_payload + final_outputs + tool_io + llm_io)
+rather than the legacy ``sentinel.domain.pipeline.types.ReplayBundle``
+shape that the CLI consumed before the F4 refactor.
 """
 
 from __future__ import annotations
@@ -7,7 +12,6 @@ from __future__ import annotations
 import json
 import sys
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 from unittest import mock
 
@@ -16,8 +20,9 @@ import pytest
 from sentinel import replay as replay_mod
 from sentinel.domain.pipeline import errors as pipeline_errors
 from sentinel.domain.pipeline import queries as pipeline_queries
-from sentinel.domain.pipeline import tracer as pipeline_tracer
-from sentinel.domain.pipeline import types as pipeline_types
+from sentinel.plugins.toolsets import recorded as recorded_toolset_mod
+from sentinel.utils import replay_bundle as bundle_mod
+from tests import factories
 
 
 class _FakeDB:
@@ -38,65 +43,65 @@ class _FakeDB:
 
 def _make_bundle(
     *,
-    run_id: uuid.UUID | None = None,
-    pipeline_type: str = "investigation",
-    final_reply: dict[str, Any] | None = None,
-    input_payload: dict[str, Any] | None = None,
-) -> pipeline_types.ReplayBundle:
-    """Build a ReplayBundle with sensible defaults for testing."""
-    return pipeline_types.ReplayBundle(
-        run_id=run_id or uuid.uuid4(),
-        pipeline_type=pipeline_type,
-        started_at=datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC),
-        completed_at=None,
-        prompt_version="abc123:alert",
-        prompt_sha256="deadbeef",
-        prompt_text="You are a helpful SRE.",
-        input_hash="cafebabe",
-        model_ids=("openai/gpt-4.1",),
-        mcp_endpoints=(),
-        skill_activations=(),
-        final_reply=final_reply,
-        input_payload=input_payload,
+    alert_payload: dict[str, Any] | None = None,
+    final_outputs: dict[str, Any] | None = None,
+    runbook_id: str | None = None,
+    runbook_version_sha: str | None = None,
+) -> bundle_mod.ReplayBundle:
+    """Build an F4.7 ReplayBundle with sensible defaults for testing."""
+    return bundle_mod.ReplayBundle(
+        envelope=factories.make_envelope(),
+        alert_payload=alert_payload or {},
+        runbook_id=runbook_id,
+        runbook_version_sha=runbook_version_sha,
+        tool_io=(),
+        llm_io=(),
+        final_outputs=final_outputs or {},
     )
+
+
+def _make_recorded_toolset() -> recorded_toolset_mod.RecordedToolset:
+    """Build an empty RecordedToolset; replay tests mock the pipeline call site."""
+    return recorded_toolset_mod.RecordedToolset(())
 
 
 class TestMain:
     def test_happy_path_prints_json(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        # Given a ReplayBundle returned by the query layer
+        # Given a ReplayBundle returned by the recorded-bundle query layer
         fake_run_id = uuid.uuid4()
-        fake_bundle = _make_bundle(run_id=fake_run_id)
+        fake_bundle = _make_bundle(
+            alert_payload={"id": "alert-123", "service": "api"},
+            runbook_id="k8s-crashloop",
+        )
 
-        async def _fake_fetch_replay_bundle(
-            *, db: object, run_id: uuid.UUID
-        ) -> pipeline_types.ReplayBundle:
+        async def _fake_fetch(*, db: object, run_id: uuid.UUID) -> bundle_mod.ReplayBundle:
             return fake_bundle
 
-        monkeypatch.setattr(pipeline_queries, "fetch_replay_bundle", _fake_fetch_replay_bundle)
+        monkeypatch.setattr(pipeline_queries, "fetch_recorded_replay_bundle", _fake_fetch)
         monkeypatch.setattr("sentinel.replay.databases.Database", _FakeDB)
         monkeypatch.setattr(sys, "argv", ["replay", str(fake_run_id)])
 
         # When main() is called with a valid run_id
         replay_mod.main()
 
-        # Then the bundle is printed as valid JSON with the expected pipeline_type
+        # Then stdout carries the canonical JSON of the bundle, and stderr
+        # carries the bundle_sha — _print_bundle's contract per F4.7
         captured = capsys.readouterr()
         parsed = json.loads(captured.out)
-        assert parsed["pipeline_type"] == "investigation"
-        assert parsed["run_id"] == str(fake_run_id)
+        assert parsed["alert_payload"] == {"id": "alert-123", "service": "api"}
+        assert parsed["runbook_id"] == "k8s-crashloop"
+        assert "bundle_sha" in captured.err
 
     def test_not_found_exits_with_code_1(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # Given fetch_replay_bundle raises ReplayBundleNotFoundError
+        # Given fetch_recorded_replay_bundle raises ReplayBundleNotFoundError
         missing_run_id = uuid.uuid4()
 
-        async def _raise_not_found(
-            *, db: object, run_id: uuid.UUID
-        ) -> pipeline_types.ReplayBundle:
+        async def _raise_not_found(*, db: object, run_id: uuid.UUID) -> bundle_mod.ReplayBundle:
             raise pipeline_errors.ReplayBundleNotFoundError(run_id)
 
-        monkeypatch.setattr(pipeline_queries, "fetch_replay_bundle", _raise_not_found)
+        monkeypatch.setattr(pipeline_queries, "fetch_recorded_replay_bundle", _raise_not_found)
         monkeypatch.setattr("sentinel.replay.databases.Database", _FakeDB)
         monkeypatch.setattr(sys, "argv", ["replay", str(missing_run_id)])
 
@@ -196,7 +201,7 @@ class TestPrintDiff:
         captured = capsys.readouterr()
         assert "No differences found" in captured.out
 
-    def test_treats_none_original_as_empty_dict(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_exits_3_when_original_is_none(self, capsys: pytest.CaptureFixture[str]) -> None:
         # Given a None original and a non-empty replayed output
         replayed = {"alert_id": "a1"}
 
@@ -211,16 +216,14 @@ class TestPrintDiff:
 class TestReplaySre:
     @pytest.mark.asyncio
     async def test_replays_sre_investigation(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # Given a bundle with SRE input payload and mocked pipeline
-        fake_reply = pipeline_types.InvestigationReply(
-            alert_id="alert-123",
-            root_cause="disk full",
-            findings_summary="Root cause identified",
+        # Given a bundle with SRE alert payload and a mocked investigate_alert
+        fake_reply = mock.MagicMock()
+        fake_reply.model_dump_json.return_value = json.dumps(
+            {"alert_id": "alert-123", "root_cause": "disk full"}
         )
 
         fake_bundle = _make_bundle(
-            pipeline_type="investigation",
-            input_payload={
+            alert_payload={
                 "id": "alert-123",
                 "source": "pagerduty",
                 "title": "High CPU",
@@ -231,9 +234,7 @@ class TestReplaySre:
             },
         )
 
-        async def _fake_investigate(
-            alert: object, **kwargs: Any
-        ) -> pipeline_types.InvestigationReply:
+        async def _fake_investigate(**kwargs: Any) -> object:
             return fake_reply
 
         monkeypatch.setattr(
@@ -241,42 +242,33 @@ class TestReplaySre:
             _fake_investigate,
         )
 
-        # Use db=None so ExecutionTracer stays in no-op mode
-        _real_tracer = pipeline_tracer.ExecutionTracer
-
-        def _noop_tracer(*, db: object) -> pipeline_tracer.ExecutionTracer:
-            return _real_tracer(db=None)
-
-        monkeypatch.setattr(pipeline_tracer, "ExecutionTracer", _noop_tracer)
-
         fake_cfg = mock.MagicMock()
-        fake_db = _FakeDB("sqlite:///test")
+        fake_cfg.build_holmes_adapter.return_value = mock.MagicMock()
+        fake_cfg.build_k8s_investigation_adapter.return_value = mock.MagicMock()
+        fake_cfg.build_challenger_adapter.return_value = mock.MagicMock()
 
-        # When _replay_sre is called
+        # When _replay_sre is called with the F4 contract
         result = await replay_mod._replay_sre(
             bundle=fake_bundle,
             cfg=fake_cfg,
-            db=fake_db,
+            recorded_toolset=_make_recorded_toolset(),
         )
 
-        # Then the result matches the fake pipeline reply
-        assert result.alert_id == "alert-123"
-        assert result.root_cause == "disk full"
+        # Then the result reflects the mocked pipeline reply (canonical JSON dict)
+        assert result == {"alert_id": "alert-123", "root_cause": "disk full"}
 
 
 class TestReplaySupport:
     @pytest.mark.asyncio
     async def test_replays_support_review(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # Given a bundle with support input payload and mocked pipeline
-        fake_reply = pipeline_types.SupportReply(
-            ticket_id="t-1",
-            ticket_key="SUPPORT-1",
-            suggested_response="Please try restarting.",
+        # Given a bundle with support ticket payload and a mocked review_ticket
+        fake_reply = mock.MagicMock()
+        fake_reply.model_dump_json.return_value = json.dumps(
+            {"ticket_id": "t-1", "ticket_key": "SUPPORT-1"}
         )
 
         fake_bundle = _make_bundle(
-            pipeline_type="support_review",
-            input_payload={
+            alert_payload={
                 "id": "t-1",
                 "key": "SUPPORT-1",
                 "summary": "Cannot log in",
@@ -288,7 +280,7 @@ class TestReplaySupport:
             },
         )
 
-        async def _fake_review(ticket: object, **kwargs: Any) -> pipeline_types.SupportReply:
+        async def _fake_review(**kwargs: Any) -> object:
             return fake_reply
 
         monkeypatch.setattr(
@@ -296,24 +288,16 @@ class TestReplaySupport:
             _fake_review,
         )
 
-        # Use db=None so ExecutionTracer stays in no-op mode
-        _real_tracer = pipeline_tracer.ExecutionTracer
-
-        def _noop_tracer(*, db: object) -> pipeline_tracer.ExecutionTracer:
-            return _real_tracer(db=None)
-
-        monkeypatch.setattr(pipeline_tracer, "ExecutionTracer", _noop_tracer)
-
         fake_cfg = mock.MagicMock()
-        fake_db = _FakeDB("sqlite:///test")
+        fake_cfg.build_document_searcher.return_value = mock.MagicMock()
+        fake_cfg.build_ticket_searcher.return_value = mock.MagicMock()
 
-        # When _replay_support is called
+        # When _replay_support is called with the F4 contract
         result = await replay_mod._replay_support(
             bundle=fake_bundle,
             cfg=fake_cfg,
-            db=fake_db,
+            recorded_toolset=_make_recorded_toolset(),
         )
 
-        # Then the result matches the fake pipeline reply
-        assert result.ticket_id == "t-1"
-        assert result.suggested_response == "Please try restarting."
+        # Then the result reflects the mocked pipeline reply (canonical JSON dict)
+        assert result == {"ticket_id": "t-1", "ticket_key": "SUPPORT-1"}

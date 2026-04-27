@@ -8,6 +8,7 @@ lifespan does not run.
 
 from __future__ import annotations
 
+import os
 import uuid
 from typing import Any
 from unittest import mock
@@ -26,6 +27,17 @@ from sentinel.interfaces.api import middleware as middleware_mod
 
 
 _VALID_UUID = "12345678-1234-5678-1234-567812345678"
+
+# OTEL_SDK_DISABLED short-circuits SDK construction to no-op spans, so the
+# in-memory exporter never sees finished spans even when the test wires
+# its own TracerProvider. CI does not set the env var; local dev sets it
+# to silence "Connection refused" noise from OTel exporters that target
+# the optional Langfuse stack. Skip cleanly so local runs aren't a false
+# positive.
+_skip_when_otel_disabled = pytest.mark.skipif(
+    os.environ.get("OTEL_SDK_DISABLED", "").lower() in {"true", "1"},
+    reason="OTEL_SDK_DISABLED short-circuits SDK construction; spans never finish.",
+)
 
 
 def _build_test_app(*, capture: dict[str, Any] | None = None) -> fastapi.FastAPI:
@@ -183,6 +195,7 @@ class TestRequestIdMiddlewareDownstreamPropagation:
         # inherit the previous request's id
         assert "request_id" not in structlog.contextvars.get_contextvars()
 
+    @_skip_when_otel_disabled
     def test_sets_request_id_attribute_on_current_otel_span(self, recorded_spans):
         # Given a real recording span installed for the request
         app = _build_test_app()

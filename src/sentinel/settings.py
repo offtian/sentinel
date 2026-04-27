@@ -249,8 +249,13 @@ class Settings(
     worker_max_retries: int = 3
 
     # Observability
-    dd_service: str = "sentinel"
-    dd_env: str = "production"
+    # Datadog (ddtrace) decoupled — these knobs were only consumed by the
+    # ddtrace pytest plugin which patched OTel SDK globally. The codebase
+    # treats Datadog as a non-existent service; the Datadog observability
+    # backend (datadog-api-client) is still available as an opt-in
+    # observability adapter via observability_backend="datadog".
+    # dd_service: str = "sentinel"
+    # dd_env: str = "production"
     otel_metrics_enabled: bool = True
     otel_traces_enabled: bool = True
     otel_traces_endpoint: str = ""

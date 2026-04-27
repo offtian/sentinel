@@ -59,7 +59,10 @@ dependencies = [
     "slack_bolt",
     "kubernetes-asyncio>=31.0",
     # Observability
-    "ddtrace",
+    # ddtrace removed — its pytest plugin auto-loads and patches OTel SDK
+    # globally, breaking OTel-based tests; Datadog is decoupled and
+    # treated as a non-existent service (datadog-api-client kept above for
+    # the optional datadog-as-observability-backend search adapter).
     "sentry-sdk>=2.35",
     "tiktoken>=0.12.0",
     "streamlit>=1.39",

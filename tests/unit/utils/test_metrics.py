@@ -1,11 +1,25 @@
 from __future__ import annotations
 
+import os
 from unittest import mock
 
+import pytest
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
 from sentinel.utils import metrics
+
+
+# OTEL_SDK_DISABLED short-circuits every SDK construction to a no-op, so the
+# in-memory reader returns None even when the test explicitly wires its own
+# MeterProvider. CI does not set the env var; local dev sets it to silence
+# the "Connection refused" noise from OTel exporters that target the optional
+# Langfuse stack. Skip cleanly so local runs aren't a false-positive failure.
+_otel_sdk_disabled = os.environ.get("OTEL_SDK_DISABLED", "").lower() in {"true", "1"}
+_skip_when_otel_disabled = pytest.mark.skipif(
+    _otel_sdk_disabled,
+    reason="OTEL_SDK_DISABLED short-circuits SDK construction; reader returns None.",
+)
 
 
 class TestRecordInvestigationCompleted:
@@ -40,6 +54,7 @@ class TestInitMeters:
     def teardown_method(self):
         metrics.reset_meters()
 
+    @_skip_when_otel_disabled
     def test_records_investigations_after_init(self):
         # Given meters initialised against an in-memory reader
         reader = InMemoryMetricReader()
@@ -61,6 +76,7 @@ class TestInitMeters:
         }
         assert "sentinel_investigations_total" in names
 
+    @_skip_when_otel_disabled
     def test_records_pipeline_node_duration(self):
         # Given meters initialised against an in-memory reader
         reader = InMemoryMetricReader()
