@@ -95,6 +95,22 @@ typecheck:
 check-imports:
     uv run lint-imports
 
+# Assert runbook content_sha frontmatter matches loader-computed sha (F6.E)
+check-runbook-shas:
+    uv run python scripts/compute_runbook_shas.py --check
+
+# Run the F6.M weekly fingerprint-clustering + auto-PR flywheel
+# (clusters last week's no-match runbook rows; opens draft PR per qualifying gap).
+# Pass --dry-run to inspect cluster output without writing rows or opening PRs.
+run-runbook-flywheel *ARGS:
+    uv run python scripts/runbook_gap_flywheel.py {{ ARGS }}
+
+# Run the F6.L daily drift-detection sweep (fixture replay + stale runbooks
+# + tools registry). Writes runbook_drift_history rows and posts one Slack
+# alert per fresh drift via the runbook-owner routing.
+check-runbook-drift:
+    uv run python scripts/runbook_drift_check.py
+
 # Database
 # --------
 
@@ -171,6 +187,34 @@ kagent-dev-up:
 # Delete the local Kind cluster
 kagent-dev-down:
     kind delete cluster --name sentinel-dev
+
+# Real-pod investigation harness
+# ------------------------------
+#
+# Spin up a victim Pod inside the local Kind cluster, OOMKill it on
+# demand, and trigger a real SRE investigation against it. The
+# investigator (with K8S_INVESTIGATION_BACKEND=native) queries real
+# kubectl describe / events / logs.
+
+# Deploy a victim Pod with a 64Mi memory limit (default name: api-service)
+victim-up name="api-service":
+    ./scripts/setup-victim-pod.sh {{name}}
+
+# Tear down all victim Pods + namespace
+victim-down:
+    kubectl --context kind-sentinel-dev delete namespace sentinel-victims --ignore-not-found
+
+# Jam memory into the victim and trigger an OOMKilled event
+victim-jam name="api-service" mb="128":
+    ./scripts/jam-pod-memory.sh {{name}} {{mb}}
+
+# Trigger an investigation against an existing victim Pod (no jam)
+investigate-victim name="api-service":
+    ./scripts/trigger-investigation.sh --victim {{name}}
+
+# End-to-end demo: ensure victim is up, OOM it, then trigger investigation
+investigate-victim-oom name="api-service" mb="128":
+    ./scripts/trigger-investigation.sh --victim {{name}} --jam {{mb}}
 
 # Housekeeping
 # ------------

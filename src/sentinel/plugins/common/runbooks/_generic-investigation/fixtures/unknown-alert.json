@@ -1,0 +1,19 @@
+{
+  "alertname": "ExoticBespokeMetric",
+  "severity": "P3",
+  "service": "oddball",
+  "resource_kind": "Configmap",
+  "labels": {
+    "team": "research",
+    "experiment": "true"
+  },
+  "summary": "ExoticBespokeMetric breached threshold 0.42 on oddball service configmap",
+  "raw_payload": {
+    "metric_name": "exotic_bespoke_metric",
+    "current_value": 0.42,
+    "threshold": 0.40,
+    "window": "5m",
+    "configmap_name": "oddball-experiment-config",
+    "namespace": "research"
+  }
+}

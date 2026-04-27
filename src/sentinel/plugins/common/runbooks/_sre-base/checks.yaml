@@ -1,0 +1,17 @@
+# Universal groundedness rules and body-sanitization config every SRE
+# runbook inherits. Children may add prescribed checks; the two
+# groundedness rules below are inherited unchanged because the F8
+# quality gate enforces them as firm-wide invariants.
+prescribed_checks: []
+
+groundedness_rules:
+  - rule_id: every_finding_has_evidence
+    description: Every Finding MUST cite at least one evidence_ref pointing at a recorded tool_call
+  - rule_id: evidence_within_investigation
+    description: Every evidence_ref must match a tool_call.evidence_object_id within the same investigation
+
+body_sanitization:
+  reject_auto_rendered_urls: true
+  allowed_url_locations:
+    - canonical_sources
+    - frontmatter

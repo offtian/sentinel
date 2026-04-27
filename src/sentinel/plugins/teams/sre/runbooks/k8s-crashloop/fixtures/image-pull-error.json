@@ -1,0 +1,31 @@
+{
+  "alertname": "KubePodCrashLooping",
+  "severity": "P3",
+  "service": "reporting-batch",
+  "resource_kind": "Pod",
+  "labels": {
+    "pm_namespace": "pm-beta",
+    "cluster_class": "production"
+  },
+  "summary": "pod stuck in ImagePullBackOff, ErrImagePull on registry.internal/reporting-batch:v2.14.7",
+  "raw_payload": {
+    "exit_code": null,
+    "reason": "ImagePullBackOff",
+    "container_name": "reporting-batch",
+    "pod_name": "reporting-batch-9f7cd6c7b-mxtvl",
+    "namespace": "pm-beta",
+    "restart_count": 0,
+    "events": [
+      {
+        "type": "Warning",
+        "reason": "Failed",
+        "message": "Failed to pull image \"registry.internal/reporting-batch:v2.14.7\": ErrImagePull"
+      },
+      {
+        "type": "Warning",
+        "reason": "Failed",
+        "message": "Error: ImagePullBackOff"
+      }
+    ]
+  }
+}

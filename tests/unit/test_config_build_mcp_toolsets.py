@@ -14,6 +14,20 @@ from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
 
 from sentinel import settings as settings_mod
 from sentinel.plugins.common import config as plugins_config_mod
+from sentinel.plugins.toolsets import _runtime as toolsets_runtime
+
+
+def _unwrap(toolset: object) -> object:
+    """
+    Unwrap a ``ReplayCapturingToolset`` if present, else return ``toolset`` itself.
+
+    F4 wraps every shared MCP toolset with the replay-capture wrapper at
+    config-build time so the I/O capture is uniform — these tests assert on
+    the underlying transport type (MCPServerSSE / MCPServerStdio).
+    """
+    if isinstance(toolset, toolsets_runtime.ReplayCapturingToolset):
+        return toolset.wrapped
+    return toolset
 
 
 def _make_settings(**overrides: object) -> mock.MagicMock:
@@ -59,9 +73,9 @@ class TestBuildMcpToolsets:
         # When build_mcp_toolsets is called
         result = cfg.build_mcp_toolsets()
 
-        # Then a single MCPServerSSE is returned
+        # Then a single MCPServerSSE is returned (under the F4 replay-capture wrapper)
         assert len(result) == 1
-        assert isinstance(result[0], MCPServerSSE)
+        assert isinstance(_unwrap(result[0]), MCPServerSSE)
 
     def test_builds_single_stdio_server_from_command(self) -> None:
         # Given a Configuration with a single stdio MCP server
@@ -71,9 +85,9 @@ class TestBuildMcpToolsets:
         # When build_mcp_toolsets is called
         result = cfg.build_mcp_toolsets()
 
-        # Then a single MCPServerStdio is returned
+        # Then a single MCPServerStdio is returned (under the F4 replay-capture wrapper)
         assert len(result) == 1
-        assert isinstance(result[0], MCPServerStdio)
+        assert isinstance(_unwrap(result[0]), MCPServerStdio)
 
     def test_builds_multiple_mixed_servers_in_declaration_order(self) -> None:
         # Given a Configuration with mixed HTTP and stdio servers
@@ -90,10 +104,11 @@ class TestBuildMcpToolsets:
         result = cfg.build_mcp_toolsets()
 
         # Then three toolsets are returned in declaration order
+        # (each wrapped by the F4 replay-capture wrapper)
         assert len(result) == 3
-        assert isinstance(result[0], MCPServerSSE)
-        assert isinstance(result[1], MCPServerStdio)
-        assert isinstance(result[2], MCPServerSSE)
+        assert isinstance(_unwrap(result[0]), MCPServerSSE)
+        assert isinstance(_unwrap(result[1]), MCPServerStdio)
+        assert isinstance(_unwrap(result[2]), MCPServerSSE)
 
     def test_memoises_result_across_calls(self) -> None:
         # Given a Configuration with an MCP server configured

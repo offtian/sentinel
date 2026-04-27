@@ -1,0 +1,9 @@
+fixtures:
+  - id: unknown-alert
+    alert_payload_path: fixtures/unknown-alert.json
+    expected:
+      runbook_id: _generic-investigation
+      match_method: llm_zero_match_rescue
+      required_checks_executed: []
+      hypothesis_keywords: []
+      forbidden_substrings_in_summary: []

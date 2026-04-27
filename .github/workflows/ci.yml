@@ -69,8 +69,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, test]
     services:
+      # F6.J migration 016 runs `CREATE EXTENSION IF NOT EXISTS vector`,
+      # which requires the pgvector extension to be installed on the
+      # server. The plain `postgres:16-alpine` image does not ship it,
+      # so we use the official pgvector image (Postgres 16 + pgvector
+      # pre-installed) instead.
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: sentinel
           POSTGRES_PASSWORD: sentinel

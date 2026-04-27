@@ -36,6 +36,7 @@ dependencies = [
     "asyncpg",
     "databases[asyncpg]",
     "psycopg2-binary",
+    "pgvector>=0.3",
     "alembic",
     "pydantic-ai>=1.0.7",
     "litellm>=1.60",
@@ -46,6 +47,8 @@ dependencies = [
     "invoke",
     "attrs",
     "PyYAML",
+    "markdown>=3.10",
+    "httpx",
     "fastmcp>=2.0",
     # Vendors
     "pdpyras",
@@ -56,7 +59,10 @@ dependencies = [
     "slack_bolt",
     "kubernetes-asyncio>=31.0",
     # Observability
-    "ddtrace",
+    # ddtrace removed — its pytest plugin auto-loads and patches OTel SDK
+    # globally, breaking OTel-based tests; Datadog is decoupled and
+    # treated as a non-existent service (datadog-api-client kept above for
+    # the optional datadog-as-observability-backend search adapter).
     "sentry-sdk>=2.35",
     "tiktoken>=0.12.0",
     "streamlit>=1.39",
@@ -97,6 +103,7 @@ dev = [
     # Localdev
     "pre-commit",
     "ipdb",
+    "python-frontmatter",
 ]
 
 # HolmesGPT SDK — installed from fork with httpx/postgrest compatibility fixes.
@@ -183,6 +190,9 @@ ignore = [
 "tests/**" = ["ANN", "D205", "D213", "SLF001"]
 "tests/factories/**" = ["RUF012", "D417"]
 "tasks/**" = ["T201"]
+# scripts/ holds CLI entry points executed via ``python scripts/<name>.py`` —
+# no __init__.py because they are not importable modules.
+"scripts/**" = ["INP001"]
 
 [tool.ruff.lint.isort]
 lines-after-imports = 2
@@ -257,6 +267,18 @@ type = "forbidden"
 source_modules = ["sentinel.domain.**.operations"]
 forbidden_modules = ["sentinel.domain.vendor_adapters"]
 
+[[tool.importlinter.contracts]]
+name = "Runbooks domain stays pure"
+type = "forbidden"
+source_modules = ["sentinel.domain.runbooks"]
+forbidden_modules = [
+    "sentinel.interfaces",
+    "sentinel.application",
+    "sentinel.plugins",
+    "sentinel.vendors",
+    "sentinel.config",
+]
+
 # Mypy
 # ----
 
@@ -279,7 +301,7 @@ allow_untyped_defs = true
 disable_error_code = "attr-defined"
 
 [[tool.mypy.overrides]]
-module = ["aioboto3", "holmesgpt.*", "holmes.*", "litellm", "litellm.*", "pdpyras", "jira.*", "atlassian.*"]
+module = ["aioboto3", "holmesgpt.*", "holmes.*", "litellm", "litellm.*", "pdpyras", "jira.*", "atlassian.*", "markdown"]
 ignore_missing_imports = true
 
 # Pytest

@@ -47,6 +47,12 @@ class SRESettings(BaseSettings):
     sre_auto_investigate: bool = True
     sre_slack_channel: str = ""
 
+    # F6.L drift-detection cron — fallback Slack channel for runbook drift
+    # alerts when the runbook frontmatter ``owner`` does not map to a
+    # team-specific channel. Empty string disables the fallback so drift on
+    # unowned runbooks is logged only.
+    runbook_owners_channel: str = "#sre-runbook-owners"
+
     # Approval gate: investigations below this confidence threshold require human approval.
     # Set to 0.0 to disable (all findings auto-publish).
     require_approval_below_confidence: float = 0.7
@@ -101,6 +107,30 @@ class SupportSettings(BaseSettings):
     document_searcher: str = "bedrock_knowledge_base"
 
 
+class ConfluencePublishSettings(BaseSettings):
+    """
+    F6.N — Confluence write-side PR-bot configuration.
+
+    Confluence is a *read-only consumer* of the on-disk runbook
+    catalog. The publish script (``scripts/runbook_confluence_publish``)
+    no-ops cleanly when these are empty so CI doesn't fail on
+    deployments that haven't wired Confluence yet. Once wired, the
+    fields combine with ``confluence_user`` to provide HTTP Basic auth
+    against the Confluence Cloud REST API.
+
+    ``confluence_base_url`` here **shadows** the read-side
+    ``SupportSettings.confluence_base_url`` field intentionally — same
+    instance, same URL, but the write-side script reads via the
+    publish-specific names so the two flows can diverge later (e.g.
+    different space keys per pipeline) without breaking each other.
+    """
+
+    confluence_user: str = ""
+    confluence_token: SecretStr | None = None
+    confluence_space_key: str = ""
+    confluence_parent_page_id: str = ""
+
+
 class LLMSettings(BaseSettings):
     """LLM model routing settings."""
 
@@ -110,9 +140,37 @@ class LLMSettings(BaseSettings):
     root_cause_llm: str = "ollama/qwen3:8b"
     ticket_reviewer_llm: str = "ollama/qwen3:8b"
     response_drafter_llm: str = "ollama/qwen3:8b"
+    # Stage 2 disambiguator (F6 runbook matcher). Empty string falls back to
+    # alert_classifier_llm at config-resolve time so a separate small model can
+    # be wired without setting it explicitly.
+    runbook_disambiguator_llm: str = ""
+    # Stage 3 RAG fallback (F6.J). Disabled by default — opt-in per environment.
+    # When True, a no-match Stage 2B result triggers pgvector retrieval against
+    # pre-indexed runbook embeddings. When False, the matcher short-circuits to
+    # the no-match result without any embedder I/O.
+    runbook_rag_fallback_enabled: bool = False
+    # Embedder model for the F6.J Stage 3 path. Provider/model format; same
+    # convention as the other LLM knobs. Defaults to OpenAI's
+    # text-embedding-3-small (1536-d) which matches the runbook_embeddings
+    # column dimension lock.
+    runbook_embedder_llm: str = "openai/text-embedding-3-small"
+    # Cosine-similarity threshold below which Stage 3 candidates are dropped.
+    # Tuned defensively at 0.78 — the matcher prefers a no-match over a noisy
+    # near-miss because the generic playbook + approval gate are the safer
+    # downstream path.
+    runbook_rag_min_similarity: float = 0.78
+    # Top-k retrieval depth for Stage 3. Five gives enough recall to write a
+    # useful evidence trail without inflating the audit table.
+    runbook_rag_top_k: int = 5
 
 
-class Settings(LLMSettings, SRESettings, K8sChartSettings, SupportSettings):
+class Settings(
+    LLMSettings,
+    SRESettings,
+    K8sChartSettings,
+    SupportSettings,
+    ConfluencePublishSettings,
+):
     """
     Application-wide settings, composed from domain-specific base classes.
 
@@ -162,6 +220,7 @@ class Settings(LLMSettings, SRESettings, K8sChartSettings, SupportSettings):
         "litellm_virtual_key",
         "langfuse_public_key",
         "langfuse_secret_key",
+        "confluence_token",
         mode="before",
     )
     @classmethod
@@ -190,8 +249,13 @@ class Settings(LLMSettings, SRESettings, K8sChartSettings, SupportSettings):
     worker_max_retries: int = 3
 
     # Observability
-    dd_service: str = "sentinel"
-    dd_env: str = "production"
+    # Datadog (ddtrace) decoupled — these knobs were only consumed by the
+    # ddtrace pytest plugin which patched OTel SDK globally. The codebase
+    # treats Datadog as a non-existent service; the Datadog observability
+    # backend (datadog-api-client) is still available as an opt-in
+    # observability adapter via observability_backend="datadog".
+    # dd_service: str = "sentinel"
+    # dd_env: str = "production"
     otel_metrics_enabled: bool = True
     otel_traces_enabled: bool = True
     otel_traces_endpoint: str = ""

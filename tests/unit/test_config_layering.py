@@ -255,10 +255,15 @@ class TestSettingsFoundationsFields:
         assert settings.litellm_base_url is None
         assert settings.litellm_virtual_key is None
 
-    def test_langfuse_fields_default_to_none(self) -> None:
-        # Given no Langfuse env
-        # When Settings is constructed
-        settings = settings_mod.Settings()
+    def test_langfuse_fields_default_to_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Given no Langfuse env (local .env may carry dev keys for
+        # docker-compose; explicitly delete before constructing Settings so
+        # the test asserts the in-code defaults rather than dev-stack state)
+        for key in ("LANGFUSE_HOST", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"):
+            monkeypatch.delenv(key, raising=False)
+
+        # When Settings is constructed without an .env file (defaults only)
+        settings = settings_mod.Settings(_env_file=None)
 
         # Then every Langfuse field is None — the OTel exporter falls
         # back to console output when the host is unset

@@ -1,0 +1,9 @@
+# _sre-base ships with no allowed tools of its own. Children inherit the
+# empty set and append their own; the merge semantics in the loader (parent
+# first, child appended; child wins on name collision) leave child tool
+# specs untouched. The cap fields are deliberately set to firm-wide
+# ceilings; child runbooks may tighten them via min(parent, child).
+allowed_tools: []
+denied_tools: []
+max_total_tool_calls: 60
+max_loop_iterations: 12

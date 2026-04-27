@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import uuid
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -16,12 +16,28 @@ from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.evaluation import comparison
 from sentinel.domain.investigations import adapters, holmes_adapter
 from sentinel.domain.investigations import entities as investigation_entities
+from sentinel.domain.runbooks import alert_view as runbook_alert_view
+from sentinel.domain.runbooks import matcher as runbook_matcher
+from sentinel.domain.runbooks import models as runbook_models
+from sentinel.domain.runbooks import persistence as runbook_persistence
+from sentinel.domain.runbooks import rag as runbook_rag
 from sentinel.domain.vendor_adapters.pagerduty import PagerDutyClient
 from sentinel.interfaces.graphs import _node_helpers, common
-from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser
+from sentinel.interfaces.graphs.agents import (
+    alert_classifier,
+    root_cause_analyser,
+    runbook_disambiguator,
+)
 from sentinel.interfaces.graphs.agents import utils as agent_utils
 from sentinel.utils import logs, metrics
 from sentinel.vendors import slack
+
+
+# Type alias for the async session factory callable supplied by the worker.
+# Returns an async context manager yielding an ``AsyncSession``. Defined as
+# Any here because the actual session type lives in SQLAlchemy and threading
+# the type would force every interface caller to import it.
+SessionFactory = Callable[[], Any]
 
 
 @dataclasses.dataclass
@@ -44,6 +60,27 @@ class Dependencies:
     challenger_adapter: adapters.BaseInvestigationAdapter | None = None
     # Optional K8s investigation adapter for cluster state queries.
     k8s_adapter: adapters.K8sInvestigationAdapter | None = None
+    # F6.F.1: runbook catalog (already-loaded mapping) consumed by the
+    # MatchRunbook node. The worker is the single owner of disk I/O —
+    # callers pass a pre-loaded mapping so the node never re-reads disk
+    # per alert. ``None`` short-circuits the matcher entirely (e.g. unit
+    # tests that don't exercise runbook matching).
+    runbooks: Mapping[str, runbook_models.Runbook] | None = None
+    # F6.F.1: callable returning an async context manager that yields an
+    # ``AsyncSession`` for runbook-match audit-row persistence. ``None``
+    # disables persistence (e.g. unit tests that mock the matcher).
+    db_session_factory: SessionFactory | None = None
+    # F6.F.1: F6.J Stage 3 RAG fallback knobs surfaced from BaseConfiguration.
+    # Threaded as scalars so the node can build the RagFallback inline against
+    # the per-call session — the embedder is built once by the worker.
+    rag_embedder: runbook_rag.Embedder | None = None
+    rag_enabled: bool = False
+    rag_top_k: int = 5
+    rag_min_similarity: float = 0.78
+    # F6.F.1: model id for the disambiguator agent (Stage 2A/2B). When None,
+    # falls back to the agent's "test" placeholder which is overridden at
+    # runtime by config wiring.
+    disambiguator_model: str | None = None
 
 
 @dataclasses.dataclass
@@ -58,6 +95,22 @@ class State:
     # Populated by ClassifyAlert and consumed by AnalyseRootCause to drive
     # runbook Skills selection in the root_cause_analyser agent.
     classification_category: str = ""
+    # F6.F.1: matched runbook from the MatchRunbook node. ``None`` on
+    # no-match — downstream agents fall back to the generic-exploration
+    # frame and ``requires_approval`` is set to True.
+    runbook: runbook_models.Runbook | None = None
+    # F6.F.1: result of the matcher orchestrator, kept on the state so
+    # downstream nodes (e.g. F8 approval gate) and worker bootstrap can
+    # cross-reference it with the audit row without re-running the matcher.
+    runbook_match: runbook_models.RunbookMatch | None = None
+    # F6.F.1: id of the runbook_match audit row, returned by
+    # ``write_runbook_match``. Stashed so the F8 feedback writer can FK to
+    # it without re-querying.
+    runbook_match_id: uuid.UUID | None = None
+    # F6.F.1: True iff the matcher returned no_match — downstream nodes
+    # use this to enforce human approval per F6 spec §5.4 generic-playbook
+    # contract (low-confidence outputs always require review).
+    requires_approval: bool = False
 
 
 @dataclasses.dataclass
@@ -66,8 +119,8 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
 
     async def run(
         self, ctx: GraphRunContext[State, Dependencies]
-    ) -> InvestigateWithHolmes | End[common.InvestigationReply]:
-        async def _impl() -> InvestigateWithHolmes | End[common.InvestigationReply]:
+    ) -> MatchRunbook | End[common.InvestigationReply]:
+        async def _impl() -> MatchRunbook | End[common.InvestigationReply]:
             await ctx.deps.status_update_client.update_status("Classifying alert...")
 
             try:
@@ -146,7 +199,7 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
                 started_at=datetime.now(tz=UTC),
             )
 
-            return InvestigateWithHolmes()
+            return MatchRunbook()
 
         return await _node_helpers.run_node_with_envelope(
             pipeline="investigation",
@@ -154,6 +207,191 @@ class ClassifyAlert(BaseNode[State, Dependencies, common.InvestigationReply]):
             envelope=ctx.state.envelope,
             fn=_impl,
         )
+
+
+@dataclasses.dataclass
+class MatchRunbook(BaseNode[State, Dependencies, common.InvestigationReply]):
+    """
+    Match the classified alert against the runbook catalog (F6.F.1).
+
+    Calls :func:`sentinel.domain.runbooks.matcher.match_runbook` against the
+    pre-loaded catalog supplied via :attr:`Dependencies.runbooks`. Always
+    writes a ``runbook_match`` audit row (including ``no_match`` outcomes).
+    On a successful match, pre-populates ``investigation_task`` rows from
+    ``runbook.checks.prescribed_checks`` so the F8 quality gate can verify
+    "every required check ran" against the row IDs without re-reading the
+    runbook from disk.
+
+    State touched:
+
+    * ``state.runbook`` — set to the matched runbook on success, ``None``
+      on no-match (the K8sInvestigator and RootCauseAnalyser agents read
+      this off their Dependencies and inject the body into a
+      ``<runbook>`` quarantine frame; F6 spec §7.2).
+    * ``state.runbook_match`` — full :class:`RunbookMatch` for downstream
+      audit / approval-gate cross-reference.
+    * ``state.runbook_match_id`` — UUID of the persisted audit row.
+    * ``state.requires_approval`` — True iff no-match. The
+      ``DetermineConfidence`` gate ANDs this with the confidence threshold,
+      so the generic-playbook fallback always lands in the approval queue.
+
+    Replay contract (F6.F.4): the matcher is deterministic under fixed
+    LLM I/O. Stage 1 is purely structural; Stage 2A/2B disambiguator I/O
+    is captured by the F4 replay bundle (PydanticAI agent runs are
+    instrumented end-to-end). Stage 3 RAG embedding I/O is captured by the
+    LiteLLM SDK path (``runbook_embedder`` tool name). On replay, this
+    node re-runs the matcher and the bundle's recorded LLM responses
+    drive Stage 2 / Stage 3 to the same outcome — no per-node replay
+    rehydration hook is required.
+
+    Soft-degrade contract: ``Dependencies.runbooks=None`` short-circuits
+    the matcher (yields a no-match result without writes) so unit tests
+    that don't exercise the catalog can omit it.
+    """
+
+    async def run(self, ctx: GraphRunContext[State, Dependencies]) -> InvestigateWithHolmes:
+        async def _impl() -> InvestigateWithHolmes:
+            await ctx.deps.status_update_client.update_status("Matching runbook...")
+
+            if ctx.deps.runbooks is None:
+                # No catalog wired — degrade to no-match without writes.
+                logs.log_event(
+                    "runbook_match_skipped",
+                    params={
+                        "alert_id": ctx.state.alert.id,
+                        "reason": "no_catalog_configured",
+                    },
+                )
+                ctx.state.runbook = None
+                ctx.state.requires_approval = True
+                return InvestigateWithHolmes()
+
+            matchable_alert = runbook_alert_view.MatchableAlertView.from_alert(
+                alert=ctx.state.alert,
+                envelope=ctx.state.envelope,
+            )
+
+            try:
+                match = await _run_matcher_and_persist(
+                    ctx=ctx,
+                    matchable_alert=matchable_alert,
+                )
+            except Exception as exc:
+                # Matcher / persistence failure must not crash the pipeline.
+                # Soft-degrade to no-match so investigation continues with the
+                # generic frame and the alert is flagged for review.
+                logs.log_exception(
+                    exc,
+                    params={
+                        "alert_id": ctx.state.alert.id,
+                        "node": "MatchRunbook",
+                    },
+                )
+                ctx.state.runbook = None
+                ctx.state.requires_approval = True
+                return InvestigateWithHolmes()
+
+            ctx.state.runbook_match = match
+            matched = (
+                ctx.deps.runbooks.get(match.matched_runbook_id)
+                if match.matched_runbook_id is not None
+                else None
+            )
+            ctx.state.runbook = matched
+            ctx.state.requires_approval = matched is None
+
+            logs.log_event(
+                "runbook_matched",
+                params={
+                    "alert_id": ctx.state.alert.id,
+                    "runbook_id": match.matched_runbook_id,
+                    "match_method": match.match_method,
+                    "tag_score": match.tag_score,
+                    "requires_approval": ctx.state.requires_approval,
+                },
+            )
+
+            return InvestigateWithHolmes()
+
+        return await _node_helpers.run_node_with_envelope(
+            pipeline="investigation",
+            node="match_runbook",
+            envelope=ctx.state.envelope,
+            fn=_impl,
+        )
+
+
+async def _run_matcher_and_persist(
+    *,
+    ctx: GraphRunContext[State, Dependencies],
+    matchable_alert: runbook_alert_view.MatchableAlertView,
+) -> runbook_models.RunbookMatch:
+    """
+    Run :func:`runbook_matcher.match_runbook` and persist the audit row.
+
+    Helper extracted so :meth:`MatchRunbook.run` stays under the project's
+    50-line cap (PLR0915). Always writes the ``runbook_match`` row,
+    including ``no_match`` outcomes; pre-populates
+    ``investigation_task`` rows from ``prescribed_checks`` on success.
+    """
+    runbooks = ctx.deps.runbooks
+    if runbooks is None:
+        msg = "ctx.deps.runbooks is None inside _run_matcher_and_persist"
+        raise RuntimeError(msg)
+
+    async def _disambiguator(
+        summary: str,
+        candidates: tuple[tuple[str, str], ...],
+    ) -> runbook_models.DisambiguatorChoice:
+        return await runbook_disambiguator.disambiguate(
+            alert_summary=summary,
+            candidates=candidates,
+            model=ctx.deps.disambiguator_model,
+        )
+
+    if ctx.deps.db_session_factory is None:
+        # No DB wired — run matcher with RAG disabled and skip persistence.
+        return await runbook_matcher.match_runbook(
+            alert=matchable_alert,
+            envelope=ctx.state.envelope,
+            runbooks=runbooks,
+            disambiguator=_disambiguator,
+            rag_fallback=None,
+        )
+
+    async with ctx.deps.db_session_factory() as session:
+        rag_fallback: runbook_rag.RagFallback | None = None
+        if ctx.deps.rag_embedder is not None:
+            rag_fallback = runbook_rag.RagFallback(
+                embedder=ctx.deps.rag_embedder,
+                session=session,
+                enabled=ctx.deps.rag_enabled,
+                top_k=ctx.deps.rag_top_k,
+                min_similarity=ctx.deps.rag_min_similarity,
+            )
+        match = await runbook_matcher.match_runbook(
+            alert=matchable_alert,
+            envelope=ctx.state.envelope,
+            runbooks=runbooks,
+            disambiguator=_disambiguator,
+            rag_fallback=rag_fallback,
+        )
+        match_id = await runbook_persistence.write_runbook_match(
+            session=session,
+            envelope=ctx.state.envelope,
+            match=match,
+        )
+        ctx.state.runbook_match_id = match_id
+        if match.matched_runbook_id is not None:
+            matched_runbook = runbooks.get(match.matched_runbook_id)
+            if matched_runbook is not None and ctx.state.investigation is not None:
+                await runbook_persistence.write_prescribed_check_tasks(
+                    session=session,
+                    investigation_id=ctx.state.investigation.id,
+                    runbook=matched_runbook,
+                )
+        await session.commit()
+    return match
 
 
 @dataclasses.dataclass
@@ -647,6 +885,7 @@ async def investigate_alert(
     investigation_graph = Graph(
         nodes=(
             ClassifyAlert,
+            MatchRunbook,
             InvestigateWithHolmes,
             AnalyseRootCause,
             DetermineConfidence,

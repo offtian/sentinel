@@ -1,0 +1,22 @@
+# Generic exploration playbook --- broad read-only toolset.
+# The agent never sees this file's prose --- only the resulting toolset.
+allowed_tools:
+  - name: k8s_describe_pod
+    max_calls: 4
+  - name: k8s_get_events
+    max_calls: 3
+  - name: k8s_get_pod_logs
+    max_calls: 5
+  - name: k8s_describe_deployment
+    max_calls: 3
+  - name: prom_query_range
+    max_calls: 4
+  - name: prom_query_instant
+    max_calls: 4
+  - name: harness_recent_deploys
+    max_calls: 1
+  - name: datadog_get_logs
+    max_calls: 3
+denied_tools: []
+max_total_tool_calls: 25
+max_loop_iterations: 6

@@ -212,6 +212,67 @@ flowchart LR
 - Initial catalogue: `k8s-crashloop-runbook`, `database-connection-runbook`, `latency-spike-runbook`, `auth-error-response`, `rate-limit-response`, `chart-helm-best-practices`
 - Skills are git-tracked and content-hashed (SHA-256) for replay
 
+Skills are *behaviours* (always-on prompt fragments). Runbooks (below) are *procedures* (per-incident contracts). They live at different layers of the same agent — see [F6 design spec](superpowers/specs/2026-04-26-f6-runbook-catalog-design.md) §1.6 for the coexistence rationale.
+
+### Runbooks
+
+Sentinel-owned, internally-evolvable runbook catalog. Filesystem-in-git, four-file directories matched by a deterministic tag pre-filter with a small-LLM disambiguator on ties and zero-match rescue, with optional pgvector RAG as a third-stage fallback. Replaces ad-hoc skills overlap with a contract-first, replayable, audit-grade procedural layer. Full design rationale: [`docs/superpowers/specs/2026-04-26-f6-runbook-catalog-design.md`](superpowers/specs/2026-04-26-f6-runbook-catalog-design.md).
+
+#### Storage and format
+
+- On-disk layout: `src/sentinel/plugins/{common,teams/<team>}/runbooks/<runbook_id>/` — team-first-wins on `runbook_id` collision (RFC §15.10)
+- Each runbook is a quartet of files:
+  - `RUNBOOK.md` — YAML frontmatter (`runbook_id`, `description`, `applies_to`, `tags`, `min_match_score`, `owner`, `last_validated`, `deprecated_at`, `superseded_by`, `mnpi_safe`, `content_sha`, `extends:`) + Markdown body
+  - `tools.yaml` — capability scope (`allowed_tools`, `denied_tools`, `max_calls`, `max_total_tool_calls`, `max_loop_iterations`); read by F7 capability-token issuer
+  - `checks.yaml` — `prescribed_checks` pre-populating `investigation_task`, `groundedness_rules`, `body_sanitization` config
+  - `tests.yaml` — golden fixtures (alert payload → expected runbook + match method + tag score + required checks)
+- Loader: `domain/runbooks/loader.py::discover_runbooks(roots)` walks roots and returns a frozen `Mapping[str, Runbook]`; computes `content_sha = sha256(canonical(body || tools || checks || tests))[:32]`
+- Filesystem-in-git is the audit log: replay pins runbooks via `(content_sha, git_commit_sha, runbook_id)` triple key. Confluence is a read-only consumer (see *Confluence read-only render* below)
+
+#### Three-stage matcher
+
+`domain/runbooks/matcher.py::match_runbook(*, alert, envelope, runbooks, llm)` orchestrates three stages and **always writes a `runbook_match` row** — including `no_match` — with full top-k `candidates_json`, `tag_score`, `llm_choice`, `llm_justification`, and `match_method` for regulator audit (RFC §3.3):
+
+1. **Stage 1 — Deterministic tag pre-filter.** Filters by `deprecated_at`, `mnpi_safe` (excluded when `envelope.pii_class == "mnpi"`), `severity_min`, `resource_kinds`, `exclude_labels`. Score = exact-match count over `applies_to.alertnames` ∪ `tags`. Threshold = per-runbook `min_match_score` (default 2). Single winner above threshold → match. Explainable to a regulator in one sentence; covers the well-tagged majority.
+2. **Stage 2 — Small-LLM disambiguator.** Fires on (a) ties at top score and (b) zero candidates above threshold. Top-k tied candidates capped at 3 alphabetical (Stage 2A) / top-N=8 alphabetical (Stage 2B). LLM input is alert summary + runbook `(id, description)` tuples; output is a Pydantic-validated `DisambiguatorChoice` with explicit `no_match` option. Threshold `confidence ≥ 0.5` (Stage 2A) / `≥ 0.6` (Stage 2B). LLM unavailable → alphabetical fallback (Stage 2A) or straight to no-match (Stage 2B). Captured in F4 replay bundle.
+3. **Stage 3 — RAG fallback (opt-in).** When Stage 2B returns `no_match` and `RUNBOOK_RAG_FALLBACK_ENABLED=true`, embeds the alert query and retrieves top-k from the pgvector `runbook_embeddings` table. Top-k evidence written to `runbook_rag_match_evidence`. Replay reads recorded evidence rows back at original similarities — index can be rebuilt or model swapped without breaking determinism.
+
+When all three stages return `no_match`, the matcher returns the `_generic-investigation` playbook with `confidence=LOW` + `requires_approval=True`, emits a `runbook_gap` event, and lets the gap-clustering flywheel pick up the signal (see *Gap-clustering weekly flywheel* below).
+
+#### `extends:` shared-preamble composition
+
+Runbooks may set `extends: <runbook_id>` in frontmatter to inherit a parent's body, tools, and checks. Loader merges parent + child (child overrides parent on key collision); cycle detection raises `RunbookExtendsCycleError`; max chain depth defaults to 5. `content_sha` is computed over the **flattened** result, so a parent body change cascades to child SHAs (and pre-commit / CI fail-closed if not bumped). Reference example: `_sre-base/RUNBOOK.md` carries the shared evidence-grounding + read-only + escalation preamble; `k8s-crashloop` extends it.
+
+#### Body sanitization + quarantine prompt frame
+
+Runbook content is treated as **untrusted** for indirect-prompt-injection defence (LogJack-class threats, arXiv 2604.15368):
+
+- **Loader-side** — strips zero-width chars + BOM; rejects auto-rendered markdown URLs in body when `checks.yaml.body_sanitization.reject_auto_rendered_urls=true` (URLs go in `canonical_sources`, not body)
+- **Runtime-side** — every investigator agent (`k8s_investigator.py`, `root_cause_analyser.py`, `holmes_adapter.py`) renders the runbook body inside a `<runbook reference="...">{{ runbook.body }}</runbook>` quarantine frame in its system-prompt template; agent instructions outside the frame remain trusted
+
+#### Lifecycle and drift detection
+
+Frontmatter lifecycle fields (`last_validated`, `deprecated_at`, `superseded_by`, `mnpi_safe`) drive a daily drift sweep (`scripts/runbook_drift_check.py`) that emits structured `runbook_drift_history` rows for:
+
+- `fixture_failure` / `min_tag_score_regression` — `tests.yaml` golden fixtures no longer hold under the current matcher
+- `stale_no_matches` — `last_validated > 90 days` AND zero match rows in last 30 days
+- `tools_yaml_invalid` — a `tool_name` listed in `tools.yaml` is not in the project tool registry
+- `content_sha_mismatch` — frontmatter `content_sha` ≠ computed (CI integrity)
+
+A partial index `WHERE resolved_at IS NULL` keeps the dashboard "show me open drift" query cheap as the resolved-table grows. Slack notification routes to the runbook's `owner`; `resolution_pr_url` closes the loop. CI re-derives `content_sha` and asserts equality to frontmatter (fail-closed); a pre-commit hook (`scripts/compute_runbook_shas.py`) writes it on author side.
+
+#### Gap-clustering weekly flywheel
+
+A weekly job (`scripts/runbook_gap_flywheel.py`) queries `runbook_match` for `match_method=no_match` rows in the last 7 days, fingerprints by `sha256(sorted_alert_labels || classification_category)[:16]`, and upserts into `runbook_gap_cluster` (UNIQUE on fingerprint). Clusters with `member_count ≥ 3` and no open PR get a draft auto-PR — templated `RUNBOOK.md` skeleton at `domain/runbooks/templates/autogen_runbook.j2` (`runbook_id: AUTOGEN-<fingerprint>`, `mnpi_safe: false` fail-closed default, body cloned from `_generic-investigation`), routed via CODEOWNERS based on the cluster's most-common `service` label. `draft_pr_disposition` (merged / closed_no_action / duplicate_of_existing / in_review / rejected_low_signal) tracks flywheel effectiveness; `flywheel_iteration` bumps on re-detection so chronic clusters are visible.
+
+#### Confluence read-only render
+
+`scripts/runbook_confluence_publish.py` (PR-bot) takes the on-disk runbooks on every merge to main and publishes them to Confluence via `vendors/confluence/client.py` (no-op when unconfigured per the existing vendor-adapter pattern). Idempotent via a `sentinel_sha` page metadata property: skip when `content_sha` unchanged. **Confluence is a read-only consumer, never a write source** — edits in Confluence are discarded on next publish. The auto-PR flywheel is the only ingestion path for new runbooks.
+
+#### Pipeline integration
+
+A `MatchRunbook` node sits between `ClassifyAlert` and `InvestigateWithHolmes` in the SRE pipeline: it calls `match_runbook(...)`, writes the audit row via `domain/runbooks/persistence.py`, pre-populates `investigation_task` rows from `checks.yaml.prescribed_checks` when matched, and sets `state.runbook` + `state.requires_approval = (state.runbook is None)`. F7 capability tokens are enforced at the toolset wrapper boundary, not function entry — this contract is declared in F6 and implemented in F7 (Cerbos / OWASP / SuperTokens guidance: prompt-level / function-entry checks are bypassable by indirect-prompt-injection routes that re-enter the toolset).
+
 ### Universal MCP Injection
 
 - `Configuration.build_mcp_toolsets()` in `config.py` is the single memoised builder that parses `MCP_SERVERS` and returns a tuple of `MCPServerSSE` / `MCPServerStdio` instances

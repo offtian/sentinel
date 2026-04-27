@@ -1,0 +1,18 @@
+{
+  "alertname": "NetworkPolicyDeny",
+  "severity": "P3",
+  "service": "risk-engine",
+  "resource_kind": "Pod",
+  "labels": {
+    "pm_namespace": "pm-gamma",
+    "cluster_class": "production"
+  },
+  "summary": "NetworkPolicy denying egress from risk-engine pod to pricing-feed:8443",
+  "raw_payload": {
+    "policy_name": "deny-default-egress",
+    "source_pod": "risk-engine-6d9c4f7c5-abcde",
+    "source_namespace": "pm-gamma",
+    "destination": "pricing-feed.market-data.svc.cluster.local:8443",
+    "denied_packets_5m": 287
+  }
+}
