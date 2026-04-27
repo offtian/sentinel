@@ -185,6 +185,26 @@ Acceptance criteria:
 - [x] `bootstrap.initialise()` configures an OTLP exporter via Logfire SDK (`bootstrap_otel.init_traces()`) — `send_to_logfire=False` routes spans to Tempo/Datadog via `otel_traces_endpoint`
 - [x] FastMCP server (`interfaces/mcp/server.py`) gains a `list_skills` tool exposing the installed skill catalogue to external agents
 
+### 8. Runbook Catalog (F6)
+
+As a **risk officer**, I want **runbooks to be a Sentinel-owned, content-hashed, audit-grade contract layer**, so that **every alert investigation runs against an explicit procedure that a regulator can cite by hash and version**. See [F6 design spec](superpowers/specs/2026-04-26-f6-runbook-catalog-design.md) §11 for the full criteria matrix.
+
+Acceptance criteria:
+
+- [x] **R-RB-1** — Pre-commit hook computes `content_sha`; written to runbook frontmatter; CI re-derives + asserts equality (fail-closed); written to `runbook_match.runbook_content_sha` on every match (covered by `scripts/compute_runbook_shas.py` + `.pre-commit-config.yaml` + migration 015)
+- [x] **R-RB-2** — Deterministic two-stage matching: 10+ tag-permutation tests pass; ties broken by Stage 2A LLM disambiguator; zero-match handled by Stage 2B + generic playbook (covered by `domain/runbooks/matcher.py` + `tests/unit/domain/runbooks/test_matcher.py`)
+- [x] **R-RB-3** — `runbook_match` row includes top-k `candidates_json` for regulator audit; row written even on no-match (covered by migration 015 + `domain/runbooks/persistence.py`)
+- [x] **R-RB-4** — `last_validated` lifecycle field present; daily drift sweep flags ≥ 90-day staleness with zero matches in last 30 days (covered by `RunbookMetadata.last_validated` + `scripts/runbook_drift_check.py` + migration 017)
+- [x] **R-RB-5** — Body sanitization rule rejects auto-rendered URLs in body when `checks.yaml.body_sanitization.reject_auto_rendered_urls=true`; runbook body rendered inside `<runbook reference="...">{{ runbook.body }}</runbook>` quarantine frame in agent system prompts for indirect-prompt-injection defence (covered by `domain/runbooks/loader.py` + agent-side Jinja2 templates for `K8sInvestigator` / `RootCauseAnalyser` / `HolmesAdapter`)
+- [x] **R-RB-6** — `runbook_feedback` table accepts negative-feedback rows from approval gate; weekly digest deferred to follow-on plan (covered by migration 015 + `RunbookFeedbackRecord`)
+- [x] Stage 3 RAG fallback (opt-in via `RUNBOOK_RAG_FALLBACK_ENABLED`): pgvector retrieval against pre-indexed runbook embeddings; top-k evidence rows written to `runbook_rag_match_evidence` for replay (covered by `domain/runbooks/rag.py` + migration 016 + `application/runbooks/_indexing.py`)
+- [x] `extends:` shared-preamble composition with cycle detection (max chain depth 5); `content_sha` computed over flattened result so a parent body change cascades to child SHAs (covered by `domain/runbooks/loader.py::resolve_extends`)
+- [x] Weekly fingerprint-clustering flywheel: clusters `runbook_match` no-match rows over last 7 days by `sha256(sorted_alert_labels || category)[:16]`; opens draft auto-PR for clusters with ≥ 3 occurrences via templated skeleton at `domain/runbooks/templates/autogen_runbook.j2` (covered by `scripts/runbook_gap_flywheel.py` + migration 018)
+- [x] Confluence read-only render: PR-bot publishes runbooks to Confluence on every merge to main; idempotent via `sentinel_sha` page property; edits in Confluence are discarded on next publish (covered by `vendors/confluence/client.py` + `scripts/runbook_confluence_publish.py`)
+- [ ] **R-AG-4** — 30-run determinism CI continues to pass on runs that traverse Stage 2 (LLM I/O captured in F4 replay bundle)
+- [ ] **R-OB-2** — Mandatory span attributes (`runbook_id`, `runbook_content_sha`, `match_method`) emitted on `MatchRunbook` span
+- [ ] **R-TL-3** *(F7 contract update)* — Capability tokens enforced at the toolset-wrapper boundary, not at function entry; F6 declares the contract, F7 implements
+
 ---
 
 ## Completion Status
