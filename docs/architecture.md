@@ -271,7 +271,18 @@ A weekly job (`scripts/runbook_gap_flywheel.py`) queries `runbook_match` for `ma
 
 #### Pipeline integration
 
-A `MatchRunbook` node sits between `ClassifyAlert` and `InvestigateWithHolmes` in the SRE pipeline: it calls `match_runbook(...)`, writes the audit row via `domain/runbooks/persistence.py`, pre-populates `investigation_task` rows from `checks.yaml.prescribed_checks` when matched, and sets `state.runbook` + `state.requires_approval = (state.runbook is None)`. F7 capability tokens are enforced at the toolset wrapper boundary, not function entry — this contract is declared in F6 and implemented in F7 (Cerbos / OWASP / SuperTokens guidance: prompt-level / function-entry checks are bypassable by indirect-prompt-injection routes that re-enter the toolset).
+A `MatchRunbook` node sits between `ClassifyAlert` and `InvestigateWithHolmes` in the SRE pipeline: it calls `match_runbook(...)`, writes the audit row via `domain/runbooks/persistence.py`, pre-populates `investigation_task` rows from `checks.yaml.prescribed_checks` when matched, and sets `state.runbook` + `state.requires_approval = (state.runbook is None)`.
+
+#### Runbook grants (F7)
+
+Enforcement is at the **toolset wrapper boundary** via `RunbookScopedToolset` (`plugins/toolsets/_runbook_scope.py`), not at function entry — prompt-level checks are bypassable by indirect-prompt-injection routes that re-enter the toolset (Cerbos / OWASP guidance). On every `call_tool`:
+
+1. Reads `deps.runbook` and `deps.envelope` from the `RunContext`. When no runbook is matched (soft-fail foundations default), passes through with a log line.
+2. Calls `domain/tools/grants.authorize_tool_call` — raises `ToolNotInRunbookError` (tool absent from allow-list or in deny-list) or `TenantScopeViolationError` (`tool_args["namespace"]` ≠ `envelope.tenant_id`).
+3. Checks per-tool and total call budgets from `runbook.tools` — raises `ToolBudgetExceededError`.
+4. On success, stamps OTel span attributes (`runbook.grant.*`) and delegates; increments `deps._tool_call_counters`.
+
+All rejections emit a `tool_grant_denied` structured log event and write an `audit_log` row via the injected `audit_fn` (a `functools.partial` of `domain/audit/operations.record_audit_entry` with the `databases.Database` pre-bound in `worker.py`). The `RunbookGrant` token returned on success carries `runbook_id`, `runbook_content_sha`, `tool_name`, `tenant_id`, and `granted_at` for downstream traceability.
 
 ### Universal MCP Injection
 

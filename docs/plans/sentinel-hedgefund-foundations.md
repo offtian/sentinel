@@ -391,20 +391,12 @@ Maps to RFC §4 + R-RB-1, R-RB-2 (and new R-RB-4..6 introduced by the F6 spec). 
 
 Maps to RFC §5.3 + R-TL-3, R-TL-4. Tools authorized only when active runbook lists them; tenant-scoped.
 
-- [ ] **F7.1** Define `src/sentinel/domain/tools/capabilities.py`. Frozen attrs `CapabilityToken(runbook_id: str, tool_name: str, tenant_id: str, granted_at: datetime)`. Function `validate_tool_call(*, runbook: Runbook, tool_name: str, tenant_id: str, call_namespace: str | None = None) -> CapabilityToken`. Raises `UnauthorizedToolCallError(tool_name, runbook_id)` if `tool_name not in {t.name for t in runbook.tools}`. Raises `ForbiddenTenantError(tenant_id, call_namespace)` if `call_namespace and call_namespace != tenant_id`
-- [ ] **F7.2** Enforce capability tokens at the **toolset wrapper boundary**, not at function entry (F6 contract update; Cerbos / OWASP / SuperTokens guidance — function-entry checks are bypassable by indirect prompt injection routes that re-enter the toolset). Implement a `CapabilityScopedToolset` wrapper that intercepts every tool invocation, validates the token against the active runbook's `tools.yaml`, enforces `max_calls`-per-tool and `max_total_tool_calls`, then delegates to the underlying toolset. Wraps every team toolset (`plugins/toolsets/kubernetes.py`, `observability.py`, etc.). Token persists onto the `tool_call` row (column added in F3.8). The active runbook is read from PydanticAI `RunContext` (deps) and the active envelope from the same context
-- [ ] **F7.3** Wire active runbook + envelope into PydanticAI agent `Dependencies` dataclass for every investigator agent. Pattern (per `sentinel.md` rule — Dependencies as `@dataclasses.dataclass`):
-    ```
-    @dataclasses.dataclass
-    class K8sInvestigatorDeps:
-        envelope: Envelope
-        runbook: Runbook
-        k8s_client: KubernetesClient
-        ...
-    ```
-- [ ] **F7.4** Unit tests `tests/unit/test_capability_tokens.py`: tool not in runbook → `UnauthorizedToolCallError`; cross-tenant call (envelope tenant ≠ tool's `namespace` arg) → `ForbiddenTenantError`; both rejections logged via `logs.log_event("capability_rejection", params={...})`; both write a row to `audit_log` (use existing `domain/audit/` writer)
-- [ ] **F7.5** Adversarial integration slice `tests/integration/test_tenant_isolation.py`: foundation slice only (full adversarial suite is week 7). Cases: `k8s_get_pod_logs(namespace="other-pm")` with envelope tenant=`pm-a` → `ForbiddenTenantError` + audit_log row; tool not in runbook (call `prom_query_range` from a runbook that only lists k8s_*) → `UnauthorizedToolCallError` + audit_log row
-- [ ] **F7.6** Update `docs/architecture.md` §Capability Tokens with the token shape, rejection types, and audit-log row schema
+- [x] **F7.1** Define `src/sentinel/domain/tools/grants.py`. Frozen attrs `RunbookGrant(runbook_id, runbook_content_sha, tool_name, tenant_id, granted_at)`. Function `authorize_tool_call(...)`. Raises `ToolNotInRunbookError`, `TenantScopeViolationError`, `ToolBudgetExceededError`
+- [x] **F7.2** `RunbookScopedToolset` wrapper at `plugins/toolsets/_runbook_scope.py` enforces at the toolset-wrapper boundary; `wrap_for_runbook_scope` factory applied in `worker.py`
+- [x] **F7.3** Wire `envelope` + `_tool_call_counters` into `Dependencies` for all three investigator agents (`investigator.py`, `k8s_investigator.py`, `root_cause_analyser.py`) + `investigation.py` call sites
+- [x] **F7.4** Unit tests: `tests/unit/domain/tools/test_grants.py` (6 cases) + `tests/unit/plugins/toolsets/test_runbook_scope.py` (10 cases)
+- [x] **F7.5** Adversarial integration slice `tests/integration/test_tenant_isolation.py`: cross-tenant namespace → `TenantScopeViolationError` + audit_log row; tool not in runbook → `ToolNotInRunbookError` + audit_log row
+- [x] **F7.6** Updated `docs/architecture.md` §Runbook grants + ticked R-TL-3 in `docs/prd.md`
 
 **Acceptance:** R-TL-3 met (tools outside runbook's `tools.yaml` rejected with structured error + audit_log row). R-TL-4 met at the app layer (cross-tenant rejection; K8s RBAC layer comes in wk5 plan). Both rejection types logged.
 

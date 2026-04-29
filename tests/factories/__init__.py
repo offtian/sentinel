@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from sentinel.data.primitives import envelope as envelope_mod
@@ -11,6 +12,7 @@ from sentinel.domain.charts import entities as chart_entities
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.investigations import adapters, holmes_adapter
 from sentinel.domain.investigations import entities as investigation_entities
+from sentinel.domain.runbooks import models as runbook_models
 from sentinel.domain.support import entities as support_entities
 
 
@@ -365,6 +367,62 @@ def make_validation_result(
         kubeconform_ok=kubeconform_ok,
         errors=errors,
         warnings=warnings,
+    )
+
+
+def make_runbook(
+    *,
+    runbook_id: str = "k8s-crashloop",
+    description: str = "CrashLoop investigation runbook",
+    content_sha: str = "deadbeef" * 4,
+    allowed_tools: tuple[str, ...] = ("k8s_get_pod_logs", "k8s_get_events"),
+    denied_tools: tuple[str, ...] = (),
+    max_total_tool_calls: int = 20,
+    max_loop_iterations: int = 10,
+    tool_max_calls: int = 5,
+    body: str = "Investigate the crashlooping pod.",
+    mnpi_safe: bool = True,
+) -> runbook_models.Runbook:
+    metadata = runbook_models.RunbookMetadata(
+        runbook_id=runbook_id,
+        description=description,
+        content_sha=content_sha,
+        applies_to=runbook_models.RunbookAppliesTo(
+            alertnames=("KubePodCrashLooping",),
+            severity_min="warning",
+            resource_kinds=("Pod",),
+            exclude_labels={},
+        ),
+        tags=(runbook_models.RunbookTag(key="category", value="k8s"),),
+        min_match_score=2,
+        owner="sre-team",
+        authors=("test",),
+        last_validated=None,
+        deprecated_at=None,
+        superseded_by=None,
+        mnpi_safe=mnpi_safe,
+        canonical_sources=(),
+    )
+    tools = runbook_models.ToolsConfig(
+        allowed_tools=tuple(
+            runbook_models.ToolSpec(name=n, max_calls=tool_max_calls) for n in allowed_tools
+        ),
+        denied_tools=denied_tools,
+        max_total_tool_calls=max_total_tool_calls,
+        max_loop_iterations=max_loop_iterations,
+    )
+    checks = runbook_models.ChecksConfig(
+        prescribed_checks=(),
+        groundedness_rules=(),
+        body_sanitization=runbook_models.BodySanitizationConfig(),
+    )
+    return runbook_models.Runbook(
+        metadata=metadata,
+        body=body,
+        tools=tools,
+        checks=checks,
+        tests=(),
+        directory=Path("/var/runbooks") / runbook_id,
     )
 
 
