@@ -286,6 +286,9 @@ class TestRequestIdMiddlewareWiring:
             mock.patch(
                 "sentinel.interfaces.api.app.workflows_support_review.build_support_review_graph"
             ),
+            mock.patch(
+                "sentinel.interfaces.api.app.workflows_sre_investigation.build_sre_investigation_graph"
+            ),
             TestClient(api_app.app) as client,
         ):
             # When /health is hit with an X-Request-Id header

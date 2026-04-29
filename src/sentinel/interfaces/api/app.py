@@ -17,6 +17,7 @@ from sentinel.interfaces.api.routers.sre.router import router as sre_router
 from sentinel.interfaces.api.routers.support.router import router as support_router
 from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.workflows import _checkpointer as workflows_checkpointer
+from sentinel.interfaces.workflows import sre_investigation as workflows_sre_investigation
 from sentinel.interfaces.workflows import support_review as workflows_support_review
 from sentinel.settings import settings
 from sentinel.utils import logs
@@ -32,6 +33,7 @@ async def lifespan(app: fastapi.FastAPI) -> AsyncGenerator[None]:
     saver_close: Callable[[], Awaitable[None]] | None = None
     app.state.support_review_graph = None
     app.state.support_review_checkpointer_close = None
+    app.state.sre_investigation_graph = None
 
     if settings.database_url:
         engine = database.get_engine()
@@ -45,6 +47,11 @@ async def lifespan(app: fastapi.FastAPI) -> AsyncGenerator[None]:
         )
         app.state.support_review_checkpointer_close = saver_close
         logs.log_event("support_review_graph_initialised")
+
+        app.state.sre_investigation_graph = (
+            workflows_sre_investigation.build_sre_investigation_graph(checkpointer=saver)
+        )
+        logs.log_event("sre_investigation_graph_initialised")
 
     yield
 

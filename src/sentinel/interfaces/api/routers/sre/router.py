@@ -12,10 +12,12 @@ from sentinel.config import get_config
 from sentinel.data import db as async_db
 from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.approval import entities as approval_entities
 from sentinel.domain.investigations import queries as sre_queries
 from sentinel.domain.jobs import operations as job_ops
 from sentinel.interfaces.api.dependencies import require_database
 from sentinel.interfaces.webhooks import envelope_factory, pagerduty
+from sentinel.interfaces.workflows import sre_investigation as workflows_sre_investigation
 from sentinel.settings import settings
 from sentinel.utils import logs
 
@@ -269,8 +271,10 @@ async def get_investigation(
 
 # ── Approval Gate ────────────────────────────────────────────────────────────
 
-# In-memory store for pending approvals.
+# In-memory store for pending approvals (legacy path).
 # Production: replace with database-backed store via Alembic migration.
+# The LangGraph path (when sre_investigation_graph is wired) uses
+# checkpoint-based routing instead.
 _pending_approvals: dict[str, dict[str, Any]] = {}
 
 
@@ -305,12 +309,48 @@ def remove_pending_approval(investigation_id: str) -> None:
 async def approve_investigation(
     investigation_id: str,
     action: ApprovalAction,
+    request: fastapi.Request,
 ) -> fastapi.responses.JSONResponse:
     """
     Approve an investigation for publishing to external channels.
 
-    Called by Slack interactive message handler or directly by an engineer.
+    Checks the LangGraph checkpoint first (when the SRE graph is wired).
+    Falls back to the legacy in-memory pending-approvals dict. Returns 404
+    when neither source has a record for the investigation_id.
     """
+    graph = request.app.state.sre_investigation_graph
+
+    if graph is not None:
+        status = await workflows_sre_investigation.get_investigation_status(
+            request_id=uuid.UUID(investigation_id),
+            graph=graph,
+        )
+        if status is not None:
+            await workflows_sre_investigation.resume_investigation(
+                request_id=uuid.UUID(investigation_id),
+                decision=approval_entities.ApprovalDecision.APPROVED,
+                graph=graph,
+                approver=action.reviewer,
+            )
+            logs.log_event(
+                "investigation.approved",
+                params={
+                    "investigation_id": investigation_id,
+                    "reviewer": action.reviewer,
+                    "path": "langgraph",
+                },
+            )
+            return fastapi.responses.JSONResponse(
+                status_code=200,
+                content={
+                    "investigation_id": investigation_id,
+                    "status": "approved",
+                    "reviewer": action.reviewer,
+                    "approved_at": datetime.now(tz=UTC).isoformat(),
+                },
+            )
+
+    # Legacy fallback: check the in-memory pending store.
     pending = get_pending_approval(investigation_id)
     if not pending:
         return fastapi.responses.JSONResponse(
@@ -326,11 +366,10 @@ async def approve_investigation(
         params={
             "investigation_id": investigation_id,
             "reviewer": action.reviewer,
+            "path": "legacy",
         },
     )
-
     remove_pending_approval(investigation_id)
-
     return fastapi.responses.JSONResponse(
         status_code=200,
         content={
@@ -346,12 +385,48 @@ async def approve_investigation(
 async def reject_investigation(
     investigation_id: str,
     action: ApprovalAction,
+    request: fastapi.Request,
 ) -> fastapi.responses.JSONResponse:
     """
     Reject an investigation -- findings will NOT be published.
 
-    Called by Slack interactive message handler or directly by an engineer.
+    Checks the LangGraph checkpoint first (when the SRE graph is wired).
+    Falls back to the legacy in-memory pending-approvals dict. Returns 404
+    when neither source has a record for the investigation_id.
     """
+    graph = request.app.state.sre_investigation_graph
+
+    if graph is not None:
+        status = await workflows_sre_investigation.get_investigation_status(
+            request_id=uuid.UUID(investigation_id),
+            graph=graph,
+        )
+        if status is not None:
+            await workflows_sre_investigation.resume_investigation(
+                request_id=uuid.UUID(investigation_id),
+                decision=approval_entities.ApprovalDecision.REJECTED,
+                graph=graph,
+                approver=action.reviewer,
+            )
+            logs.log_event(
+                "investigation.rejected",
+                params={
+                    "investigation_id": investigation_id,
+                    "reviewer": action.reviewer,
+                    "path": "langgraph",
+                },
+            )
+            return fastapi.responses.JSONResponse(
+                status_code=200,
+                content={
+                    "investigation_id": investigation_id,
+                    "status": "rejected",
+                    "reviewer": action.reviewer,
+                    "rejected_at": datetime.now(tz=UTC).isoformat(),
+                },
+            )
+
+    # Legacy fallback: check the in-memory pending store.
     pending = get_pending_approval(investigation_id)
     if not pending:
         return fastapi.responses.JSONResponse(
@@ -367,11 +442,10 @@ async def reject_investigation(
         params={
             "investigation_id": investigation_id,
             "reviewer": action.reviewer,
+            "path": "legacy",
         },
     )
-
     remove_pending_approval(investigation_id)
-
     return fastapi.responses.JSONResponse(
         status_code=200,
         content={
@@ -384,8 +458,34 @@ async def reject_investigation(
 
 
 @router.get("/investigations/{investigation_id}/approval-status")
-async def get_approval_status(investigation_id: str) -> fastapi.responses.JSONResponse:
-    """Check the current approval status of an investigation."""
+async def get_approval_status(
+    investigation_id: str,
+    request: fastapi.Request,
+) -> fastapi.responses.JSONResponse:
+    """
+    Check the current approval status of an investigation.
+
+    Checks the LangGraph checkpoint first (when the SRE graph is wired).
+    Falls back to the legacy in-memory pending-approvals dict. Returns 404
+    when neither source has a record for the investigation_id.
+    """
+    graph = request.app.state.sre_investigation_graph
+
+    if graph is not None:
+        status = await workflows_sre_investigation.get_investigation_status(
+            request_id=uuid.UUID(investigation_id),
+            graph=graph,
+        )
+        if status is not None:
+            return fastapi.responses.JSONResponse(
+                status_code=200,
+                content={
+                    "investigation_id": investigation_id,
+                    "status": status.status,
+                },
+            )
+
+    # Legacy fallback: check the in-memory pending store.
     pending = get_pending_approval(investigation_id)
     if not pending:
         return fastapi.responses.JSONResponse(
