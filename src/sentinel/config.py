@@ -198,6 +198,19 @@ class BaseConfiguration(BaseModel):
         return _normalise_model_name(self.settings.root_cause_llm)
 
     @property
+    def investigator_model(self) -> str:
+        """
+        F7 Sentinel-native investigator agent model.
+
+        Reuses the ``root_cause_llm`` setting today — investigator and
+        analyser are both SRE-focused and benefit from the same model
+        choice. If divergence is needed later (e.g. a smaller model for
+        evidence-gathering and a stronger one for synthesis), promote
+        this to its own ``investigator_llm`` Settings field.
+        """
+        return _normalise_model_name(self.settings.root_cause_llm)
+
+    @property
     def reviewer_model(self) -> str:
         return _normalise_model_name(self.settings.ticket_reviewer_llm)
 
@@ -354,9 +367,16 @@ class BaseConfiguration(BaseModel):
         """Build and memoise shared MCP toolsets. Override in subclass."""
         raise NotImplementedError
 
-    def build_holmes_adapter(self) -> Any:
-        """Build the appropriate Holmes adapter. Override in subclass."""
-        raise NotImplementedError
+    # F7: build_holmes_adapter removed — the HolmesGPT adapter is archived
+    # and replaced by the Sentinel-native investigator agent registered via
+    # ``load_agents``. Callers should pass ``investigator_toolsets`` to
+    # ``investigation.investigate_alert`` instead of building a Holmes
+    # adapter. The hook is retained as a comment for archaeological
+    # reference; removing it entirely would break old replay bundles that
+    # mention the symbol in their captured stack traces.
+    # def build_holmes_adapter(self) -> Any:
+    #     """Build the appropriate Holmes adapter. Override in subclass."""
+    #     raise NotImplementedError
 
     def build_k8s_investigation_adapter(self, *, agent_runner: Any) -> Any:
         """Build the K8s investigation adapter. Override in subclass."""

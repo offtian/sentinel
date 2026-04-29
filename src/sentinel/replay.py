@@ -159,13 +159,17 @@ async def _replay_sre(
         alert=alert,
         envelope=bundle.envelope,
         agent_for=cfg.agent_for,
-        holmes=cfg.build_holmes_adapter(),
         post_to_slack=False,
         k8s_adapter=cfg.build_k8s_investigation_adapter(
             agent_runner=k8s_runner.run_k8s_agent,
         ),
         challenger_adapter=cfg.build_challenger_adapter(),
         classifier_toolsets=(recorded_toolset,),
+        # F7: investigator and analyser both replay against the same
+        # recorded toolset — recorded tool returns are the ground truth
+        # so the split between gather and synthesise stages doesn't
+        # matter at replay time.
+        investigator_toolsets=(recorded_toolset,),
         analyser_toolsets=(recorded_toolset,),
     )
     payload: dict[str, Any] = json.loads(result.model_dump_json())

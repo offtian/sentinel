@@ -1,9 +1,10 @@
 """
 Unit tests for ``CommonConfiguration._build_holmes_sdk_toolsets()``.
 
-Covers the explicit per-toolset wiring of HolmesGPT built-in Confluence
-and Notion toolsets.  Each toolset is included only when its required
-settings are populated (no-op pattern).
+ARCHIVED — F7 (2026-04-27). The HolmesGPT SDK toolset wiring has been
+removed from CommonConfiguration; these tests would only fail with
+AttributeError. Skipping wholesale rather than deleting so the test
+history remains traceable.
 """
 
 from __future__ import annotations
@@ -11,10 +12,15 @@ from __future__ import annotations
 from typing import Any
 from unittest import mock
 
-from holmes.core import tools as holmes_tools_mod
+import pytest
 
-from sentinel import settings as settings_mod
-from sentinel.plugins.common import config as plugins_config_mod
+
+pytestmark = pytest.mark.skip(reason="HolmesGPT SDK wiring archived in F7")
+
+from holmes.core import tools as holmes_tools_mod  # noqa: E402
+
+from sentinel import settings as settings_mod  # noqa: E402
+from sentinel.plugins.common import config as plugins_config_mod  # noqa: E402
 
 
 def _make_settings(**overrides: object) -> mock.MagicMock:

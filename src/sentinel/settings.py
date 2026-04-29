@@ -38,12 +38,14 @@ class SRESettings(BaseSettings):
     grafana_loki_datasource_uid: str = ""
     grafana_tempo_datasource_uid: str = ""
 
-    holmesgpt_enabled: bool = True
-    # Investigation backend: "direct" (default — queries vendors directly) or
-    # "sdk" (uses HolmesGPT SDK ToolCallingLLM with built-in toolsets).
-    holmes_backend: str = "sdk"
-    # LLM model used by HolmesGPT SDK when holmes_backend="sdk".
-    holmes_sdk_model: str = "openai/gpt-4.1"
+    # F7: HolmesGPT settings archived — the integration is replaced by the
+    # Sentinel-native investigator agent. Reading these knobs from .env or
+    # environment no longer affects the pipeline; they remain commented out
+    # for archaeological reference. Operators can delete the corresponding
+    # .env entries safely.
+    # holmesgpt_enabled: bool = True
+    # holmes_backend: str = "sdk"  # "direct" or "sdk" (SDK ToolCallingLLM)
+    # holmes_sdk_model: str = "openai/gpt-4.1"
     sre_auto_investigate: bool = True
     sre_slack_channel: str = ""
 

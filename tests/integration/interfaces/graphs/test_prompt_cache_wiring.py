@@ -150,14 +150,11 @@ class TestSRECacheWiring:
             "alert_classifier": classifier_agent,
             "root_cause_analyser": analyser_agent,
         }
-        holmes = factories.MockHolmesAdapter()
-
         # When running the full SRE investigation pipeline
         await investigation.investigate_alert(
             alert=factories.make_alert(),
             envelope=factories.make_envelope(),
             agent_for=lambda name: agents.get(name, mock.MagicMock()),
-            holmes=holmes,
             post_to_slack=False,
         )
 

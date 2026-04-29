@@ -30,7 +30,6 @@ from sentinel import config as config_mod
 from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain.alerts import entities as alert_entities
 from sentinel.domain.charts import entities as chart_entities
-from sentinel.domain.investigations import holmes_adapter
 from sentinel.domain.search import factory as search_factory
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.chat.status_update import StreamlitStatusUpdateClient
@@ -213,11 +212,14 @@ async def _run_sre(
         alert=alert,
         envelope=_envelope_for_chat(),
         agent_for=cfg.agent_for,
-        holmes=holmes_adapter.HolmesAdapter(enabled=settings.holmesgpt_enabled),
         status_update_client=status_client,
         post_to_slack=False,
         trace_collector=trace_collector,
         classifier_toolsets=shared_mcp,
+        # F7: investigator gets the observability toolset built by
+        # CommonConfiguration; chat's interactive flow passes shared MCP
+        # only and lets the worker/replay paths add observability.
+        investigator_toolsets=shared_mcp,
         analyser_toolsets=shared_mcp,
         k8s_adapter=k8s_adapter,
         challenger_adapter=cfg.build_challenger_adapter(),

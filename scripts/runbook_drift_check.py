@@ -38,7 +38,6 @@ from datetime import UTC, date, datetime
 import attrs
 
 from sentinel import config as sentinel_config
-from sentinel import settings as settings_mod
 from sentinel.application.runbooks import _drift_notifier as drift_notifier_mod
 from sentinel.data import database
 from sentinel.domain.runbooks import (
@@ -296,12 +295,6 @@ async def _main() -> int:
     """Entry point. Returns the process exit code."""
     today = datetime.now(tz=UTC).date()
     return await _run_drift_check(today=today)
-
-
-# Re-export so static analysis sees the settings module is imported for env-var
-# bootstrap even though we don't call it directly here. The script invokes
-# ``sentinel_config.get_config()`` which loads ``Settings`` transitively.
-_ = (settings_mod,)
 
 
 if __name__ == "__main__":

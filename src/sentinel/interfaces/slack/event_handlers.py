@@ -10,14 +10,12 @@ from slack_bolt.context.ack.async_ack import AsyncAck
 from sentinel import config as config_mod
 from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain.alerts import entities as alert_entities
-from sentinel.domain.investigations.holmes_adapter import HolmesAdapter
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.graphs import common, investigation, support_review
 from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
 from sentinel.interfaces.graphs.agents import utils as agent_utils
 from sentinel.interfaces.slack.app import app
 from sentinel.interfaces.slack.status_update import SlackStatusUpdateClient
-from sentinel.settings import settings
 from sentinel.utils import logs
 
 
@@ -202,7 +200,6 @@ async def _run_sre(
         alert=alert,
         envelope=_envelope_for_slack(channel=channel, user_id="slack-thread"),
         agent_for=cfg.agent_for,
-        holmes=HolmesAdapter(enabled=settings.holmesgpt_enabled),
         status_update_client=status,
         post_to_slack=False,  # we post directly in this thread instead
         k8s_adapter=cfg.build_k8s_investigation_adapter(

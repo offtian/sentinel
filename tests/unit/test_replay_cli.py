@@ -243,7 +243,7 @@ class TestReplaySre:
         )
 
         fake_cfg = mock.MagicMock()
-        fake_cfg.build_holmes_adapter.return_value = mock.MagicMock()
+        # F7: build_holmes_adapter archived; replay no longer calls it.
         fake_cfg.build_k8s_investigation_adapter.return_value = mock.MagicMock()
         fake_cfg.build_challenger_adapter.return_value = mock.MagicMock()
 

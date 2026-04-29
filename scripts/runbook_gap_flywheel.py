@@ -46,7 +46,6 @@ import attrs
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from sentinel import config as sentinel_config
-from sentinel import settings as settings_mod
 from sentinel.data import database
 from sentinel.domain.runbooks import flywheel as flywheel_mod
 from sentinel.utils import logs
@@ -542,12 +541,6 @@ async def _main() -> int:
     args = parser.parse_args()
     today = datetime.now(tz=UTC).date()
     return await _run_flywheel(today=today, dry_run=args.dry_run)
-
-
-# Re-export so static analysis sees the settings module is imported for env-var
-# bootstrap even though we don't call it directly here. The script invokes
-# ``sentinel_config.get_config()`` which loads ``Settings`` transitively.
-_ = (settings_mod,)
 
 
 if __name__ == "__main__":

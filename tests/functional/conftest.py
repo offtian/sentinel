@@ -6,15 +6,14 @@ from unittest import mock
 
 import pytest
 
-from sentinel.domain.investigations import holmes_adapter
 from sentinel.domain.search import searcher
 from sentinel.interfaces.graphs.agents import (
     alert_classifier,
+    investigator,
     response_drafter,
     root_cause_analyser,
     ticket_reviewer,
 )
-from tests import factories
 
 
 @dataclass(frozen=True)
@@ -46,41 +45,18 @@ def _make_fake_agent(fake_run: Any) -> mock.MagicMock:
     return agent
 
 
-def _build_fake_config(agent_overrides: dict[str, Any]) -> mock.MagicMock:
-    """
-    Build a mock config whose ``agent_for()`` returns fake agents.
-
-    Any agent name not in ``agent_overrides`` returns a default MagicMock.
-    """
-    cfg = mock.MagicMock()
-    cfg.agent_for = mock.MagicMock(
-        side_effect=lambda name: agent_overrides.get(name, mock.MagicMock())
-    )
-    return cfg
-
-
-@pytest.fixture
-def mock_holmes() -> factories.MockHolmesAdapter:
-    return factories.MockHolmesAdapter(
-        result=holmes_adapter.HolmesInvestigationResult(
-            analysis=(
-                "Datadog logs show a 5x spike in 5xx errors starting at 14:32 UTC. "
-                "Kubernetes pod api-service-7b8c was OOMKilled at 14:30 UTC. "
-                "Memory usage ramped from 512Mi to 2Gi over 10 minutes."
-            ),
-            tool_calls=[
-                {
-                    "tool": "datadog_query_logs",
-                    "result": "5xx errors: 250/min (baseline 50/min)",
-                },
-                {
-                    "tool": "kubernetes_get_pods",
-                    "result": "api-service-7b8c OOMKilled 14:30 UTC",
-                },
-            ],
-            sources_queried=["datadog_logs", "kubernetes"],
-        )
-    )
+# F7 (2026-04-27): mock_holmes fixture archived. The HolmesGPT adapter
+# is no longer wired into the investigation pipeline; tests requiring a
+# pre-canned investigator output should register a fake "investigator"
+# agent in their config (see tests/unit/interfaces/graphs/test_investigation_*
+# for patterns). Leaving the fixture commented out — and not removed —
+# so the test history remains traceable and the symbol survives a grep
+# during the F7 stabilisation window.
+# @pytest.fixture
+# def mock_holmes() -> factories.MockHolmesAdapter:
+#     return factories.MockHolmesAdapter(
+#         result=holmes_adapter.HolmesInvestigationResult(...)
+#     )
 
 
 async def _fake_alert_classifier_run(*, user_prompt, deps, **kwargs):
@@ -112,6 +88,26 @@ async def _fake_root_cause_analyser_run(*, user_prompt, deps, **kwargs):
             ],
             affected_services=["api-service"],
             timeline="14:20 memory ramp → 14:30 OOMKill → 14:32 5xx spike",
+        )
+    )
+
+
+async def _fake_investigator_run(*, user_prompt, deps, **kwargs):
+    """Deterministic empty investigation findings.
+
+    Mirrors the alert_classifier / root_cause_analyser default-fake pattern.
+    Returns an empty ``InvestigationFindings`` (no summary, no sources, no
+    tool calls) so the F7 ``Investigate`` node lands on the ``status="empty"``
+    branch — the evidence floor still kicks in downstream, but the pipeline
+    completes the run cleanly and emits all envelope spans. Tests that need
+    populated findings should override the ``"investigator"`` key when
+    calling ``_build_fake_config``.
+    """
+    return FakeAgentResult(
+        investigator.InvestigationFindings(
+            summary="",
+            sources_queried=[],
+            tool_calls=[],
         )
     )
 
@@ -151,6 +147,29 @@ async def _fake_response_drafter_run(*, user_prompt, deps, **kwargs):
             notes_for_agent="User may need IT admin involvement if SSO-managed.",
         )
     )
+
+
+def _build_fake_config(agent_overrides: dict[str, Any]) -> mock.MagicMock:
+    """
+    Build a mock config whose ``agent_for()`` returns fake agents.
+
+    Defaults are provided for the SRE-pipeline agents that the F7
+    ``Investigate`` node calls so tests that don't explicitly override them
+    still get an awaitable fake (a default ``MagicMock`` would raise
+    ``TypeError: object MagicMock can't be used in 'await' expression`` when
+    the node calls ``await agent.run(...)``). Any agent name not in
+    ``agent_overrides`` and not in the defaults still falls back to a plain
+    ``MagicMock`` for callers that only need ``.is_configured``-style access.
+    """
+    defaults: dict[str, Any] = {
+        "alert_classifier": _make_fake_agent(_fake_alert_classifier_run),
+        "root_cause_analyser": _make_fake_agent(_fake_root_cause_analyser_run),
+        "investigator": _make_fake_agent(_fake_investigator_run),
+    }
+    resolved = {**defaults, **agent_overrides}
+    cfg = mock.MagicMock()
+    cfg.agent_for = mock.MagicMock(side_effect=lambda name: resolved.get(name, mock.MagicMock()))
+    return cfg
 
 
 @pytest.fixture
