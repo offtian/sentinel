@@ -805,7 +805,7 @@ class TestSoftModeFallback:
         monkeypatch.setattr(
             sre_router_mod,
             "settings",
-            lambda: _build_settings_stub(cluster_name="", region=""),
+            _build_settings_stub(cluster_name="", region=""),
         )
         monkeypatch.setattr(
             sre_router_mod,
