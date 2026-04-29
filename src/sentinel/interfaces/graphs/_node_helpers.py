@@ -15,22 +15,23 @@ from opentelemetry.util import types as otel_types
 from sentinel import config as config_mod
 from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.utils import logs, metrics
+from sentinel.utils.observability import spans as obs_spans
 
 
-def _team_profile_attribute() -> dict[str, otel_types.AttributeValue]:
+def _get_team_profile() -> str:
     """
-    Return a single-key span-attribute dict for ``team_profile``, or empty.
+    Return the active team_id string, or empty on config failure.
 
     Reads ``team_id`` from the active configuration. On any failure (config
     bootstrap is broken, registry lookup raises), logs a structured warning
-    and returns an empty dict so the rest of the envelope attributes still
+    and returns an empty string so the rest of the envelope attributes still
     land on the span.
     """
     try:
-        return {"team_profile": config_mod.get_config().team_id}
+        return config_mod.get_config().team_id
     except Exception as exc:
         logs.log_event("otel.team_profile.unset", params={"reason": str(exc)})
-        return {}
+        return ""
 
 
 # ``_NODE_TRACER`` / ``_PIPELINE_TRACER`` start out as ``None`` and are
@@ -95,10 +96,10 @@ def instrumented_node_run[T](
 
     When ``envelope`` is provided, attaches the six envelope-owned mandatory
     OTel span attributes per RFC §13.2 to the current span before invoking
-    ``fn``, plus the ``team_profile`` attribute resolved from the active
-    configuration. The remaining two mandatory attributes
-    (``prompt_version_sha``, ``model_id``) are set at agent invocation sites
-    via :func:`agents.utils.set_agent_span_attributes`.
+    ``fn``, plus the ``team_profile``, ``pipeline``/``node`` labels, and
+    Langfuse session/user grouping attributes via :class:`NodeSpanAttributes`.
+    The remaining two mandatory attributes (``prompt_version_sha``, ``model_id``)
+    are set at agent invocation sites via :func:`agents.utils.set_agent_span_attributes`.
 
     :param pipeline: Pipeline label (e.g. ``"sre"``, ``"support"``).
     :param node: Node label (e.g. ``"classify_alert"``).
@@ -108,10 +109,22 @@ def instrumented_node_run[T](
     """
 
     async def _runner() -> T:
-        attributes: dict[str, otel_types.AttributeValue] = {"langfuse.observation.type": "chain"}
         if envelope is not None:
-            attributes.update(envelope.to_span_attributes())
-            attributes.update(_team_profile_attribute())
+            attributes: dict[str, otel_types.AttributeValue] = obs_spans.NodeSpanAttributes(
+                request_id=str(envelope.request_id),
+                tenant_id=envelope.tenant_id,
+                cluster_id=envelope.cluster_id,
+                region=envelope.region,
+                pii_class=envelope.pii_class,
+                received_at=envelope.received_at.isoformat(),
+                pipeline=pipeline,
+                node=node,
+                team_profile=_get_team_profile(),
+                langfuse_session_id=str(envelope.request_id),
+                langfuse_user_id=envelope.tenant_id,
+            ).to_otel_dict()
+        else:
+            attributes = {"langfuse.observation.type": "chain"}
         # Open an explicit child span for the node so the agent.run() and tool
         # spans nest under a stable, named parent. pydantic-graph's own
         # ``run node X`` span is unreliable for nodes that call into
@@ -209,11 +222,21 @@ async def run_pipeline_with_envelope[T](
     """
     span_name = f"{pipeline}.investigation_pipeline"
     attributes: dict[str, otel_types.AttributeValue] = {
-        "langfuse.observation.type": "chain",
+        **obs_spans.NodeSpanAttributes(
+            request_id=str(envelope.request_id),
+            tenant_id=envelope.tenant_id,
+            cluster_id=envelope.cluster_id,
+            region=envelope.region,
+            pii_class=envelope.pii_class,
+            received_at=envelope.received_at.isoformat(),
+            pipeline=pipeline,
+            node="pipeline",
+            team_profile=_get_team_profile(),
+            langfuse_session_id=str(envelope.request_id),
+            langfuse_user_id=envelope.tenant_id,
+        ).to_otel_dict(),
         "langfuse.observation.input": input_payload,
     }
-    attributes.update(envelope.to_span_attributes())
-    attributes.update(_team_profile_attribute())
 
     with _get_pipeline_tracer().start_as_current_span(span_name, attributes=attributes) as span:
         result = await fn()

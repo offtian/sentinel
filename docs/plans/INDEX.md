@@ -46,6 +46,7 @@
 
 | Plan | Goal | PRD Section |
 |------|------|-------------|
+| [langgraph-sre-migration](langgraph-sre-migration.md) | SRE sub-plan under umbrella `pydanticai-langgraph-adoption`: SRE pipeline → LangGraph workflow with W2 feature flag + interrupt()-based approval gate; introduces typed observability layer (gen_ai.* semconv, token/cost) consumed by both legacy chart and new SRE | RFC §2.3, §15.14 |
 | [sentinel-data-and-domain-restructure](sentinel-data-and-domain-restructure.md) | Split `data/` into `sql/` + `primitives/`; split `domain/sre/` into `domain/alerts/` + `domain/investigations/`; rename pipeline labels | RFC §15.1 |
 | [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, SRE approval persistence (token usage + LLM cost delivered in PR #18) | 4, 6 |
 | [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | 4, 7 |

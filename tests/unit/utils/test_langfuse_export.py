@@ -7,6 +7,8 @@ import pytest
 
 from sentinel.utils import langfuse_export
 from sentinel.utils import logs as logs_mod
+from sentinel.utils.observability import semconv
+from sentinel.utils.observability import spans as obs_spans
 
 
 def _all_attrs() -> dict[str, str]:
@@ -384,3 +386,111 @@ class TestBuildLangfuseExporter:
         params = patched_log_exc.call_args.kwargs["params"]
         assert params["event"] == "langfuse.exporter.construction_failed"
         assert params["host"] == "http://lf.local"
+
+
+class TestGenAiAttrsCoexistWithMandatory:
+    """gen_ai.* semconv attrs must survive alongside RFC §13.2 mandatory attrs."""
+
+    def test_validator_passes_span_with_gen_ai_and_mandatory_attrs(self) -> None:
+        # Given an agent span carrying RFC §13.2 mandatory attrs PLUS gen_ai.* attrs
+        # (the union produced by AgentSpanAttributes.to_otel_dict() merged with
+        # NodeSpanAttributes.to_otel_dict() via the MandatoryAttributesPropagator)
+        agent_attrs = obs_spans.AgentSpanAttributes(
+            gen_ai_request_model="openai/gpt-4.1",
+            prompt_version_sha="deadbeef",
+            model_id="openai/gpt-4.1",
+            team_profile="sre",
+            agent_name="alert_classifier",
+        ).to_otel_dict()
+        full_attrs = {**_all_attrs(), **agent_attrs}
+        span = _make_span(attributes=full_attrs)
+        validator = langfuse_export.MandatoryAttributesValidator()
+
+        # When on_end is invoked
+        with mock.patch.object(logs_mod, "log_event") as patched_log:
+            validator.on_end(span)
+
+        # Then no missing-attrs event fires — gen_ai.* presence does not
+        # interfere with the mandatory-attr check
+        patched_log.assert_not_called()
+
+    def test_gen_ai_attrs_present_in_node_span_attributes(self) -> None:
+        # Given a NodeSpanAttributes built from an envelope-like set of fields
+        node_attrs = obs_spans.NodeSpanAttributes(
+            request_id="req-1",
+            tenant_id="tenant-a",
+            cluster_id="cluster-1",
+            region="eu-west-1",
+            pii_class="internal",
+            received_at="2026-04-26T00:00:00Z",
+            pipeline="sre",
+            node="classify_alert",
+            team_profile="sre",
+            langfuse_session_id="req-1",
+            langfuse_user_id="tenant-a",
+        )
+
+        # When converting to OTel dict
+        otel_dict = node_attrs.to_otel_dict()
+
+        # Then all RFC §13.2 envelope-derived attrs are present
+        for attr in (
+            "request_id",
+            "tenant_id",
+            "cluster_id",
+            "region",
+            "pii_class",
+            "received_at",
+        ):
+            assert attr in otel_dict
+        # And Langfuse session/user grouping attrs are present
+        assert "langfuse.session.id" in otel_dict
+        assert "langfuse.user.id" in otel_dict
+
+    def test_agent_span_attributes_emit_gen_ai_semconv_keys(self) -> None:
+        # Given an AgentSpanAttributes for a production model
+        agent_attrs = obs_spans.AgentSpanAttributes(
+            gen_ai_request_model="openai/gpt-4.1",
+            prompt_version_sha="abc123",
+            model_id="openai/gpt-4.1",
+        )
+
+        # When converting to OTel dict
+        otel_dict = agent_attrs.to_otel_dict()
+
+        # Then gen_ai.* semconv keys are present alongside Sentinel-named attrs
+        assert semconv.GEN_AI_SYSTEM in otel_dict
+        assert semconv.GEN_AI_REQUEST_MODEL in otel_dict
+        assert semconv.GEN_AI_OPERATION_NAME in otel_dict
+        assert "prompt_version_sha" in otel_dict
+        assert "model_id" in otel_dict
+
+    def test_propagator_does_not_copy_gen_ai_attrs_to_child(self) -> None:
+        # Given a parent span carrying RFC §13.2 mandatory attrs AND gen_ai.* attrs
+        parent_attrs = {
+            **_all_attrs(),
+            semconv.GEN_AI_SYSTEM: "pydantic-ai",
+            semconv.GEN_AI_REQUEST_MODEL: "openai/gpt-4.1",
+        }
+        parent_span = mock.MagicMock()
+        parent_span.attributes = parent_attrs
+        child_spec = ("attributes", "instrumentation_scope", "set_attributes")
+        child = mock.MagicMock(spec=child_spec)
+        child.attributes = {}
+        child.instrumentation_scope = None
+        propagator = langfuse_export.MandatoryAttributesPropagator()
+
+        # When on_start fires
+        with mock.patch.object(
+            langfuse_export.otel_trace,
+            "get_current_span",
+            return_value=parent_span,
+        ):
+            propagator.on_start(child, parent_context=None)
+
+        # Then only the nine mandatory attrs are copied — gen_ai.* are per-agent
+        # and must not bleed from parent to child spans
+        copied = child.set_attributes.call_args.args[0]
+        assert semconv.GEN_AI_SYSTEM not in copied
+        assert semconv.GEN_AI_REQUEST_MODEL not in copied
+        assert set(copied.keys()) == set(langfuse_export.MANDATORY_ATTRS)

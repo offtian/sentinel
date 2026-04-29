@@ -146,11 +146,14 @@ class TestSetAgentSpanAttributes:
                 agent_name="alert_classifier",
             )
 
-        # Then RFC §13.2 mandatory attrs plus Langfuse-namespaced prompt
-        # registry attributes land on the span in one call
+        # Then RFC §13.2 mandatory attrs, OTel GenAI semconv keys, and
+        # Langfuse-namespaced prompt registry attributes all land on the span
         fake_span.set_attributes.assert_called_once()
         attrs_set = fake_span.set_attributes.call_args.args[0]
         assert attrs_set == {
+            "gen_ai.system": "pydantic-ai",
+            "gen_ai.operation.name": "chat",
+            "gen_ai.request.model": "openai/gpt-4.1-mini",
             "prompt_version_sha": "a" * 64,
             "model_id": "openai/gpt-4.1-mini",
             "langfuse.prompt.version": "a" * 64,
@@ -168,12 +171,14 @@ class TestSetAgentSpanAttributes:
                 model_name="",
             )
 
-        # Then only prompt_version_sha + Langfuse prompt.version are set;
-        # model_id and langfuse.prompt.name are omitted to avoid polluting
-        # Langfuse with empty identifiers from test agents
+        # Then only gen_ai.system / operation_name + prompt attrs are set;
+        # gen_ai.request.model, model_id, and langfuse.prompt.name are omitted
+        # for test/mock agents that have no real model
         fake_span.set_attributes.assert_called_once()
         attrs_set = fake_span.set_attributes.call_args.args[0]
         assert attrs_set == {
+            "gen_ai.system": "pydantic-ai",
+            "gen_ai.operation.name": "chat",
             "prompt_version_sha": "b" * 64,
             "langfuse.prompt.version": "b" * 64,
         }

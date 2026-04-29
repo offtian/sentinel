@@ -318,6 +318,8 @@ class TestInvestigateAlertSetsSpanAttributesOnEveryNode:
             "pii_class",
             "received_at",
             "team_profile",
+            "pipeline",
+            "node",
             "langfuse.observation.type",
             "langfuse.session.id",
             "langfuse.user.id",
