@@ -203,7 +203,7 @@ Acceptance criteria:
 - [x] Confluence read-only render: PR-bot publishes runbooks to Confluence on every merge to main; idempotent via `sentinel_sha` page property; edits in Confluence are discarded on next publish (covered by `vendors/confluence/client.py` + `scripts/runbook_confluence_publish.py`)
 - [ ] **R-AG-4** — 30-run determinism CI continues to pass on runs that traverse Stage 2 (LLM I/O captured in F4 replay bundle)
 - [ ] **R-OB-2** — Mandatory span attributes (`runbook_id`, `runbook_content_sha`, `match_method`) emitted on `MatchRunbook` span
-- [ ] **R-TL-3** *(F7 contract update)* — Capability tokens enforced at the toolset-wrapper boundary, not at function entry; F6 declares the contract, F7 implements
+- [x] **R-TL-3** *(F7 contract update)* — Runbook grants (`RunbookGrant`) enforced at the `RunbookScopedToolset` wrapper boundary, not at function entry; three rejection types (`ToolNotInRunbookError`, `TenantScopeViolationError`, `ToolBudgetExceededError`) each write an `audit_log` row (covered by `domain/tools/grants.py` + `plugins/toolsets/_runbook_scope.py` + `tests/unit/domain/tools/test_grants.py` + `tests/integration/test_tenant_isolation.py`)
 
 ---
 

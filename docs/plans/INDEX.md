@@ -36,7 +36,8 @@
 | Plan | Goal | Progress | Notes |
 |------|------|----------|-------|
 | [grafana-metrics](grafana-metrics.md) | OTel metrics instrumentation for Grafana dashboards | 2/5 | Prometheus reader + basic metrics wired |
-| [sentinel-hedgefund-foundations](sentinel-hedgefund-foundations.md) | Evolve current codebase into RFC-001 v0.4 foundations (config, identity, OTel→Langfuse→replay, LiteLLM proxy, runbooks, capability tokens, groundedness) | 6/9 phases | F1 + F2 + F3 + F4 + F5 complete; F6 in progress |
+| [sentinel-hedgefund-foundations](sentinel-hedgefund-foundations.md) | Evolve current codebase into RFC-001 v0.4 foundations (config, identity, OTel→Langfuse→replay, LiteLLM proxy, runbooks, capability tokens, groundedness) | 7/9 phases | F1 + F2 + F3 + F4 + F5 + F7 complete; F6 in progress |
+| [sentinel-foundations-f7-capability-tokens](sentinel-foundations-f7-capability-tokens.md) | F7 runbook grants enforced at toolset-wrapper boundary; cross-tenant + non-listed-tool rejection with audit_log row | complete | Branch `feat/sentinel-foundations-f7-capability-tokens`; R-TL-3 ticked |
 | [sentinel-foundations-f5-litellm-proxy](sentinel-foundations-f5-litellm-proxy.md) | F5 LiteLLM proxy migration + ADR 0007 orchestration framework decision | complete | PR #30 merged |
 | [sentinel-foundations-f6-runbook-catalog](sentinel-foundations-f6-runbook-catalog.md) | F6 runbook catalog + three-stage matcher (deterministic tag + small-LLM disambiguator on ties / zero-match + opt-in pgvector RAG fallback) + `extends:` composition + lifecycle/drift/flywheel + Confluence read-only render | ~85% (47+ / 68 items) | Branch `feat/sentinel-foundations-f6-runbook-catalog`; F6.A–F6.E + F6.G + F6.J–F6.N (most) + F6.K complete; F6.F (pipeline node), F6.J.6 (RAG tests), F6.L.4–L.6 (drift Slack/Justfile/tests), F6.M.6 (flywheel tests), F6.N.4 (Confluence ops doc), F6.H (docs), F6.I (ship) in flight |
 | [pydanticai-langgraph-adoption](pydanticai-langgraph-adoption.md) | Migrate orchestration harness to LangGraph; support pipeline first, SRE/chart follow with own plans | 0/3 phases | Support migration in flight; ADR 0007 authored in PR #30 |
@@ -45,7 +46,6 @@
 
 | Plan | Goal | PRD Section |
 |------|------|-------------|
-| [sentinel-foundations-f7-capability-tokens](sentinel-foundations-f7-capability-tokens.md) | F7 capability tokens enforced at toolset-wrapper boundary (Cerbos / OWASP guidance); cross-tenant + non-listed-tool rejection with audit_log row; replay determinism preserved | RFC §5.3, R-TL-3, R-TL-4 |
 | [sentinel-data-and-domain-restructure](sentinel-data-and-domain-restructure.md) | Split `data/` into `sql/` + `primitives/`; split `domain/sre/` into `domain/alerts/` + `domain/investigations/`; rename pipeline labels | RFC §15.1 |
 | [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, SRE approval persistence (token usage + LLM cost delivered in PR #18) | 4, 6 |
 | [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | 4, 7 |
