@@ -456,6 +456,7 @@ async def _run_investigator_agent(
                 cluster_name=str(ctx.state.alert.raw_payload.get("cluster", "")),
                 namespace=str(ctx.state.alert.raw_payload.get("namespace", "")),
                 runbook=ctx.state.runbook,
+                envelope=ctx.state.envelope,
             ),
             toolsets=list(ctx.deps.investigator_toolsets) or None,
             model_settings=agent_utils.build_cache_settings(
@@ -709,6 +710,7 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
                         category=ctx.state.classification_category,
                         runbook=ctx.state.runbook,
                         investigation_status=self.investigation_status,
+                        envelope=ctx.state.envelope,
                     ),
                     toolsets=list(ctx.deps.analyser_toolsets) or None,
                     model_settings=agent_utils.build_cache_settings(

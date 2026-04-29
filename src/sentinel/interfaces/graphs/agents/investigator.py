@@ -19,6 +19,7 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
+from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain import prompts
 from sentinel.domain.runbooks import models as runbook_models
 from sentinel.interfaces.graphs.agents import utils
@@ -57,6 +58,10 @@ class Dependencies:
     # frame. None on no-match — the investigator is told to fall back to
     # the generic-exploration template.
     runbook: runbook_models.Runbook | None = None
+    # F7: identity envelope threaded through so RunbookScopedToolset can
+    # enforce tenant-scoped tool calls at the wrapper boundary.
+    envelope: envelope_mod.Envelope | None = None
+    _tool_call_counters: dict[str, int] = dataclasses.field(default_factory=dict)
 
 
 _PROMPT_TEMPLATE = prompts.load_template("investigator")

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import functools
 import json
 import os
 import signal
@@ -32,6 +33,7 @@ from sentinel.data import db as async_db
 from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain import prompts
 from sentinel.domain.alerts import entities as alert_entities
+from sentinel.domain.audit import operations as audit_ops
 from sentinel.domain.investigations import operations as sre_ops
 from sentinel.domain.jobs import entities
 from sentinel.domain.jobs import operations as job_ops
@@ -42,6 +44,7 @@ from sentinel.domain.support import operations as support_ops
 from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.graphs import common, investigation, support_review
 from sentinel.interfaces.graphs.agents import k8s_runner
+from sentinel.plugins.toolsets import _runbook_scope as scope_mod
 from sentinel.settings import settings
 from sentinel.utils import llm_warmup, logs
 
@@ -244,6 +247,28 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
         service_name=str(payload.get("service", "")),
     )
 
+    # F7: wrap every investigator/analyser toolset with RunbookScopedToolset so
+    # tool calls are validated against the active runbook's tools.yaml at runtime.
+    # audit_fn is pre-bound to the live DB; None when DB is unavailable (just logs).
+    _db_for_audit = _get_optional_db()
+    _audit_fn = (
+        functools.partial(audit_ops.record_audit_entry, db=_db_for_audit)
+        if _db_for_audit is not None
+        else None
+    )
+    investigator_toolsets_raw = (observability_toolset, *shared_mcp)
+    analyser_toolsets_raw = shared_mcp
+    investigator_toolsets = tuple(
+        ts
+        for raw in investigator_toolsets_raw
+        if (ts := scope_mod.wrap_for_runbook_scope(raw, audit_fn=_audit_fn)) is not None
+    )
+    analyser_toolsets = tuple(
+        ts
+        for raw in analyser_toolsets_raw
+        if (ts := scope_mod.wrap_for_runbook_scope(raw, audit_fn=_audit_fn)) is not None
+    )
+
     try:
         result = await investigation.investigate_alert(
             alert=alert,
@@ -253,12 +278,8 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
             persist_fn=_persist,
             trace_collector=et,
             classifier_toolsets=shared_mcp,
-            # F7: observability toolset moved from analyser to investigator —
-            # the investigator owns evidence gathering, the analyser owns
-            # synthesis. shared MCP stays on both so general tools (notion,
-            # confluence, etc.) remain reachable from either stage.
-            investigator_toolsets=(observability_toolset, *shared_mcp),
-            analyser_toolsets=shared_mcp,
+            investigator_toolsets=investigator_toolsets,
+            analyser_toolsets=analyser_toolsets,
             k8s_adapter=k8s_adapter,
             challenger_adapter=challenger_adapter,
         )
