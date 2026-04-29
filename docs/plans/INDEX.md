@@ -45,6 +45,7 @@
 
 | Plan | Goal | PRD Section |
 |------|------|-------------|
+| [sentinel-foundations-f7-capability-tokens](sentinel-foundations-f7-capability-tokens.md) | F7 capability tokens enforced at toolset-wrapper boundary (Cerbos / OWASP guidance); cross-tenant + non-listed-tool rejection with audit_log row; replay determinism preserved | RFC §5.3, R-TL-3, R-TL-4 |
 | [sentinel-data-and-domain-restructure](sentinel-data-and-domain-restructure.md) | Split `data/` into `sql/` + `primitives/`; split `domain/sre/` into `domain/alerts/` + `domain/investigations/`; rename pipeline labels | RFC §15.1 |
 | [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, SRE approval persistence (token usage + LLM cost delivered in PR #18) | 4, 6 |
 | [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | 4, 7 |
