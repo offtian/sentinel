@@ -49,6 +49,12 @@ class SRESettings(BaseSettings):
     sre_auto_investigate: bool = True
     sre_slack_channel: str = ""
 
+    # W2 LangGraph SRE feature flag: when True, SRE investigation worker routes
+    # to the LangGraph workflow (interfaces/workflows/sre_investigation.py)
+    # instead of the legacy Pydantic Graph pipeline. Defaults to False so the
+    # existing pipeline stays live until an operator opts in.
+    langgraph_sre_enabled: bool = False
+
     # F6.L drift-detection cron — fallback Slack channel for runbook drift
     # alerts when the runbook frontmatter ``owner`` does not map to a
     # team-specific channel. Empty string disables the fallback so drift on
