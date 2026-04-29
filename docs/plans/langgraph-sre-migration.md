@@ -1,6 +1,6 @@
 # Plan: LangGraph SRE Migration + Typed Observability
 
-**Status:** draft
+**Status:** in-progress (Phases 1-4 complete; Phase 5 next)
 **Created:** 2026-04-29
 **Last updated:** 2026-04-29
 
@@ -196,7 +196,7 @@ phase ends in a green CI state.
 
 ### Phase 2 — SRE LangGraph workflow scaffolding
 
-- [x] **T14** Add `langgraph_sre_enabled: bool = True` to `Settings` (`.env.default` row); surface as `@property` on `BaseConfiguration`
+- [x] **T14** Add `langgraph_sre_enabled: bool = False` to `Settings` (`.env.default` row); surface as `@property` on `BaseConfiguration`
 - [x] **T15** TDD `interfaces/workflows/sre_state.py` — `InvestigationState` TypedDict with `envelope`, `alert`, `classification_category`, `runbook`, `runbook_match`, `runbook_match_id`, `requires_approval`, `investigation`, `confidence`, `needs_approval`, `approval_decision`, `findings_published`
 - [x] **T16** Scaffold `interfaces/workflows/sre_investigation.py` — module docstring, imports, module-local aliases (`get_config`, `interrupt`)
 
