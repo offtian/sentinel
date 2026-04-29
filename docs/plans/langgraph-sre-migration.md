@@ -180,45 +180,45 @@ phase ends in a green CI state.
 
 ### Phase 1 — Typed observability foundation
 
-- [ ] **T1** TDD `utils/observability/spans.py` — `NodeSpanAttributes` Pydantic model, `.to_otel_dict()` returns RFC §13.2 attrs + `team_profile` + `pipeline`/`node` + `langfuse.*` keys
-- [ ] **T2** TDD `AgentSpanAttributes` — gen_ai.system / request.model / operation.name + `prompt_version_sha` + `model_id` + `team_profile`
-- [ ] **T3** TDD `ToolSpanAttributes` — gen_ai.tool.name / call.id + optional `runbook_grant_id`
-- [ ] **T4** TDD `UsageAttributes` — gen_ai.usage.input_tokens / output_tokens / total_tokens + `sentinel.cost_usd`
-- [ ] **T5** TDD `utils/observability/semconv.py` — re-export OTel incubating gen_ai constants under stable Sentinel-owned names so import sites are insulated from namespace churn
-- [ ] **T6** TDD `utils/observability/usage.py` — `extract_usage(pydantic_ai_usage, *, model_name) -> UsageAttributes` reading `request_tokens`/`response_tokens`/`total_tokens` and looking up cost via `litellm.cost_calculator.completion_cost`
-- [ ] **T7** Refactor `interfaces/graphs/_node_helpers.py` — `instrumented_node_run` and `run_pipeline_with_envelope` set attributes via `NodeSpanAttributes(...).to_otel_dict()` (additive: existing keys preserved, gen_ai.* / Langfuse keys added)
-- [ ] **T8** Refactor `interfaces/graphs/agents/utils.py::set_agent_span_attributes` — consumes `AgentSpanAttributes`; emit gen_ai.* alongside `prompt_version_sha`/`model_id`
-- [ ] **T9** Wire `extract_usage(...)` at `Investigate` and `AnalyseRootCause` agent.run sites in legacy `investigation.py` (highest-token nodes; proves layer on running code)
-- [ ] **T10** Wire `extract_usage(...)` at the support workflow `classify_ticket` and `draft_response` agent.run sites
-- [ ] **T11** Extend `tests/unit/utils/test_langfuse_export.py` — assert gen_ai.* attrs land alongside RFC §13.2 attrs on agent and node spans
-- [ ] **T12** TDD `tests/unit/utils/observability/` — happy-path + missing-field tests for each `*Attributes` class
-- [ ] **T13** Phase 1 commit; `just lint` + `just test` + `just test-integration` green
+- [x] **T1** TDD `utils/observability/spans.py` — `NodeSpanAttributes` Pydantic model, `.to_otel_dict()` returns RFC §13.2 attrs + `team_profile` + `pipeline`/`node` + `langfuse.*` keys
+- [x] **T2** TDD `AgentSpanAttributes` — gen_ai.system / request.model / operation.name + `prompt_version_sha` + `model_id` + `team_profile`
+- [x] **T3** TDD `ToolSpanAttributes` — gen_ai.tool.name / call.id + optional `runbook_grant_id`
+- [x] **T4** TDD `UsageAttributes` — gen_ai.usage.input_tokens / output_tokens / total_tokens + `sentinel.cost_usd`
+- [x] **T5** TDD `utils/observability/semconv.py` — re-export OTel incubating gen_ai constants under stable Sentinel-owned names so import sites are insulated from namespace churn
+- [x] **T6** TDD `utils/observability/usage.py` — `extract_usage(pydantic_ai_usage, *, model_name) -> UsageAttributes` reading `request_tokens`/`response_tokens`/`total_tokens` and looking up cost via `litellm.cost_calculator.completion_cost`
+- [x] **T7** Refactor `interfaces/graphs/_node_helpers.py` — `instrumented_node_run` and `run_pipeline_with_envelope` set attributes via `NodeSpanAttributes(...).to_otel_dict()` (additive: existing keys preserved, gen_ai.* / Langfuse keys added)
+- [x] **T8** Refactor `interfaces/graphs/agents/utils.py::set_agent_span_attributes` — consumes `AgentSpanAttributes`; emit gen_ai.* alongside `prompt_version_sha`/`model_id`; adds `stamp_usage_attributes` helper
+- [x] **T9** Wire `extract_usage(...)` at `Investigate` and `AnalyseRootCause` agent.run sites in legacy `investigation.py` (highest-token nodes; proves layer on running code)
+- [x] **T10** Wire `extract_usage(...)` at the support workflow `classify_ticket` and `draft_response` agent.run sites
+- [x] **T11** Extend `tests/unit/utils/test_langfuse_export.py` — assert gen_ai.* attrs land alongside RFC §13.2 attrs on agent and node spans
+- [x] **T12** TDD `tests/unit/utils/observability/` — happy-path + missing-field tests for each `*Attributes` class
+- [x] **T13** Phase 1 commit; `just lint` + `just test` green (integration skipped — no DB in local env)
 
 ### Phase 2 — SRE LangGraph workflow scaffolding
 
-- [ ] **T14** Add `langgraph_sre_enabled: bool = False` to `Settings` (`.env.default` row); surface as `@property` on `BaseConfiguration`
-- [ ] **T15** TDD `interfaces/workflows/sre_state.py` — `InvestigationState` TypedDict with `envelope`, `alert`, `classification_category`, `runbook`, `runbook_match`, `runbook_match_id`, `requires_approval`, `investigation`, `confidence`, `needs_approval`, `approval_decision`, `findings_published`
-- [ ] **T16** Scaffold `interfaces/workflows/sre_investigation.py` — module docstring, imports, module-local aliases (`get_config`, `interrupt`)
+- [x] **T14** Add `langgraph_sre_enabled: bool = True` to `Settings` (`.env.default` row); surface as `@property` on `BaseConfiguration`
+- [x] **T15** TDD `interfaces/workflows/sre_state.py` — `InvestigationState` TypedDict with `envelope`, `alert`, `classification_category`, `runbook`, `runbook_match`, `runbook_match_id`, `requires_approval`, `investigation`, `confidence`, `needs_approval`, `approval_decision`, `findings_published`
+- [x] **T16** Scaffold `interfaces/workflows/sre_investigation.py` — module docstring, imports, module-local aliases (`get_config`, `interrupt`)
 
 ### Phase 3 — Port SRE nodes (TDD per node)
 
-- [ ] **T17** TDD `classify_alert` — invokes alert_classifier agent, structured logging, returns `{"classification_category": ..., "alert": updated_alert}`
-- [ ] **T18** TDD `match_runbook` — runbook tag match → disambiguator on tie / RAG fallback; returns `{"runbook": ..., "runbook_match": ..., "runbook_match_id": ..., "requires_approval": ...}`
-- [ ] **T19** TDD `investigate` — investigator agent + K8s adapter + optional challenger comparison; returns `{"investigation": Investigation(analysis=..., sources=..., tool_calls=...)}`
-- [ ] **T20** TDD `analyse_root_cause` — root_cause_analyser agent with runbook skill injection; returns `{"investigation": investigation.with_root_cause(...)}`
-- [ ] **T21** TDD `determine_confidence` — `ConfidenceScore.from_factors(...)`; returns `{"confidence": ..., "needs_approval": confidence.total < threshold}`
-- [ ] **T22** TDD `wait_for_human` — `interrupt({"action": "approve_investigation", "request_id": ..., "summary": ..., "root_cause": ..., "remediation": ..., "confidence_total": ..., "confidence_label": ...})`; resume payload mapped to `ApprovalDecision`
-- [ ] **T23** TDD `publish_findings` — Slack post + PagerDuty update; gated on `approval_decision == APPROVED` when `needs_approval`, unconditional otherwise; returns `{"findings_published": True}`
+- [x] **T17** TDD `classify_alert` — invokes alert_classifier agent, structured logging, returns `{"classification_category": ..., "alert": updated_alert}`
+- [x] **T18** TDD `match_runbook` — runbook tag match → disambiguator on tie / RAG fallback; returns `{"runbook": ..., "runbook_match": ..., "runbook_match_id": ..., "requires_approval": ...}`
+- [x] **T19** TDD `investigate` — investigator agent + K8s adapter + optional challenger comparison; returns `{"investigation": Investigation(analysis=..., sources=..., tool_calls=...)}`
+- [x] **T20** TDD `analyse_root_cause` — root_cause_analyser agent with runbook skill injection; returns `{"investigation": investigation.with_root_cause(...)}`
+- [x] **T21** TDD `determine_confidence` — `ConfidenceScore.from_factors(...)`; returns `{"confidence": ..., "needs_approval": confidence.total < threshold}`
+- [x] **T22** TDD `wait_for_human` — `interrupt({"action": "approve_investigation", "request_id": ..., "summary": ..., "root_cause": ..., "remediation": ..., "confidence_total": ..., "confidence_label": ...})`; resume payload mapped to `ApprovalDecision`
+- [x] **T23** TDD `publish_findings` — Slack post + PagerDuty update; gated on `approval_decision == APPROVED` when `needs_approval`, unconditional otherwise; returns `{"findings_published": True}`
 
 ### Phase 4 — Wire graph + entrypoints
 
-- [ ] **T24** TDD `_route_after_confidence` — branches to `wait_for_human` if `needs_approval` else `publish_findings`; `path_map` enumerates both targets
-- [ ] **T25** TDD `_route_after_approval` — branches to `publish_findings` if `approval_decision == APPROVED` else `END`; `path_map` enumerates both
-- [ ] **T26** TDD `build_sre_investigation_graph(*, checkpointer)` — composes StateGraph; every node wrapped in `with_envelope`
-- [ ] **T27** TDD `InvestigationOutcome` (attrs.frozen) — mirrors support's `ReviewOutcome` with SRE-specific fields (root_cause, remediation, findings_published)
-- [ ] **T28** TDD `investigate_alert(*, alert, envelope, graph) -> InvestigationOutcome` — seeds state, calls `graph.ainvoke`, maps state to outcome
-- [ ] **T29** TDD `resume_investigation(*, request_id, decision, graph, approver, reason)` — `Command(resume={"approved": ..., "approver": ..., "reason": ...})`
-- [ ] **T30** TDD `get_investigation_status(*, request_id, graph) -> InvestigationStatus | None` — reads checkpoint state, classifies as pending/approved/rejected/completed
+- [x] **T24** TDD `_route_after_confidence` — branches to `wait_for_human` if `needs_approval` else `publish_findings`; `path_map` enumerates both targets
+- [x] **T25** TDD `_route_after_approval` — branches to `publish_findings` if `approval_decision == APPROVED` else `END`; `path_map` enumerates both
+- [x] **T26** TDD `build_sre_investigation_graph(*, checkpointer)` — composes StateGraph; every node wrapped in `with_envelope`
+- [x] **T27** TDD `InvestigationOutcome` (attrs.frozen) — mirrors support's `ReviewOutcome` with SRE-specific fields (root_cause, remediation, findings_published)
+- [x] **T28** TDD `investigate_alert(*, alert, envelope, graph) -> InvestigationOutcome` — seeds state, calls `graph.ainvoke`, maps state to outcome
+- [x] **T29** TDD `resume_investigation(*, request_id, decision, graph, approver, reason)` — `Command(resume={"approved": ..., "approver": ..., "reason": ...})`
+- [x] **T30** TDD `get_investigation_status(*, request_id, graph) -> InvestigationStatus | None` — reads checkpoint state, classifies as pending/approved/rejected/completed
 
 ### Phase 5 — Lifespan + worker + endpoint wiring
 
