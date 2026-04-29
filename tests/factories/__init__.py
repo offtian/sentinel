@@ -422,7 +422,7 @@ def make_runbook(
         tools=tools,
         checks=checks,
         tests=(),
-        directory=Path("/tmp/runbooks") / runbook_id,
+        directory=Path("/var/runbooks") / runbook_id,
     )
 
 
