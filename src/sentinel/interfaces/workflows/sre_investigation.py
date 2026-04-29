@@ -138,7 +138,8 @@ async def classify_alert(state: sre_state_mod.InvestigationState) -> dict[str, A
 
     agent_utils.stamp_usage_attributes(
         result.usage(), model_name=agent_utils.get_model_name(classifier_agent)
-    )    classification: alert_classifier.AlertClassification = result.output
+    )
+    classification: alert_classifier.AlertClassification = result.output
 
     logs.log_event(
         "alert_classified",
@@ -417,7 +418,8 @@ async def investigate(state: sre_state_mod.InvestigationState) -> dict[str, Any]
         )
         agent_utils.stamp_usage_attributes(
             result.usage(), model_name=agent_utils.get_model_name(investigator_agent)
-        )        findings_output: investigator.InvestigationFindings = result.output
+        )
+        findings_output: investigator.InvestigationFindings = result.output
         investigation_analysis = findings_output.summary
         investigation_sources = list(findings_output.sources_queried)
         investigation_tool_calls = [
@@ -583,7 +585,8 @@ async def analyse_root_cause(
 
     agent_utils.stamp_usage_attributes(
         result.usage(), model_name=agent_utils.get_model_name(analyser_agent)
-    )    analysis: root_cause_analyser.RootCauseAnalysis = result.output
+    )
+    analysis: root_cause_analyser.RootCauseAnalysis = result.output
 
     logs.log_event(
         "root_cause_analysed",

@@ -1,8 +1,8 @@
 # Plan: LangGraph SRE Migration + Typed Observability
 
-**Status:** in-progress (Phases 1-4 complete; Phase 5 next)
+**Status:** complete (all phases done)
 **Created:** 2026-04-29
-**Last updated:** 2026-04-29
+**Last updated:** 2026-04-30
 
 ## Goal
 
@@ -222,12 +222,12 @@ phase ends in a green CI state.
 
 ### Phase 5 — Lifespan + worker + endpoint wiring
 
-- [ ] **T31** Extend FastAPI lifespan to build SRE graph alongside support graph; expose on `app.state.sre_investigation_graph`
-- [ ] **T32** TDD update `worker._run_sre_investigation` — reads `langgraph_sre_enabled`; routes to `workflows.sre_investigation.investigate_alert` when true, legacy when false; both paths emit identical telemetry via shared observability layer
-- [ ] **T33** Update `interfaces/api/routers/sre/...` approval/reject/status endpoints — detect existence of LangGraph checkpoint for `request_id`; route to `resume_investigation` / `get_investigation_status` when present, legacy approval flow when absent
-- [ ] **T34** Update `interfaces/slack/event_handlers.py` approval-decision branch — same flag-aware routing
-- [ ] **T35** TDD update for the manual-trigger endpoint `POST /api/sre/investigate` — same flag-aware dispatch
-- [ ] **T36** TDD update for `interfaces/chat/app.py` and `replay.py` callers of legacy `investigate_alert` — same flag-aware dispatch (or a thin shim if the chat surface is read-only)
+- [x] **T31** Extend FastAPI lifespan to build SRE graph alongside support graph; expose on `app.state.sre_investigation_graph`
+- [x] **T32** TDD update `worker._run_sre_investigation` — reads `langgraph_sre_enabled`; routes to `workflows.sre_investigation.investigate_alert` when true, legacy when false; both paths emit identical telemetry via shared observability layer
+- [x] **T33** Update `interfaces/api/routers/sre/...` approval/reject/status endpoints — detect existence of LangGraph checkpoint for `request_id`; route to `resume_investigation` / `get_investigation_status` when present, legacy approval flow when absent
+- [x] **T34** Update `interfaces/slack/event_handlers.py` approval-decision branch — same flag-aware routing
+- [x] **T35** TDD update for the manual-trigger endpoint `POST /api/sre/investigate` — same flag-aware dispatch
+- [x] **T36** TDD update for `interfaces/chat/app.py` and `replay.py` callers of legacy `investigate_alert` — same flag-aware dispatch (or a thin shim if the chat surface is read-only)
 
 ### Phase 6 — Integration + parity tests
 
