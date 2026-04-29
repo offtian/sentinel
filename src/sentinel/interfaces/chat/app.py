@@ -24,6 +24,7 @@ from typing import Any
 
 import httpx
 import streamlit as st
+from langgraph.checkpoint.memory import MemorySaver
 
 from sentinel import bootstrap
 from sentinel import config as config_mod
@@ -37,6 +38,7 @@ from sentinel.interfaces.graphs import agents as agent_module
 from sentinel.interfaces.graphs import chart_generation, common, investigation, support_review
 from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
 from sentinel.interfaces.graphs.agents import utils as agent_utils
+from sentinel.interfaces.workflows import sre_investigation as workflows_sre_investigation
 from sentinel.settings import settings
 
 
@@ -208,9 +210,36 @@ async def _run_sre(
             ],
         }
 
+    envelope = _envelope_for_chat()
+
+    if settings.langgraph_sre_enabled:
+        # MemorySaver: ephemeral, sufficient for the Streamlit developer surface
+        # which has no cross-restart resume requirement.
+        graph = workflows_sre_investigation.build_sre_investigation_graph(
+            checkpointer=MemorySaver(),
+        )
+        outcome = await workflows_sre_investigation.investigate_alert(
+            alert=alert,
+            envelope=envelope,
+            graph=graph,
+        )
+        # Shim: wrap InvestigationOutcome into the legacy reply shape so the
+        # Streamlit rendering path (_format_investigation) works unchanged.
+        return common.InvestigationReply(
+            alert_id=alert.id,
+            root_cause=outcome.root_cause,
+            remediation=outcome.remediation,
+            confidence=outcome.confidence,
+            findings_summary=outcome.root_cause or "",
+            sources_queried=None,
+            approval_status=(
+                "pending" if outcome.needs_approval and outcome.approval_decision is None else None
+            ),
+        )
+
     return await investigation.investigate_alert(
         alert=alert,
-        envelope=_envelope_for_chat(),
+        envelope=envelope,
         agent_for=cfg.agent_for,
         status_update_client=status_client,
         post_to_slack=False,

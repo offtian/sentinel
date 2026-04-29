@@ -5,6 +5,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from langgraph.checkpoint.memory import MemorySaver
 from slack_bolt.context.ack.async_ack import AsyncAck
 
 from sentinel import config as config_mod
@@ -16,6 +17,8 @@ from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
 from sentinel.interfaces.graphs.agents import utils as agent_utils
 from sentinel.interfaces.slack.app import app
 from sentinel.interfaces.slack.status_update import SlackStatusUpdateClient
+from sentinel.interfaces.workflows import sre_investigation as workflows_sre_investigation
+from sentinel.settings import settings
 from sentinel.utils import logs
 
 
@@ -119,6 +122,60 @@ def _investigation_blocks(
     return blocks
 
 
+def _investigation_blocks_from_outcome(
+    outcome: workflows_sre_investigation.InvestigationOutcome,
+    alert_title: str,
+) -> list[dict[str, object]]:
+    """Build Block Kit blocks from a LangGraph InvestigationOutcome."""
+    confidence_label = outcome.confidence.label.value if outcome.confidence else "Unknown"
+    confidence_emoji = {
+        "High": ":large_green_circle:",
+        "Medium": ":large_yellow_circle:",
+    }.get(confidence_label, ":red_circle:")
+
+    approval_note = ""
+    if outcome.needs_approval:
+        approval_note = " _(pending approval)_"
+
+    blocks: list[dict[str, object]] = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"Investigation: {alert_title[:140]}"},
+        },
+        {
+            "type": "section",
+            "fields": [
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Category:* {outcome.classification_category or 'unknown'}",
+                },
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Confidence:* {confidence_emoji} {confidence_label}{approval_note}",
+                },
+            ],
+        },
+        {"type": "divider"},
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Root Cause:*\n{outcome.root_cause or '_Unable to determine._'}",
+            },
+        },
+    ]
+
+    if outcome.remediation:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*Remediation:*\n{outcome.remediation}"},
+            }
+        )
+
+    return blocks
+
+
 def _support_blocks(
     reply: common.SupportReply,
     ticket_summary: str,
@@ -195,20 +252,35 @@ async def _run_sre(
         raw_payload={"slack_text": text},
     )
 
-    cfg = config_mod.get_config()
-    reply = await investigation.investigate_alert(
-        alert=alert,
-        envelope=_envelope_for_slack(channel=channel, user_id="slack-thread"),
-        agent_for=cfg.agent_for,
-        status_update_client=status,
-        post_to_slack=False,  # we post directly in this thread instead
-        k8s_adapter=cfg.build_k8s_investigation_adapter(
-            agent_runner=k8s_runner.run_k8s_agent,
-        ),
-        challenger_adapter=cfg.build_challenger_adapter(),
-    )
+    envelope = _envelope_for_slack(channel=channel, user_id="slack-thread")
 
-    blocks = _investigation_blocks(reply, alert.title)
+    if settings.langgraph_sre_enabled:
+        # MemorySaver: ephemeral, sufficient for the Slack conversational surface
+        # which has no cross-restart resume requirement.
+        graph = workflows_sre_investigation.build_sre_investigation_graph(
+            checkpointer=MemorySaver(),
+        )
+        outcome = await workflows_sre_investigation.investigate_alert(
+            alert=alert,
+            envelope=envelope,
+            graph=graph,
+        )
+        blocks = _investigation_blocks_from_outcome(outcome, alert.title)
+    else:
+        cfg = config_mod.get_config()
+        reply = await investigation.investigate_alert(
+            alert=alert,
+            envelope=envelope,
+            agent_for=cfg.agent_for,
+            status_update_client=status,
+            post_to_slack=False,  # we post directly in this thread instead
+            k8s_adapter=cfg.build_k8s_investigation_adapter(
+                agent_runner=k8s_runner.run_k8s_agent,
+            ),
+            challenger_adapter=cfg.build_challenger_adapter(),
+        )
+        blocks = _investigation_blocks(reply, alert.title)
+
     await status.replace_with_result(
         text=f"Investigation complete: {alert.title}",
         blocks=blocks,

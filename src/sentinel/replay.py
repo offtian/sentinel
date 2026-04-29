@@ -152,6 +152,11 @@ async def _replay_sre(
     No ``trace_collector`` is passed: replay must not open a fresh
     capture window (no live LLM/tool calls happen anyway, but binding a
     builder would also write a spurious ``pipeline_runs`` row).
+
+    Intentionally bypasses ``langgraph_sre_enabled``: replay must
+    reproduce the *original* pipeline execution exactly. Running a
+    LangGraph graph against a Pydantic-Graph ReplayBundle would produce
+    a different call sequence and invalidate the recorded I/O queues.
     """
     alert = alert_entities.Alert.model_validate(bundle.alert_payload)
 
