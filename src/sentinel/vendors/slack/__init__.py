@@ -7,17 +7,17 @@ from sentinel.utils import logs
 from sentinel.vendors.slack import _blocks as _slack_blocks
 
 
-_client: AsyncWebClient | None = None
+_web_client: AsyncWebClient | None = None
 
 
 def _get_client() -> AsyncWebClient | None:
     """
     Return a cached Slack client, or None if no token is configured.
     """
-    global _client  # noqa: PLW0603
-    if _client is None and settings.slack_bot_token:
-        _client = AsyncWebClient(token=settings.slack_bot_token)
-    return _client
+    global _web_client  # noqa: PLW0603
+    if _web_client is None and settings.slack_bot_token:
+        _web_client = AsyncWebClient(token=settings.slack_bot_token)
+    return _web_client
 
 
 async def post_investigation_summary(
