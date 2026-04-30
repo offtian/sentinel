@@ -37,7 +37,7 @@ from langgraph.checkpoint import memory as lg_memory
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from sentinel.interfaces.graphs import common as legacy_common
-from sentinel.interfaces.graphs import investigation as legacy_investigation
+from sentinel.interfaces.graphs._archive import investigation as legacy_investigation
 from sentinel.interfaces.graphs.agents import (
     alert_classifier,
     investigator,
