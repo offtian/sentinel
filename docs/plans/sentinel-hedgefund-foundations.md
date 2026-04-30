@@ -38,7 +38,7 @@ The strategy is **evolve in place**, not greenfield. RFC §15.14 v0.4 selects Py
 - WORM archive job for `audit_log` (RFC §12.3.10, wk 5+)
 - Full 30-tool catalogue (RFC §5.2, wk 5+)
 - Slack interactive UI for approval buttons (data structures only in foundations)
-- LangGraph migration (deferred behind ADR 0007 — revisit at month 3 once replay determinism is proven)
+- LangGraph migration (deferred behind ADR 0007 — **SRE pipeline migrated in `langgraph-sre-migration` plan, PR #35**; support + chart pipelines pending own plans)
 
 ### Already shipped (no-op for this plan)
 
@@ -60,7 +60,7 @@ The strategy is **evolve in place**, not greenfield. RFC §15.14 v0.4 selects Py
 |----------|--------|-----|
 | Repo strategy | Evolve existing Sentinel codebase in place | RFC §15.14 v0.4 picks PydanticAI + LangGraph — current stack is already PydanticAI; preserves runbook/MCP/K8s/audit work; framework deltas isolate to LiteLLM transport, config layering, and OTEL/Langfuse wiring |
 | Agent framework | PydanticAI (no change) | RFC D-01 v0.4 confirms; `instrument=True` already wired across agents |
-| Orchestration framework | Stay on Pydantic Graph for foundations; revisit LangGraph at month 3 (ADR 0007) | LangGraph's checkpoint replay is attractive but framework swap mid-foundations would block F4–F8; PR #15 already covers replay determinism via the bundle approach |
+| Orchestration framework | Stay on Pydantic Graph for foundations; revisit LangGraph at month 3 (ADR 0007) — **SRE pipeline has since migrated to LangGraph** (`interfaces/workflows/sre_investigation.py`, PR #35, `langgraph-sre-migration` plan complete). Support + chart pipelines remain on Pydantic Graph pending their own migration plans. | LangGraph's checkpoint replay is attractive but framework swap mid-foundations would block F4–F8; PR #15 already covers replay determinism via the bundle approach. SRE migration landed after foundations stabilised, validating the ADR 0007 decision. |
 | Strangler vs big-bang | Strangler everywhere | Existing pipelines must keep working at every phase boundary; LiteLLM proxy + runbook catalog + capability tokens coexist with current code until F8 |
 | Config layering | Two-layer chain on the existing Pydantic `BaseConfiguration`: layered fields + firm-wide defaults on `BaseConfiguration`, vendor wiring on `CommonConfiguration` in `plugins/common/`. Multi-tenant via `Settings.team_profile` + `TEAM_CONFIG_REFS` registry. Team subclasses (`SRETeamConfig`) earn their keep when behaviour diverges. | Pivoted from the original 4-layer attrs chain — Pydantic stays the single config contract, `team_id` is a property reading `settings.team_profile`, dispatch happens via `importlib` so `config` never depends on `plugins`. |
 | Identity propagation | `request_id` minted by FastAPI middleware; `tenant_id`/`region`/`pii_class` carried in `Envelope` frozen attrs from ingress | Matches RFC §3.1 + R-IN-3; `Envelope` is the single object every node reads tenant identity from |
@@ -443,7 +443,7 @@ _Fill in after completion._
 - `sentinel-hedgefund-deployment.md` — Helm chart finalisation, real K8s cluster wiring, OTEL collector, network policies, Pod Security (RFC §6, §14 wks 5–8)
 - `info-barriers.md` — 5-layer info barrier layers 3–5: LiteLLM tenant routing, full redactor with LLM judge, Postgres RLS by tenant_id (RFC §5.7, month 3+)
 - `case-history-retrieval.md` — pgvector + BM25 case-history retrieval (RFC §3.3.1, needs ≥100 confirmed investigations)
-- `langgraph-migration.md` — orchestration framework migration if ADR 0007 flips at month 3 (RFC §15.14)
+- `langgraph-sre-migration.md` — **complete** (PR #35); SRE pipeline now on LangGraph. Support + chart pipeline migrations are next follow-up plans.
 - `adversarial-fixtures.md` — adversarial test suite for cross-PM injection, prompt injection (RFC §5.6 + §10.6, wk7)
 - `audit-worm-archive.md` — WORM archive job for `audit_log` 7-year retention (RFC §12.3.10, wk5+)
 - `devops-team-profile.md` and `ace-team-profile.md` — DevOps and ACE profiles (RFC §1.4, months 4–6)
