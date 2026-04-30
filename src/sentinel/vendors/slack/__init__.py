@@ -4,6 +4,19 @@ from sentinel.settings import settings
 from sentinel.utils import logs
 from sentinel.vendors.slack import _blocks as _slack_blocks
 from sentinel.vendors.slack import _client as _slack_client
+from sentinel.vendors.slack._blocks import (
+    approval_request_blocks,
+    drift_alert_blocks,
+    investigation_summary_blocks,
+    support_summary_blocks,
+)
+from sentinel.vendors.slack._client import AsyncSlackClient, SlackClientError, get_client
+from sentinel.vendors.slack._parsers import (
+    MentionEvent,
+    MessageEvent,
+    parse_mention_event,
+    parse_message_event,
+)
 
 
 async def post_investigation_summary(
@@ -228,3 +241,23 @@ async def post_drift_alert(
                 "channel": channel,
             },
         )
+
+
+__all__ = [
+    "AsyncSlackClient",
+    "MentionEvent",
+    "MessageEvent",
+    "SlackClientError",
+    "approval_request_blocks",
+    "drift_alert_blocks",
+    "get_client",
+    "investigation_summary_blocks",
+    "is_slack_configured",
+    "parse_mention_event",
+    "parse_message_event",
+    "post_approval_request",
+    "post_drift_alert",
+    "post_investigation_summary",
+    "post_support_suggestion",
+    "support_summary_blocks",
+]
