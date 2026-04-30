@@ -21,6 +21,7 @@ from sentinel.interfaces.slack.status_update import SlackStatusUpdateClient
 from sentinel.interfaces.workflows import sre_investigation as workflows_sre_investigation
 from sentinel.settings import settings
 from sentinel.utils import logs
+from sentinel.vendors.slack import _blocks as slack_blocks
 
 
 def _envelope_for_slack(*, channel: str, user_id: str) -> envelope_mod.Envelope:
@@ -282,6 +283,14 @@ async def _run_sre(
         )
         blocks = _investigation_blocks(reply, alert.title)
 
+    blocks = slack_blocks.investigation_summary_blocks(
+        alert_id=reply.alert_id,
+        alert_title=alert.title,
+        root_cause=reply.root_cause,
+        remediation=reply.remediation,
+        confidence_label=reply.confidence.label.value if reply.confidence else None,
+        findings_summary=reply.findings_summary or "",
+    )
     await status.replace_with_result(
         text=f"Investigation complete: {alert.title}",
         blocks=blocks,
@@ -325,7 +334,13 @@ async def _run_support(
         status_update_client=status,
     )
 
-    blocks = _support_blocks(reply, ticket.summary)
+    blocks = slack_blocks.support_summary_blocks(
+        ticket_key=ticket.key,
+        ticket_summary=ticket.summary,
+        suggested_response=reply.suggested_response,
+        confidence_label=reply.confidence.label.value if reply.confidence else None,
+        category=reply.category,
+    )
     await status.replace_with_result(
         text=f"Response suggestion ready for: {ticket.summary}",
         blocks=blocks,
