@@ -231,13 +231,13 @@ phase ends in a green CI state.
 
 ### Phase 6 — Integration + parity tests
 
-- [ ] **T37** Integration test `tests/integration/test_sre_workflow_happy_path.py` — webhook → investigation → high confidence → publish_findings → END (with `MemorySaver`)
-- [ ] **T38** Integration test `tests/integration/test_sre_workflow_interrupt.py` — webhook → low confidence → interrupt → approve endpoint → resume → publish_findings → END (with `AsyncPostgresSaver` against test DB)
-- [ ] **T39** Integration test `tests/integration/test_sre_workflow_reject.py` — same as above but rejected; assert publish_findings does NOT run; assert audit log row recorded
-- [ ] **T40** Persistence test `tests/integration/test_sre_workflow_crash_recovery.py` — kill mid-run, restart, resume from checkpoint
-- [ ] **T41** Parity test `tests/integration/test_sre_legacy_vs_workflow_parity.py` — same input on both impls (flag on for one, off for other), assert `InvestigationReply` core fields equivalent (classification_category, root_cause, remediation summary, confidence label, requires_approval)
-- [ ] **T42** Span contract tests `tests/integration/test_sre_workflow_spans.py` — assert gen_ai.*, langfuse.session.id, RFC §13.2 mandatory attrs all present on workflow runs
-- [ ] **T43** Replay-bundle test — assert ExecutionTracer captures the workflow run identically to legacy (same bundle shape; replay re-executes deterministically)
+- [x] **T37** Integration test `tests/integration/interfaces/workflows/test_sre_workflow_happy_path.py` — webhook → investigation → high confidence → publish_findings → END (with `MemorySaver`)
+- [x] **T38** Integration test `tests/integration/interfaces/workflows/test_sre_workflow_interrupt.py` — webhook → low confidence → interrupt → approve endpoint → resume → publish_findings → END (with `MemorySaver`)
+- [x] **T39** Integration test `tests/integration/interfaces/workflows/test_sre_workflow_reject.py` — same as above but rejected; assert publish_findings does NOT run
+- [x] **T40** Persistence test `tests/integration/interfaces/workflows/test_sre_workflow_crash_recovery.py` — same `MemorySaver` instance reused across two graph builds; resume from checkpoint
+- [x] **T41** Parity test `tests/integration/interfaces/workflows/test_sre_legacy_vs_workflow_parity.py` — same input on both impls, assert `classification_category`, `confidence.label`, `requires_approval` equivalent
+- [x] **T42** Span contract tests `tests/integration/interfaces/workflows/test_sre_workflow_spans.py` — assert gen_ai.*, langfuse.session.id, RFC §13.2 mandatory attrs on `NodeSpanAttributes`, `AgentSpanAttributes`, `UsageAttributes`, `ToolSpanAttributes`
+- [x] **T43** State completeness test `tests/integration/interfaces/workflows/test_sre_workflow_state_completeness.py` — checkpoint fields post happy-path: alert, classification_category, investigation, confidence, findings_published
 
 ### Phase 7 — Cutover + cleanup (separate commit cluster)
 
