@@ -34,7 +34,7 @@ introduced later if a node accumulates (e.g. a fan-out investigation step).
 from __future__ import annotations
 
 import uuid
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain.alerts import entities as alert_entities
@@ -70,6 +70,13 @@ class InvestigationState(TypedDict, total=False):
     - ``investigation``: created by ``classify_alert``, updated with
       analysis by ``investigate``, updated with root cause by
       ``analyse_root_cause``.
+    - ``_investigation_context``: internal side-channel written by
+      ``investigate`` and read/extended by ``analyse_root_cause`` and
+      ``determine_confidence``. Carries investigation status, tool call
+      counts, and the raw LLM-reported confidence used for the evidence
+      floor. Must be declared in the TypedDict so LangGraph persists it
+      between node checkpoints — otherwise it is silently dropped and
+      ``determine_confidence`` scores against empty evidence.
     - ``confidence``: ``ConfidenceScore`` written by
       ``determine_confidence``.
     - ``needs_approval``: routing flag set by ``determine_confidence``;
@@ -89,6 +96,10 @@ class InvestigationState(TypedDict, total=False):
     runbook_match_id: uuid.UUID | None
     requires_approval: bool
     investigation: investigation_entities.Investigation | None
+    # Internal side-channel: persisted between investigate → analyse_root_cause
+    # → determine_confidence so the evidence floor and confidence scoring have
+    # access to tool call counts and raw LLM confidence across checkpoints.
+    _investigation_context: dict[str, Any]
     confidence: confidence_entities.ConfidenceScore | None
     needs_approval: bool
     approval_decision: approval_entities.ApprovalDecision | None

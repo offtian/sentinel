@@ -35,7 +35,8 @@ from sentinel.domain.alerts import entities as alert_entities
 from sentinel.domain.pipeline import errors as pipeline_errors
 from sentinel.domain.pipeline import queries as pipeline_queries
 from sentinel.domain.support import entities as support_entities
-from sentinel.interfaces.graphs import investigation, support_review
+from sentinel.interfaces.graphs import support_review
+from sentinel.interfaces.graphs._archive import investigation
 from sentinel.interfaces.graphs.agents import k8s_runner
 from sentinel.plugins.models import recorded as recorded_model_mod
 from sentinel.plugins.toolsets import recorded as recorded_toolset_mod

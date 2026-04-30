@@ -525,7 +525,7 @@ async def analyse_root_cause(
     classification_category = state.get("classification_category", "")
 
     # Read investigator context stashed by the previous node.
-    inv_ctx: dict[str, Any] = state.get("_investigation_context", {})  # type: ignore[assignment]
+    inv_ctx: dict[str, Any] = state.get("_investigation_context", {})
     investigation_analysis: str = inv_ctx.get("analysis", "")
     investigation_sources: list[str] = list(inv_ctx.get("sources", []))
     investigation_tool_calls: list[dict[str, Any]] = list(inv_ctx.get("tool_calls", []))
@@ -656,7 +656,7 @@ async def determine_confidence(
     requires_approval = bool(state.get("requires_approval", False))
 
     # Read context from the investigation context stashed by previous nodes.
-    inv_ctx: dict[str, Any] = state.get("_investigation_context", {})  # type: ignore[assignment]
+    inv_ctx: dict[str, Any] = state.get("_investigation_context", {})
     investigation_status: str = inv_ctx.get("status", "skipped")
     tool_calls_with_data: int = int(inv_ctx.get("tool_calls_with_data", 0))
     tool_calls_total: int = int(inv_ctx.get("tool_calls_total", 0))

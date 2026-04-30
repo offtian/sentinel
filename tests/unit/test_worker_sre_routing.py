@@ -138,7 +138,7 @@ class TestRunSreInvestigationRouting:
         fake_legacy_result = _make_fake_legacy_result()
         legacy_investigate_mock = AsyncMock(return_value=fake_legacy_result)
 
-        from sentinel.interfaces.graphs import investigation as investigation_mod
+        from sentinel.interfaces.graphs._archive import investigation as investigation_mod
 
         monkeypatch.setattr(
             investigation_mod,
@@ -184,7 +184,7 @@ class TestRunSreInvestigationRouting:
         fake_legacy_result = _make_fake_legacy_result()
         legacy_investigate_mock = AsyncMock(return_value=fake_legacy_result)
 
-        from sentinel.interfaces.graphs import investigation as investigation_mod
+        from sentinel.interfaces.graphs._archive import investigation as investigation_mod
 
         monkeypatch.setattr(
             investigation_mod,

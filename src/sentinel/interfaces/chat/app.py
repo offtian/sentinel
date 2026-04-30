@@ -35,7 +35,8 @@ from sentinel.domain.search import factory as search_factory
 from sentinel.domain.support import entities as support_entities
 from sentinel.interfaces.chat.status_update import StreamlitStatusUpdateClient
 from sentinel.interfaces.graphs import agents as agent_module
-from sentinel.interfaces.graphs import chart_generation, common, investigation, support_review
+from sentinel.interfaces.graphs import chart_generation, common, support_review
+from sentinel.interfaces.graphs._archive import investigation
 from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
 from sentinel.interfaces.graphs.agents import utils as agent_utils
 from sentinel.interfaces.workflows import sre_investigation as workflows_sre_investigation
