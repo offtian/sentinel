@@ -68,7 +68,18 @@ Quality improvement relies on three feedback loops:
 ## Layer Architecture
 
 ```
-interfaces/    → FastAPI routers, Pydantic Graph pipelines, webhook handlers, PydanticAI agents, MCP server
+interfaces/    → FastAPI routers, webhook handlers, MCP server, pipeline orchestration
+  workflows/   → LangGraph pipelines (SRE investigation ✓; support + chart to follow)
+                   sre_investigation.py  — nodes, graph builder, entrypoints
+                   sre_state.py          — InvestigationState TypedDict
+                   _checkpointer.py      — AsyncPostgresSaver factory
+                   _envelope.py          — with_envelope node decorator
+  graphs/      → Pydantic Graph pipelines (active: support, chart; archived: SRE)
+                   support_review.py     — active support pipeline (Pydantic Graph)
+                   chart_generation.py   — active chart-coding pipeline (Pydantic Graph)
+                   _archive/             — archived Pydantic Graph pipelines (reference-only)
+                   agents/               — PydanticAI agent factories (shared by both frameworks)
+                   _node_helpers.py      — instrumented_node_run, typed span-attr emission
   mcp/         → FastMCP server exposing Sentinel tools to external agents
     ↓
 application/   → Use cases and orchestration (investigate, triage, review_ticket, search_docs)
@@ -87,13 +98,33 @@ evals/         → Evaluation framework (pydantic_evals): cases/, evaluators/, r
 plugins/       → Plugin adapters: toolsets (PydanticAI tool wrappers), MCP client builder
     ↓
 data/          → SQLModel database models, Alembic migrations
+  primitives/  → Shared frozen data shapes (Envelope, ApprovalPolicy, capability tokens)
     ↓
-vendors/       → External SDK wrappers (Slack, PagerDuty, Jira, Datadog)
+vendors/       → External SDK wrappers
+  slack/       → Typed package: AsyncSlackClient, Block Kit builders, event parsers
     ↓
-utils/         → Logging, shared helpers
+utils/
+  observability/ → Typed OTel span-attribute models (NodeSpanAttributes, AgentSpanAttributes,
+                   UsageAttributes, ToolSpanAttributes); gen_ai.* semconv constants;
+                   PydanticAI Usage → token/cost extraction
     ↓
 config         → Centralised configuration (environs + Configuration class)
 ```
+
+**Rule**: Lower layers cannot import from higher layers. Enforced via `import-linter` contracts in `pyproject.toml`. `interfaces/graphs/_archive/` is additionally forbidden from being imported by any module (enforced by a dedicated contract).
+
+### Orchestration frameworks
+
+Two pipeline frameworks coexist during the LangGraph migration (see ADR 0007):
+
+| Framework | Location | Pipelines | State persistence |
+|-----------|----------|-----------|-------------------|
+| **LangGraph** | `interfaces/workflows/` | SRE investigation | `AsyncPostgresSaver` (Postgres checkpoints) — supports `interrupt()` / resume |
+| **Pydantic Graph** | `interfaces/graphs/` | Support review, Chart generation | In-memory (`GraphRunContext`); no mid-run persistence |
+
+**PydanticAI agents** (`interfaces/graphs/agents/`) are framework-agnostic — the same agent factories (`build_agent(*, model, skills)`) are called by both LangGraph nodes and Pydantic Graph nodes. The LangGraph nodes call `.run(model=...)` directly; Pydantic Graph nodes use `instrumented_node_run()`.
+
+**Typed observability** (`utils/observability/`) is also framework-agnostic: both frameworks stamp OTel spans with the same `NodeSpanAttributes` / `AgentSpanAttributes` / `UsageAttributes` models, so Langfuse Generation views and cost dashboards are populated identically regardless of which pipeline ran the agent.
 
 **Rule**: Lower layers cannot import from higher layers. This is enforced via `import-linter` contracts in `pyproject.toml`.
 
@@ -302,7 +333,7 @@ All rejections emit a `tool_grant_denied` structured log event and write an `aud
 
 ## AI Support Pipeline
 
-The support review pipeline follows the same Pydantic Graph pattern:
+The support review pipeline runs on **Pydantic Graph** (`interfaces/graphs/support_review.py`). LangGraph migration is planned as the next sub-plan under the umbrella `pydanticai-langgraph-adoption` plan.
 
 ```
 ClassifyTicket
