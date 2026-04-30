@@ -42,7 +42,8 @@ from sentinel.domain.pipeline import tracer as pipeline_tracer
 from sentinel.domain.support import entities as support_entities
 from sentinel.domain.support import operations as support_ops
 from sentinel.interfaces.graphs import agents as agent_module
-from sentinel.interfaces.graphs import common, investigation, support_review
+from sentinel.interfaces.graphs import common, support_review
+from sentinel.interfaces.graphs._archive import investigation
 from sentinel.interfaces.graphs.agents import k8s_runner
 from sentinel.interfaces.workflows import _checkpointer as workflows_checkpointer
 from sentinel.interfaces.workflows import sre_investigation as workflows_sre_investigation
