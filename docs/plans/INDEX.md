@@ -41,12 +41,12 @@
 | [sentinel-foundations-f5-litellm-proxy](sentinel-foundations-f5-litellm-proxy.md) | F5 LiteLLM proxy migration + ADR 0007 orchestration framework decision | complete | PR #30 merged |
 | [sentinel-foundations-f6-runbook-catalog](sentinel-foundations-f6-runbook-catalog.md) | F6 runbook catalog + three-stage matcher (deterministic tag + small-LLM disambiguator on ties / zero-match + opt-in pgvector RAG fallback) + `extends:` composition + lifecycle/drift/flywheel + Confluence read-only render | ~85% (47+ / 68 items) | Branch `feat/sentinel-foundations-f6-runbook-catalog`; F6.A–F6.E + F6.G + F6.J–F6.N (most) + F6.K complete; F6.F (pipeline node), F6.J.6 (RAG tests), F6.L.4–L.6 (drift Slack/Justfile/tests), F6.M.6 (flywheel tests), F6.N.4 (Confluence ops doc), F6.H (docs), F6.I (ship) in flight |
 | [pydanticai-langgraph-adoption](pydanticai-langgraph-adoption.md) | Migrate orchestration harness to LangGraph; support pipeline first, SRE/chart follow with own plans | 0/3 phases | Support migration in flight; ADR 0007 authored in PR #30 |
+| [langgraph-sre-migration](langgraph-sre-migration.md) | SRE pipeline → LangGraph workflow: typed observability layer, flag-gated cutover, interrupt-based approval gate, Phase 6 integration tests | Phases 1–6 complete | PR #35 open; Phase 7 (cutover + cleanup) in progress |
 
 ### Draft (Not Started)
 
 | Plan | Goal | PRD Section |
 |------|------|-------------|
-| [langgraph-sre-migration](langgraph-sre-migration.md) | SRE sub-plan under umbrella `pydanticai-langgraph-adoption`: SRE pipeline → LangGraph workflow with W2 feature flag + interrupt()-based approval gate; introduces typed observability layer (gen_ai.* semconv, token/cost) consumed by both legacy chart and new SRE | RFC §2.3, §15.14 |
 | [sentinel-data-and-domain-restructure](sentinel-data-and-domain-restructure.md) | Split `data/` into `sql/` + `primitives/`; split `domain/sre/` into `domain/alerts/` + `domain/investigations/`; rename pipeline labels | RFC §15.1 |
 | [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, SRE approval persistence (token usage + LLM cost delivered in PR #18) | 4, 6 |
 | [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | 4, 7 |
