@@ -16,11 +16,14 @@ from sentinel.interfaces.graphs import common, support_review
 from sentinel.interfaces.graphs._archive import investigation
 from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
 from sentinel.interfaces.graphs.agents import utils as agent_utils
+from sentinel.interfaces.slack import constants as slack_constants
 from sentinel.interfaces.slack.app import app
 from sentinel.interfaces.slack.status_update import SlackStatusUpdateClient
 from sentinel.interfaces.workflows import sre_investigation as workflows_sre_investigation
 from sentinel.settings import settings
 from sentinel.utils import logs
+from sentinel.vendors.slack import _blocks as slack_blocks
+from sentinel.vendors.slack import _parsers as slack_parsers
 
 
 def _envelope_for_slack(*, channel: str, user_id: str) -> envelope_mod.Envelope:
@@ -282,13 +285,21 @@ async def _run_sre(
         )
         blocks = _investigation_blocks(reply, alert.title)
 
+    blocks = slack_blocks.investigation_summary_blocks(
+        alert_id=reply.alert_id,
+        alert_title=alert.title,
+        root_cause=reply.root_cause,
+        remediation=reply.remediation,
+        confidence_label=reply.confidence.label.value if reply.confidence else None,
+        findings_summary=reply.findings_summary or "",
+    )
     await status.replace_with_result(
         text=f"Investigation complete: {alert.title}",
         blocks=blocks,
     )
 
     logs.log_event(
-        "slack_investigation_complete",
+        slack_constants.EVENT_SRE_COMPLETE,
         params={"alert_id": alert.id, "channel": channel},
     )
 
@@ -325,14 +336,20 @@ async def _run_support(
         status_update_client=status,
     )
 
-    blocks = _support_blocks(reply, ticket.summary)
+    blocks = slack_blocks.support_summary_blocks(
+        ticket_key=ticket.key,
+        ticket_summary=ticket.summary,
+        suggested_response=reply.suggested_response,
+        confidence_label=reply.confidence.label.value if reply.confidence else None,
+        category=reply.category,
+    )
     await status.replace_with_result(
         text=f"Response suggestion ready for: {ticket.summary}",
         blocks=blocks,
     )
 
     logs.log_event(
-        "slack_support_review_complete",
+        slack_constants.EVENT_SUPPORT_COMPLETE,
         params={"ticket_key": ticket.key, "channel": channel},
     )
 
@@ -365,7 +382,7 @@ async def _handle_request(
     is_sre = classified_intent == intent_router.Intent.SRE
 
     logs.log_event(
-        "slack_request_received",
+        slack_constants.EVENT_REQUEST_RECEIVED,
         params={
             "user_id": user_id,
             "channel": channel,
@@ -393,29 +410,27 @@ async def handle_app_mention(
     client: Any,
     ack: AsyncAck,
 ) -> None:
-    """
-    Handle @Sentinel mentions in any channel.
-
-    The thread_ts is used as the reply thread. If the mention itself is
-    already in a thread we continue in that thread; otherwise we start one.
-    """
+    """Handle @Sentinel mentions in any channel."""
     await ack()
-
-    text = event.get("text", "")
-    channel = event.get("channel", "")
-    ts = event.get("ts", "")
-    thread_ts = event.get("thread_ts") or ts  # stay in existing thread if present
-    user_id = event.get("user", "unknown")
-
+    mention = slack_parsers.parse_mention_event(event)
     try:
         await _handle_request(
-            text, client=client, channel=channel, thread_ts=thread_ts, user_id=user_id
+            mention.text,
+            client=client,
+            channel=mention.channel,
+            thread_ts=mention.thread_ts,
+            user_id=mention.user_id,
         )
-    except Exception as exc:
-        logs.log_exception(exc)
+    except* Exception as eg:
+        for exc in eg.exceptions:
+            logs.log_exception(exc)
+        logs.log_event(
+            slack_constants.EVENT_REQUEST_ERROR,
+            params={"channel": mention.channel, "error_count": len(eg.exceptions)},
+        )
         await client.chat_postMessage(
-            channel=channel,
-            thread_ts=thread_ts,
+            channel=mention.channel,
+            thread_ts=mention.thread_ts,
             text=":x: Something went wrong while processing your request. Please try again.",
         )
 
@@ -426,32 +441,28 @@ async def handle_direct_message(
     client: Any,
     ack: AsyncAck,
 ) -> None:
-    """
-    Handle direct messages to the bot.
-
-    Only processes messages in DM channels (channel_type=im) to avoid
-    double-handling messages that also trigger app_mention.
-    """
+    """Handle direct messages to the bot."""
     await ack()
-
-    # Skip bot messages, edits, and non-DM channels
     if event.get("bot_id") or event.get("subtype") or event.get("channel_type") != "im":
         return
-
-    text = event.get("text", "")
-    channel = event.get("channel", "")
-    ts = event.get("ts", "")
-    thread_ts = event.get("thread_ts") or ts
-    user_id = event.get("user", "unknown")
-
+    message = slack_parsers.parse_message_event(event)
     try:
         await _handle_request(
-            text, client=client, channel=channel, thread_ts=thread_ts, user_id=user_id
+            message.text,
+            client=client,
+            channel=message.channel,
+            thread_ts=message.thread_ts,
+            user_id=message.user_id,
         )
-    except Exception as exc:
-        logs.log_exception(exc)
+    except* Exception as eg:
+        for exc in eg.exceptions:
+            logs.log_exception(exc)
+        logs.log_event(
+            slack_constants.EVENT_REQUEST_ERROR,
+            params={"channel": message.channel, "error_count": len(eg.exceptions)},
+        )
         await client.chat_postMessage(
-            channel=channel,
-            thread_ts=thread_ts,
+            channel=message.channel,
+            thread_ts=message.thread_ts,
             text=":x: Something went wrong while processing your request. Please try again.",
         )
