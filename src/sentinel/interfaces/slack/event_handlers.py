@@ -16,6 +16,7 @@ from sentinel.interfaces.graphs import common, support_review
 from sentinel.interfaces.graphs._archive import investigation
 from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
 from sentinel.interfaces.graphs.agents import utils as agent_utils
+from sentinel.interfaces.slack import constants as slack_constants
 from sentinel.interfaces.slack.app import app
 from sentinel.interfaces.slack.status_update import SlackStatusUpdateClient
 from sentinel.interfaces.workflows import sre_investigation as workflows_sre_investigation
@@ -298,7 +299,7 @@ async def _run_sre(
     )
 
     logs.log_event(
-        "slack_investigation_complete",
+        slack_constants.EVENT_SRE_COMPLETE,
         params={"alert_id": alert.id, "channel": channel},
     )
 
@@ -348,7 +349,7 @@ async def _run_support(
     )
 
     logs.log_event(
-        "slack_support_review_complete",
+        slack_constants.EVENT_SUPPORT_COMPLETE,
         params={"ticket_key": ticket.key, "channel": channel},
     )
 
@@ -381,7 +382,7 @@ async def _handle_request(
     is_sre = classified_intent == intent_router.Intent.SRE
 
     logs.log_event(
-        "slack_request_received",
+        slack_constants.EVENT_REQUEST_RECEIVED,
         params={
             "user_id": user_id,
             "channel": channel,
@@ -420,8 +421,13 @@ async def handle_app_mention(
             thread_ts=mention.thread_ts,
             user_id=mention.user_id,
         )
-    except Exception as exc:
-        logs.log_exception(exc)
+    except* Exception as eg:
+        for exc in eg.exceptions:
+            logs.log_exception(exc)
+        logs.log_event(
+            slack_constants.EVENT_REQUEST_ERROR,
+            params={"channel": mention.channel, "error_count": len(eg.exceptions)},
+        )
         await client.chat_postMessage(
             channel=mention.channel,
             thread_ts=mention.thread_ts,
@@ -448,8 +454,13 @@ async def handle_direct_message(
             thread_ts=message.thread_ts,
             user_id=message.user_id,
         )
-    except Exception as exc:
-        logs.log_exception(exc)
+    except* Exception as eg:
+        for exc in eg.exceptions:
+            logs.log_exception(exc)
+        logs.log_event(
+            slack_constants.EVENT_REQUEST_ERROR,
+            params={"channel": message.channel, "error_count": len(eg.exceptions)},
+        )
         await client.chat_postMessage(
             channel=message.channel,
             thread_ts=message.thread_ts,
