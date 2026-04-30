@@ -79,6 +79,7 @@ Acceptance criteria:
 - [x] SRE agents auto-load MCP toolsets discovered from `MCP_SERVERS` — shared via `Configuration.build_mcp_toolsets()`, injected as `classifier_toolsets` and `analyser_toolsets`
 - [x] Alert classifier output drives runbook **skill** selection (e.g. `k8s-crashloop-runbook`) appended to root-cause-analyser context — `ClassifyAlert` stores `classification_category`, passed to `root_cause_analyser.Dependencies(category=...)`, which calls `_inject_runbook_skills()` → `render_skills_section(category=...)`
 - [x] Prompt caching enabled on all SRE agent system prompts via PydanticAI `model_settings` (Anthropic `cache_instructions` / OpenAI `prompt_cache_key`)
+- [x] SRE pipeline runs on LangGraph (`interfaces/workflows/sre_investigation.py`) with interrupt-based approval gate, `AsyncPostgresSaver` checkpoint persistence, and typed observability span attributes (`utils/observability/`); flag-controlled via `LANGGRAPH_SRE_ENABLED`; legacy Pydantic Graph archived at `interfaces/graphs/_archive/investigation.py`
 
 ### 2. AI Support Agent — Ticket Review Pipeline
 
