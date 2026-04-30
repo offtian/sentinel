@@ -24,7 +24,7 @@ class TestAsyncSlackClient:
 
     def test_is_configured_returns_true_when_token_present(self) -> None:
         # Given a valid token
-        client = slack_client_mod.AsyncSlackClient(token="xoxb-fake-token")
+        client = slack_client_mod.AsyncSlackClient(token="xoxb-fake-token")  # noqa: S106
 
         # Then is_configured is True
         assert client.is_configured is True
@@ -35,7 +35,7 @@ class TestAsyncSlackClient:
         mock_sdk = mock.AsyncMock()
         mock_sdk.chat_postMessage.return_value = {"ok": True, "ts": "1.0"}
 
-        client = slack_client_mod.AsyncSlackClient(token="xoxb-test")
+        client = slack_client_mod.AsyncSlackClient(token="xoxb-test")  # noqa: S106
         client._sdk = mock_sdk  # inject mock
 
         # When posting a message
@@ -55,7 +55,7 @@ class TestAsyncSlackClient:
         mock_sdk.chat_postMessage.side_effect = SlackApiError(
             message="channel_not_found", response={"ok": False, "error": "channel_not_found"}
         )
-        client = slack_client_mod.AsyncSlackClient(token="xoxb-test")
+        client = slack_client_mod.AsyncSlackClient(token="xoxb-test")  # noqa: S106
         client._sdk = mock_sdk
 
         # Then post_message raises SlackClientError (our own error type)

@@ -1,23 +1,9 @@
 from __future__ import annotations
 
-from slack_sdk.web.async_client import AsyncWebClient
-
 from sentinel.settings import settings
 from sentinel.utils import logs
 from sentinel.vendors.slack import _blocks as _slack_blocks
-
-
-_web_client: AsyncWebClient | None = None
-
-
-def _get_client() -> AsyncWebClient | None:
-    """
-    Return a cached Slack client, or None if no token is configured.
-    """
-    global _web_client  # noqa: PLW0603
-    if _web_client is None and settings.slack_bot_token:
-        _web_client = AsyncWebClient(token=settings.slack_bot_token)
-    return _web_client
+from sentinel.vendors.slack import _client as _slack_client
 
 
 async def post_investigation_summary(
@@ -36,14 +22,14 @@ async def post_investigation_summary(
     Uses Slack Web API to send a formatted message with investigation results.
     """
     target_channel = channel or settings.sre_slack_channel
-    client = _get_client()
-    if not target_channel or not client:
+    if not target_channel or not _slack_client.get_client().is_configured:
         logs.log_event(
             "slack_post_skipped",
             params={"reason": "No channel or token configured"},
         )
         return
 
+    slack = _slack_client.get_client()
     blocks = _slack_blocks.investigation_summary_blocks(
         alert_id=alert_id,
         alert_title=alert_title,
@@ -54,7 +40,7 @@ async def post_investigation_summary(
     )
 
     try:
-        await client.chat_postMessage(
+        await slack.post_message(
             channel=target_channel,
             text=f"Investigation complete for: {alert_title}",
             blocks=blocks,
@@ -63,8 +49,8 @@ async def post_investigation_summary(
             "slack_investigation_posted",
             params={"channel": target_channel, "alert_id": alert_id},
         )
-    except Exception as e:
-        logs.log_exception(e, params={"alert_id": alert_id, "channel": target_channel})
+    except _slack_client.SlackClientError as exc:
+        logs.log_exception(exc, params={"alert_id": alert_id, "channel": target_channel})
 
 
 async def post_support_suggestion(
@@ -78,14 +64,14 @@ async def post_support_suggestion(
 ) -> None:
     """Post a support response suggestion to a Slack channel."""
     target_channel = channel or settings.support_slack_channel
-    client = _get_client()
-    if not target_channel or not client:
+    if not target_channel or not _slack_client.get_client().is_configured:
         logs.log_event(
             "slack_post_skipped",
             params={"reason": "No channel or token configured"},
         )
         return
 
+    slack = _slack_client.get_client()
     blocks = _slack_blocks.support_summary_blocks(
         ticket_key=ticket_key,
         ticket_summary=ticket_summary,
@@ -95,7 +81,7 @@ async def post_support_suggestion(
     )
 
     try:
-        await client.chat_postMessage(
+        await slack.post_message(
             channel=target_channel,
             text=f"Response suggestion for: {ticket_key}",
             blocks=blocks,
@@ -104,8 +90,8 @@ async def post_support_suggestion(
             "slack_support_posted",
             params={"channel": target_channel, "ticket_key": ticket_key},
         )
-    except Exception as e:
-        logs.log_exception(e, params={"ticket_key": ticket_key, "channel": target_channel})
+    except _slack_client.SlackClientError as exc:
+        logs.log_exception(exc, params={"ticket_key": ticket_key, "channel": target_channel})
 
 
 async def post_approval_request(
@@ -125,14 +111,14 @@ async def post_approval_request(
     Return the message timestamp (``ts``) for tracking, or None if posting was skipped.
     """
     target_channel = channel or settings.sre_slack_channel
-    client = _get_client()
-    if not target_channel or not client:
+    if not target_channel or not _slack_client.get_client().is_configured:
         logs.log_event(
             "slack_approval_skipped",
             params={"reason": "No channel or token configured"},
         )
         return None
 
+    slack = _slack_client.get_client()
     blocks = _slack_blocks.approval_request_blocks(
         investigation_id=investigation_id,
         alert_id=alert_id,
@@ -144,22 +130,21 @@ async def post_approval_request(
     )
 
     try:
-        response = await client.chat_postMessage(
+        ts = await slack.post_message(
             channel=target_channel,
             text=f"Approval required for investigation: {alert_title}",
             blocks=blocks,
         )
-        message_ts = response.get("ts")
         logs.log_event(
             "slack_approval_posted",
             params={
                 "channel": target_channel,
                 "investigation_id": investigation_id,
-                "message_ts": message_ts,
+                "message_ts": ts,
             },
         )
-        return message_ts
-    except Exception as exc:
+        return ts
+    except _slack_client.SlackClientError as exc:
         logs.log_exception(
             exc,
             params={"investigation_id": investigation_id, "channel": target_channel},
@@ -197,8 +182,7 @@ async def post_drift_alert(
     Slack API error (one drift's outage must never block the rest of the
     sweep).
     """
-    client = _get_client()
-    if not client or not channel:
+    if not _slack_client.get_client().is_configured or not channel:
         logs.log_event(
             "runbook_drift_slack_skipped",
             params={
@@ -209,6 +193,7 @@ async def post_drift_alert(
         )
         return
 
+    slack = _slack_client.get_client()
     blocks = _slack_blocks.drift_alert_blocks(
         runbook_id=runbook_id,
         content_sha=content_sha,
@@ -220,7 +205,7 @@ async def post_drift_alert(
     fallback_text = f"Runbook drift: {drift_type} on {runbook_id} ({drift_severity})"
 
     try:
-        await client.chat_postMessage(
+        await slack.post_message(
             channel=channel,
             text=fallback_text,
             blocks=blocks,
@@ -234,7 +219,7 @@ async def post_drift_alert(
                 "drift_severity": drift_severity,
             },
         )
-    except Exception as exc:
+    except _slack_client.SlackClientError as exc:
         logs.log_exception(
             exc,
             params={
