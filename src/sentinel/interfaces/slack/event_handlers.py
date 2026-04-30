@@ -12,7 +12,8 @@ from sentinel import config as config_mod
 from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain.alerts import entities as alert_entities
 from sentinel.domain.support import entities as support_entities
-from sentinel.interfaces.graphs import common, investigation, support_review
+from sentinel.interfaces.graphs import common, support_review
+from sentinel.interfaces.graphs._archive import investigation
 from sentinel.interfaces.graphs.agents import intent_router, k8s_runner
 from sentinel.interfaces.graphs.agents import utils as agent_utils
 from sentinel.interfaces.slack.app import app

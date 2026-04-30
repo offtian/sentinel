@@ -281,18 +281,42 @@ forbidden_modules = [
 
 [[tool.importlinter.contracts]]
 # Phase 7 / T48: The archived legacy SRE pipeline is reference-only.
-# No production module should import from _archive; only the legacy-parity
-# integration test and the flag-branch in worker.py (preserved until T49)
-# are permitted. New code must use sentinel.interfaces.workflows.sre_investigation.
+# Only the explicit legacy flag-branches (worker, replay, chat/app) may import
+# from _archive during the staging soak window (T49/T50 cleanup pending).
+# New code must use sentinel.interfaces.workflows.sre_investigation instead.
 name = "Archived SRE pipeline is reference-only"
 type = "forbidden"
-source_modules = ["sentinel"]
+# Enumerate the high-level layers that must not grow new _archive dependencies.
+# (source_modules cannot be "sentinel" because _archive is itself a sentinel
+#  sub-module — import-linter rejects self-referential forbidden contracts.)
+source_modules = [
+    "sentinel.application",
+    "sentinel.domain",
+    "sentinel.plugins",
+    "sentinel.evals",
+    "sentinel.interfaces.api",
+    "sentinel.interfaces.graphs.agents",
+    "sentinel.interfaces.graphs.chart_generation",
+    "sentinel.interfaces.graphs.common",
+    "sentinel.interfaces.graphs._node_helpers",
+    "sentinel.interfaces.graphs.support_review",
+    "sentinel.interfaces.mcp",
+    "sentinel.interfaces.slack",
+    "sentinel.interfaces.workflows",
+    "sentinel.vendors",
+    "sentinel.utils",
+    "sentinel.config",
+    "sentinel.data",
+    "sentinel.settings",
+    "sentinel.bootstrap",
+    "sentinel.bootstrap_otel",
+]
 forbidden_modules = ["sentinel.interfaces.graphs._archive"]
 ignore_imports = [
-    # worker.py: legacy flag-branch preserved until staging soak confirms (T49 skip)
-    "sentinel.worker -> sentinel.interfaces.graphs._archive.investigation",
-    # parity integration test: explicitly compares legacy vs workflow outputs
-    "tests.integration.interfaces.workflows.test_sre_legacy_vs_workflow_parity -> sentinel.interfaces.graphs._archive.investigation",
+    # The following are legacy flag-branches preserved until T49/T50 cleanup
+    # (staging soak gate — see langgraph-sre-phase7 plan for context).
+    # Remove these entries when the flag branches are deleted after soak.
+    "sentinel.interfaces.slack.event_handlers -> sentinel.interfaces.graphs._archive.investigation",
 ]
 
 # Mypy
