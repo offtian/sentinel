@@ -46,7 +46,7 @@ def db_available() -> bool:
 
 
 @pytest.fixture(autouse=True)
-def skip_without_db(request: pytest.FixtureRequest, db_available: bool) -> None:
+def skip_without_db(request: pytest.FixtureRequest, db_available: bool) -> None:  # noqa: FBT001
     """Auto-skip any integration test when the database is not reachable."""
     if not db_available:
         pytest.skip("No database reachable — run `just docker-compose-up` first")
