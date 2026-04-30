@@ -26,6 +26,8 @@ just test tests/unit/path/test_file.py::TestClass # Single test class
 - Vendor adapters no-op when unconfigured (missing API keys) via `is_configured` property
 - All LLM agents route through LiteLLM SDK (in-process) via PydanticAI's `litellm:` model prefix — no external proxy
 - Agents use `Agent("test", ...)` placeholder model, overridden at runtime via `.run(model=...)`
+- `interfaces/workflows/` is the canonical home for new pipeline code (LangGraph); the SRE pipeline lives at `interfaces/workflows/sre_investigation.py` (flag-gated via `LANGGRAPH_SRE_ENABLED`)
+- `interfaces/graphs/` contains legacy Pydantic Graph pipelines: the SRE pipeline is archived at `interfaces/graphs/_archive/investigation.py` (reference-only; import-linter forbids new dependencies on it); the support pipeline at `interfaces/graphs/support_review.py` is still active pending its own migration plan; chart pipeline at `interfaces/graphs/chart_generation.py` is active
 
 ## Pipelines (gotchas)
 

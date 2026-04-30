@@ -99,28 +99,36 @@ config         → Centralised configuration (environs + Configuration class)
 
 ## AI SRE Pipeline
 
-The SRE investigation pipeline is implemented as a Pydantic Graph with the following nodes:
+The SRE investigation pipeline runs on **LangGraph** (`interfaces/workflows/sre_investigation.py`),
+flag-controlled via `LANGGRAPH_SRE_ENABLED`. The legacy Pydantic Graph implementation is
+archived at `interfaces/graphs/_archive/investigation.py` (reference-only; see ADR 0007).
 
 ```
-ClassifyAlert
-  │  PydanticAI agent classifies severity, service, category
-  │  (error → NodeError with context, pipeline continues gracefully)
-  ↓
-InvestigateWithHolmes
-  │  HolmesGPT adapter queries observability systems (Datadog, K8s, Prometheus)
-  │  (error → PipelineNodeFailed wrapping NodeError)
-  ↓
-AnalyseRootCause
-  │  PydanticAI agent synthesises findings into root cause + remediation
-  ↓
-DetermineConfidence
-  │  Calculate confidence score; if below threshold → approval gate
-  │  (requires human approval via POST .../approve or .../reject)
-  ↓
-PublishFindings
-  │  Posts to Slack, adds PagerDuty incident note, persists to database
-  ↓
-End(InvestigationReply)
+START
+  → classify_alert       PydanticAI agent: severity, service, category
+  → match_runbook        Three-stage matcher (tag → disambiguator → RAG fallback)
+  → investigate          Investigator agent + K8s adapter + optional challenger
+  → analyse_root_cause   Root-cause synthesiser with runbook skill injection
+  → determine_confidence ConfidenceScore.from_factors; below threshold → approval gate
+  → [conditional]
+       needs_approval=True  → wait_for_human  interrupt() suspends graph;
+                                              resume via POST .../approve|reject
+                             → [conditional]
+                                  APPROVED → publish_findings → END
+                                  REJECTED → END
+       needs_approval=False → publish_findings → END
+```
+
+Graph nodes are wrapped with `with_envelope` (RFC §3.1 identity propagation) and emit
+typed span attributes via `utils/observability/` (`NodeSpanAttributes`, `AgentSpanAttributes`,
+`UsageAttributes`). Approval state is persisted via the LangGraph `AsyncPostgresSaver`
+checkpointer; the `wait_for_human` node uses `interrupt()` + `Command(resume=...)`.
+
+The legacy Pydantic Graph shape was:
+
+```
+ClassifyAlert → MatchRunbook → Investigate → AnalyseRootCause
+  → DetermineConfidence → [ApprovalGate] → PublishFindings → End
 ```
 
 ### Entry Points

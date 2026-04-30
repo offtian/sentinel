@@ -26,15 +26,22 @@ data/          Database models and migrations (PostgreSQL + SQLModel)
 vendors/       External SDK wrappers (Slack, PagerDuty, Jira)
 ```
 
-Both pipelines are built as [Pydantic Graph](https://ai.pydantic.dev/pydantic-graph/) DAGs with [PydanticAI](https://ai.pydantic.dev/) agents at key decision nodes. LLM calls route through [LiteLLM](https://github.com/BerriAI/litellm) SDK (in-process) via PydanticAI's `litellm:` model prefix — no external proxy.
+The support pipeline is built as a [Pydantic Graph](https://ai.pydantic.dev/pydantic-graph/) DAG. The SRE pipeline runs on [LangGraph](https://github.com/langchain-ai/langgraph) (flag-gated via `LANGGRAPH_SRE_ENABLED`). All LLM calls route through [LiteLLM](https://github.com/BerriAI/litellm) SDK (in-process) via PydanticAI's `litellm:` model prefix — no external proxy.
 
-### Alert Investigation Pipeline
+### Alert Investigation Pipeline (LangGraph)
 
 ```
-ClassifyAlert → InvestigateWithHolmes → AnalyseRootCause → DetermineConfidence → [ApprovalGate] → PublishFindings
+classify_alert → match_runbook → investigate → analyse_root_cause → determine_confidence
+  → [needs_approval?] wait_for_human → [APPROVED?] publish_findings → END
+                                      → [REJECTED] → END
+  → publish_findings → END
 ```
 
-Each node has structured error handling via `NodeError` / `PipelineNodeFailed`. The `DetermineConfidence` node enforces an approval gate for low-confidence results (configurable via `require_approval_below_confidence`).
+The SRE pipeline is implemented in `interfaces/workflows/sre_investigation.py`. Approval state
+is persisted via `AsyncPostgresSaver`; the `wait_for_human` node uses LangGraph `interrupt()`
+so investigations survive worker restarts. Enable via `LANGGRAPH_SRE_ENABLED=true`; the
+legacy Pydantic Graph pipeline remains available at `interfaces/graphs/_archive/investigation.py`
+for rollback until the staging soak window closes.
 
 ### Support Review Pipeline
 
@@ -129,6 +136,7 @@ Key settings:
 | `ROOT_CAUSE_LLM`       | Model for root cause analysis         | `openai/gpt-4.1`                            |
 | `TICKET_REVIEWER_LLM`  | Model for ticket classification       | `openai/gpt-4.1-mini`                       |
 | `RESPONSE_DRAFTER_LLM` | Model for response drafting           | `openai/gpt-4.1`                            |
+| `LANGGRAPH_SRE_ENABLED` | Route SRE investigations through LangGraph workflow (flag W2) | `false` |
 | `SRE_AUTO_INVESTIGATE` | Auto-investigate incoming alerts      | `true`                                      |
 | `SUPPORT_AUTO_DRAFT`   | Auto-draft responses for new tickets  | `true`                                      |
 | `HOLMESGPT_ENABLED`    | Enable HolmesGPT investigation engine | `true`                                      |
