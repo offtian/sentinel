@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from sentinel.vendors.slack import _parsers as slack_parsers
 
@@ -69,5 +70,5 @@ class TestParseMessageEvent:
         raw = {"type": "message", "channel": "C1", "ts": "1.0", "text": "hi"}
 
         # Then parsing raises ValidationError (not a silent empty string)
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             slack_parsers.parse_message_event(raw)
