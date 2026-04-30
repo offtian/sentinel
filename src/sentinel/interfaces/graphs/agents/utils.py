@@ -6,6 +6,8 @@ from opentelemetry import trace as otel_trace
 
 from sentinel.domain import skills as skills_mod
 from sentinel.interfaces.graphs.agents import _cache_settings
+from sentinel.utils.observability import spans as obs_spans
+from sentinel.utils.observability import usage as obs_usage
 
 
 def set_agent_span_attributes(
@@ -15,10 +17,11 @@ def set_agent_span_attributes(
     agent_name: str = "",
 ) -> None:
     """
-    Set the prompt_version_sha and model_id mandatory OTel attributes on the
-    current span per RFC §13.2, plus Langfuse-namespaced prompt attributes
-    (``langfuse.prompt.name``, ``langfuse.prompt.version``) that promote
-    spans into Langfuse's Prompt registry view.
+    Set typed agent span attributes on the current OTel span per RFC §13.2.
+
+    Emits OTel GenAI semconv keys (``gen_ai.*``) alongside the Sentinel-named
+    mandatory attrs (``prompt_version_sha``, ``model_id``) and Langfuse prompt
+    registry attrs that promote spans into Langfuse's Prompt registry view.
 
     Called immediately before ``agent.run(...)`` at every PydanticAI invocation
     site so the agent's LLM child spans inherit these attributes (the six
@@ -31,15 +34,32 @@ def set_agent_span_attributes(
         When provided, sets ``langfuse.prompt.name`` so Langfuse can group
         spans by prompt. Empty skips the attribute.
     """
-    attributes: dict[str, str] = {
-        "prompt_version_sha": prompt_sha256,
-        "langfuse.prompt.version": prompt_sha256,
-    }
-    if model_name:
-        attributes["model_id"] = model_name
-    if agent_name:
-        attributes["langfuse.prompt.name"] = agent_name
-    otel_trace.get_current_span().set_attributes(attributes)
+    attrs = obs_spans.AgentSpanAttributes(
+        gen_ai_request_model=model_name,
+        prompt_version_sha=prompt_sha256,
+        model_id=model_name,
+        agent_name=agent_name,
+    )
+    otel_trace.get_current_span().set_attributes(attrs.to_otel_dict())
+
+
+def stamp_usage_attributes(usage: Any, *, model_name: str) -> None:
+    """
+    Stamp token/cost UsageAttributes on the current OTel span.
+
+    Called immediately after ``agent.run(...)`` returns at every PydanticAI
+    invocation site so Langfuse Generation views receive token counts and
+    ``sentinel.cost_usd``. The ``usage`` argument accepts any object with
+    ``input_tokens`` and ``output_tokens`` attributes (duck-typed for
+    ``pydantic_ai.usage.RunUsage``).
+
+    :param usage: A ``pydantic_ai.usage.RunUsage`` returned by
+        ``result.usage()``.
+    :param model_name: LiteLLM model string used for cost lookup.
+    """
+    otel_trace.get_current_span().set_attributes(
+        obs_usage.extract_usage(usage, model_name=model_name).to_otel_dict()
+    )
 
 
 def get_model_name(agent: Any) -> str:

@@ -35,7 +35,8 @@ from sentinel.domain.alerts import entities as alert_entities
 from sentinel.domain.pipeline import errors as pipeline_errors
 from sentinel.domain.pipeline import queries as pipeline_queries
 from sentinel.domain.support import entities as support_entities
-from sentinel.interfaces.graphs import investigation, support_review
+from sentinel.interfaces.graphs import support_review
+from sentinel.interfaces.graphs._archive import investigation
 from sentinel.interfaces.graphs.agents import k8s_runner
 from sentinel.plugins.models import recorded as recorded_model_mod
 from sentinel.plugins.toolsets import recorded as recorded_toolset_mod
@@ -152,6 +153,11 @@ async def _replay_sre(
     No ``trace_collector`` is passed: replay must not open a fresh
     capture window (no live LLM/tool calls happen anyway, but binding a
     builder would also write a spurious ``pipeline_runs`` row).
+
+    Intentionally bypasses ``langgraph_sre_enabled``: replay must
+    reproduce the *original* pipeline execution exactly. Running a
+    LangGraph graph against a Pydantic-Graph ReplayBundle would produce
+    a different call sequence and invalidate the recorded I/O queues.
     """
     alert = alert_entities.Alert.model_validate(bundle.alert_payload)
 

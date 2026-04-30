@@ -126,9 +126,9 @@ class TestInstrumentedNodeRun:
             )
             asyncio.run(wrapped())
 
-        # Then the six envelope-owned attributes plus team_profile and the
-        # Langfuse-namespaced observation/session/user attributes land on
-        # the span as construction attributes
+        # Then the six envelope-owned attributes plus pipeline/node labels,
+        # team_profile, and the Langfuse-namespaced observation/session/user
+        # attributes land on the span as construction attributes
         attrs = _start_span_attributes(fake_span)
         expected_keys = {
             "request_id",
@@ -138,6 +138,8 @@ class TestInstrumentedNodeRun:
             "pii_class",
             "received_at",
             "team_profile",
+            "pipeline",
+            "node",
             "langfuse.observation.type",
             "langfuse.session.id",
             "langfuse.user.id",
@@ -180,9 +182,11 @@ class TestInstrumentedNodeRun:
             )
             asyncio.run(wrapped())
 
-        # Then the envelope attrs still land on the span and the failure was logged
+        # Then the envelope attrs still land on the span and the failure was logged.
+        # team_profile is present but empty — NodeSpanAttributes always emits the
+        # key; _get_team_profile() returns "" when config bootstrap fails.
         attrs = _start_span_attributes(fake_span)
-        assert "team_profile" not in attrs
+        assert attrs["team_profile"] == ""
         assert "request_id" in attrs
         log_event.assert_called_once()
         assert log_event.call_args.args[0] == "otel.team_profile.unset"

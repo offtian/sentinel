@@ -476,6 +476,9 @@ async def _run_investigator_agent(
             ),
         )
 
+    agent_utils.stamp_usage_attributes(
+        result.usage(), model_name=agent_utils.get_model_name(investigator_agent)
+    )
     analysis = result.output.summary
     sources = list(result.output.sources_queried)
     tool_calls = [
@@ -736,6 +739,10 @@ class AnalyseRootCause(BaseNode[State, Dependencies, common.InvestigationReply])
                     tool_calls_with_data=self.tool_calls_with_data,
                     tool_calls_total=self.tool_calls_total,
                 )
+
+            agent_utils.stamp_usage_attributes(
+                result.usage(), model_name=agent_utils.get_model_name(analyser_agent)
+            )
 
             if ctx.deps.trace_collector and hasattr(
                 ctx.deps.trace_collector, "record_agent_result"

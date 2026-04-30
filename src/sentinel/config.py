@@ -243,6 +243,18 @@ class BaseConfiguration(BaseModel):
         return self.settings.runbook_rag_fallback_enabled
 
     @property
+    def langgraph_sre_enabled(self) -> bool:
+        """
+        Return True when the SRE pipeline should route to the LangGraph workflow.
+
+        Surfaced from ``Settings.langgraph_sre_enabled`` (W2 feature flag) so
+        the worker routing decision reads from the configuration contract rather
+        than ``Settings`` directly. Defaults to False — the Pydantic Graph
+        pipeline remains live until an operator opts in.
+        """
+        return self.settings.langgraph_sre_enabled
+
+    @property
     def embedder_model(self) -> str:
         """
         Return the normalised embedder model identifier for the F6.J Stage 3 path.

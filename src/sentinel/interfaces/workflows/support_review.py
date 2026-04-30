@@ -145,6 +145,9 @@ async def classify_ticket(state: support_state_mod.SupportReviewState) -> dict[s
         )
         raise
 
+    agent_utils.stamp_usage_attributes(
+        result.usage(), model_name=agent_utils.get_model_name(reviewer_agent)
+    )
     classification: ticket_reviewer.TicketClassification = result.output
     logs.log_event(
         "ticket_classified",
@@ -306,6 +309,9 @@ async def draft_response(state: support_state_mod.SupportReviewState) -> dict[st
         )
         raise
 
+    agent_utils.stamp_usage_attributes(
+        result.usage(), model_name=agent_utils.get_model_name(drafter_agent)
+    )
     drafted: response_drafter.DraftedResponse = result.output
     suggestion = support_entities.ResponseSuggestion(
         ticket_id=ticket.id,

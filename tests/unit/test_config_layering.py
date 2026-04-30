@@ -289,3 +289,38 @@ class TestSettingsFoundationsFields:
         # (loader resolves team-specific subdirectories from this root)
         assert isinstance(settings.runbooks_root, Path)
         assert settings.runbooks_root.parts[-1] == "runbooks"
+
+    def test_langgraph_sre_enabled_defaults_to_false(self) -> None:
+        # Given no override
+        # When Settings is constructed
+        settings = settings_mod.Settings()
+
+        # Then langgraph_sre_enabled defaults to False — the W2 feature
+        # flag that routes SRE investigations to the LangGraph workflow is
+        # off by default so the Pydantic Graph pipeline remains live until
+        # an operator opts in
+        assert settings.langgraph_sre_enabled is False
+
+
+class TestLangGraphSREFeatureFlag:
+    """Tests for the W2 LangGraph SRE feature flag surfaced on BaseConfiguration."""
+
+    def test_langgraph_sre_enabled_returns_false_when_settings_is_false(self) -> None:
+        # Given Settings with langgraph_sre_enabled=False (default)
+        s = settings_mod.Settings()
+
+        # When BaseConfiguration is constructed from those settings
+        config = config_mod.BaseConfiguration(settings=s)
+
+        # Then langgraph_sre_enabled property reflects the False setting
+        assert config.langgraph_sre_enabled is False
+
+    def test_langgraph_sre_enabled_returns_true_when_settings_is_true(self) -> None:
+        # Given Settings with langgraph_sre_enabled explicitly set to True
+        s = settings_mod.Settings(langgraph_sre_enabled=True)
+
+        # When BaseConfiguration is constructed from those settings
+        config = config_mod.BaseConfiguration(settings=s)
+
+        # Then langgraph_sre_enabled property reflects the True setting
+        assert config.langgraph_sre_enabled is True

@@ -42,11 +42,20 @@ from sentinel.domain.pipeline import tracer as pipeline_tracer
 from sentinel.domain.support import entities as support_entities
 from sentinel.domain.support import operations as support_ops
 from sentinel.interfaces.graphs import agents as agent_module
-from sentinel.interfaces.graphs import common, investigation, support_review
+from sentinel.interfaces.graphs import common, support_review
+from sentinel.interfaces.graphs._archive import investigation
 from sentinel.interfaces.graphs.agents import k8s_runner
+from sentinel.interfaces.workflows import _checkpointer as workflows_checkpointer
+from sentinel.interfaces.workflows import sre_investigation as workflows_sre_investigation
 from sentinel.plugins.toolsets import _runbook_scope as scope_mod
 from sentinel.settings import settings
 from sentinel.utils import llm_warmup, logs
+
+
+# Module-level graph state — set at startup when langgraph_sre_enabled is True.
+# None when the flag is off or the DB is not configured (safe fallback to legacy path).
+_sre_investigation_graph: Any = None
+_sre_checkpointer_close: Any = None
 
 
 def _collect_model_ids(settings: object, *attr_names: str) -> list[str]:
@@ -270,19 +279,47 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
     )
 
     try:
-        result = await investigation.investigate_alert(
-            alert=alert,
-            envelope=envelope,
-            agent_for=cfg.agent_for,
-            pagerduty_client=pd_client,
-            persist_fn=_persist,
-            trace_collector=et,
-            classifier_toolsets=shared_mcp,
-            investigator_toolsets=investigator_toolsets,
-            analyser_toolsets=analyser_toolsets,
-            k8s_adapter=k8s_adapter,
-            challenger_adapter=challenger_adapter,
-        )
+        if (
+            getattr(settings, "langgraph_sre_enabled", False)
+            and _sre_investigation_graph is not None
+        ):
+            lg_outcome = await workflows_sre_investigation.investigate_alert(
+                alert=alert,
+                envelope=envelope,
+                graph=_sre_investigation_graph,
+            )
+            # Convert InvestigationOutcome to a serializable form for the result store.
+            result_data = {
+                "request_id": str(lg_outcome.request_id),
+                "classification_category": lg_outcome.classification_category,
+                "root_cause": lg_outcome.root_cause,
+                "remediation": lg_outcome.remediation,
+                "confidence_total": (
+                    lg_outcome.confidence.total if lg_outcome.confidence is not None else None
+                ),
+                "confidence_label": (
+                    lg_outcome.confidence.label.value
+                    if lg_outcome.confidence is not None
+                    else None
+                ),
+                "needs_approval": lg_outcome.needs_approval,
+                "findings_published": lg_outcome.findings_published,
+            }
+        else:
+            legacy_result = await investigation.investigate_alert(
+                alert=alert,
+                envelope=envelope,
+                agent_for=cfg.agent_for,
+                pagerduty_client=pd_client,
+                persist_fn=_persist,
+                trace_collector=et,
+                classifier_toolsets=shared_mcp,
+                investigator_toolsets=investigator_toolsets,
+                analyser_toolsets=analyser_toolsets,
+                k8s_adapter=k8s_adapter,
+                challenger_adapter=challenger_adapter,
+            )
+            result_data = json.loads(legacy_result.model_dump_json())
     except Exception:
         # F4.7: pass runbook fields (None for now — F6 wires real values).
         await et.complete_pipeline(
@@ -293,7 +330,6 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
         )
         raise
 
-    result_data = json.loads(result.model_dump_json())
     await et.complete_pipeline(
         status="completed",
         output_data=result_data,
@@ -302,7 +338,7 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
         runbook_version_sha=None,
     )
 
-    return result.model_dump_json()
+    return json.dumps(result_data)
 
 
 async def _run_support_review(payload: dict[str, object]) -> str:
@@ -514,6 +550,15 @@ async def _main() -> None:
         await async_db.connect_db()
         logs.log_event("worker.database_initialised")
 
+    if settings.langgraph_sre_enabled:
+        global _sre_investigation_graph, _sre_checkpointer_close  # noqa: PLW0603
+        sre_saver, sre_close = await workflows_checkpointer.build_checkpointer(settings)
+        _sre_investigation_graph = workflows_sre_investigation.build_sre_investigation_graph(
+            checkpointer=sre_saver,
+        )
+        _sre_checkpointer_close = sre_close
+        logs.log_event("worker.sre_investigation_graph_initialised")
+
     # Run warmup in the background so polling starts immediately. The task
     # holds a reference for the lifetime of `_main` to keep it from being
     # garbage-collected mid-flight; on shutdown we cancel it cleanly.
@@ -527,6 +572,9 @@ async def _main() -> None:
     finally:
         if not warmup_task.done():
             warmup_task.cancel()
+        if _sre_checkpointer_close is not None:
+            await _sre_checkpointer_close()
+            logs.log_event("worker.sre_investigation_graph_closed")
         if settings.database_url:
             await async_db.disconnect_db()
         await database.close_engine()
