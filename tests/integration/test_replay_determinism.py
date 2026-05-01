@@ -1,13 +1,18 @@
 """
-F4.8 — 30-run replay determinism for the SRE investigation pipeline.
+F4.8 / F8.6 — 30-run replay determinism for the SRE investigation pipeline.
 
 Captures a synthetic crashloop bundle once via :class:`CapturingModel`
-plumbed through the real ``investigate_alert`` graph (with a deterministic
-:class:`pydantic_ai.models.test.TestModel` behind every agent), then
-replays the same bundle 30 times against a fresh
+plumbed through the real ``investigate_alert`` LangGraph entry-point (with a
+deterministic :class:`pydantic_ai.models.test.TestModel` behind every agent),
+then replays the same bundle 30 times against a fresh
 :class:`~sentinel.plugins.models.recorded.RecordedModel` per iteration
-and asserts every replayed output is byte-identical to
-``bundle.final_outputs``.
+and asserts every replayed output is bit-identical to the first replay.
+
+Updated for F8: uses the LangGraph workflow API
+(``sre_investigation.investigate_alert(alert=, envelope=, graph=)``)
+with an in-memory checkpointer and a patched ``get_config`` singleton,
+replacing the pre-LangGraph Pydantic Graph API that was removed when the
+SRE pipeline migrated to LangGraph in PR #35.
 
 This guards against three regression classes the F4 phase B contract
 must hold:
@@ -29,13 +34,15 @@ import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any
+from unittest import mock
 
 import pytest
+from langgraph.checkpoint.memory import MemorySaver
 from pydantic_ai.models import test as pydantic_ai_test_model
 
 from sentinel.domain.alerts import entities as alert_entities
-from sentinel.interfaces.graphs import investigation
-from sentinel.interfaces.graphs.agents import alert_classifier, root_cause_analyser
+from sentinel.interfaces.graphs.agents import alert_classifier, investigator, root_cause_analyser
+from sentinel.interfaces.workflows import sre_investigation as sre_mod
 from sentinel.plugins.models import capturing as capturing_mod
 from sentinel.plugins.models import recorded as recorded_model_mod
 from sentinel.plugins.toolsets import _runtime as runtime_mod
@@ -60,7 +67,7 @@ def _build_crashloop_alert() -> alert_entities.Alert:
 
 def _build_real_agents() -> dict[str, Any]:
     """
-    Construct the two SRE agents used by the investigation graph.
+    Construct the three SRE agents used by the investigation graph.
 
     Each agent gets a deterministic :class:`TestModel` whose
     ``custom_output_args`` is pinned to a schema-conforming dict so the
@@ -69,6 +76,7 @@ def _build_real_agents() -> dict[str, Any]:
     """
     classifier = alert_classifier.build_agent()
     analyser = root_cause_analyser.build_agent()
+    inv_agent = investigator.build_agent()
     classifier.model = pydantic_ai_test_model.TestModel(
         custom_output_args={
             "severity": "high",
@@ -88,7 +96,18 @@ def _build_real_agents() -> dict[str, Any]:
             "timeline": "started 2026-04-26 16:00 UTC",
         },
     )
-    return {"alert_classifier": classifier, "root_cause_analyser": analyser}
+    inv_agent.model = pydantic_ai_test_model.TestModel(
+        custom_output_args={
+            "summary": "",
+            "sources_queried": [],
+            "tool_calls": [],
+        },
+    )
+    return {
+        "alert_classifier": classifier,
+        "root_cause_analyser": analyser,
+        "investigator": inv_agent,
+    }
 
 
 def _wrap_with_capturing(agents: dict[str, Any]) -> None:
@@ -112,6 +131,37 @@ def _swap_in_recorded(
     return recorded_model
 
 
+def _build_fake_config(agents: dict[str, Any]) -> mock.MagicMock:
+    """Build a minimal config mock that serves the given agents."""
+    cfg = mock.MagicMock()
+    cfg.agent_for = mock.MagicMock(side_effect=lambda name: agents.get(name, mock.MagicMock()))
+    cfg.runbooks = None
+    cfg.db_session_factory = None
+    cfg.k8s_adapter = None
+    cfg.require_approval_below_confidence = 0.7
+    cfg.post_to_slack = False
+    cfg.investigator_toolsets = ()
+    cfg.analyser_toolsets = ()
+    return cfg
+
+
+def _outcome_to_dict(outcome: sre_mod.InvestigationOutcome) -> dict[str, Any]:
+    """Serialise an ``InvestigationOutcome`` to a JSON-stable dict for comparison."""
+    confidence = outcome.confidence
+    return {
+        "classification_category": outcome.classification_category,
+        "root_cause": outcome.root_cause,
+        "remediation": outcome.remediation,
+        "confidence_total": confidence.total if confidence else None,
+        "confidence_label": confidence.label.value if confidence else None,
+        "needs_approval": outcome.needs_approval,
+        "findings_published": outcome.findings_published,
+        "approval_decision": (
+            outcome.approval_decision.value if outcome.approval_decision else None
+        ),
+    }
+
+
 async def _run_pipeline(
     *,
     alert: alert_entities.Alert,
@@ -121,26 +171,21 @@ async def _run_pipeline(
     """
     Drive the SRE investigation graph against *agents* and return its output dict.
 
-    ``trace_collector`` is intentionally ``None`` so the graph never opens
-    a fresh capture window during replay (per F4.7 design — replay must
-    not record into the in-flight builder).
+    Uses a fresh :class:`MemorySaver` checkpointer per call so state never
+    bleeds between capture and replay iterations.
     """
+    cfg = _build_fake_config(agents)
+    if recorded_toolset is not None:
+        cfg.investigator_toolsets = (recorded_toolset,)
+        cfg.analyser_toolsets = (recorded_toolset,)
 
-    def _agent_for(name: str) -> Any:
-        return agents[name]
+    graph = sre_mod.build_sre_investigation_graph(checkpointer=MemorySaver())
+    envelope = factories.make_envelope()
 
-    toolsets: tuple[Any, ...] = (recorded_toolset,) if recorded_toolset is not None else ()
+    with mock.patch.object(sre_mod, "get_config", return_value=cfg):
+        outcome = await sre_mod.investigate_alert(alert=alert, envelope=envelope, graph=graph)
 
-    result = await investigation.investigate_alert(
-        alert=alert,
-        envelope=factories.make_envelope(),
-        agent_for=_agent_for,
-        post_to_slack=False,
-        classifier_toolsets=toolsets,
-        analyser_toolsets=toolsets,
-    )
-    payload: dict[str, Any] = json.loads(result.model_dump_json())
-    return payload
+    return _outcome_to_dict(outcome)
 
 
 @pytest.mark.asyncio
@@ -152,7 +197,7 @@ async def test_replay_is_deterministic_across_30_runs() -> None:
     Catches iterator-state leaks, canonicalisation drift, and pipeline-
     level non-determinism in one assertion sweep.
     """
-    # Given a synthetic crashloop alert and the two SRE agents wrapped for capture
+    # Given a synthetic crashloop alert and the three SRE agents wrapped for capture
     alert = _build_crashloop_alert()
     agents = _build_real_agents()
     _wrap_with_capturing(agents)
@@ -174,7 +219,7 @@ async def test_replay_is_deterministic_across_30_runs() -> None:
         final_outputs=captured_output,
     )
 
-    # Then the bundle has at least the two SRE agent calls
+    # Then the bundle has at least the SRE agent calls (classifier + analyser)
     assert len(captured_bundle.llm_io) >= 2, (
         "expected at least two LLM entries (classifier + analyser) in the captured bundle"
     )
