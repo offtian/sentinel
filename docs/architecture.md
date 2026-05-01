@@ -140,7 +140,13 @@ START
   → match_runbook        Three-stage matcher (tag → disambiguator → RAG fallback)
   → investigate          Investigator agent + K8s adapter + optional challenger
   → analyse_root_cause   Root-cause synthesiser with runbook skill injection
-  → determine_confidence ConfidenceScore.from_factors; below threshold → approval gate
+  → assess_quality       Groundedness gate (R-QG-1): every Finding must cite ≥1
+                         evidence_ref; vacuously passes when investigation skipped/
+                         failed or produced no findings; failure forces
+                         needs_approval=True (soft-fail → human review, F8.3)
+  → determine_confidence ConfidenceScore.from_factors; below threshold → approval
+                         gate; also forces needs_approval=True if quality_verdict
+                         failed
   → [conditional]
        needs_approval=True  → wait_for_human  interrupt() suspends graph;
                                               resume via POST .../approve|reject

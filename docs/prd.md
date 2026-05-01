@@ -167,6 +167,8 @@ Acceptance criteria:
 - [x] Immutable `ApprovalRequest` domain entity with approve/reject/auto-approve transitions
 - [x] Append-only audit log with SHA-256 input hashes for regulatory traceability
 - [x] Supervisor graph wrapping both pipelines with rule-based quality gate before publishing
+- [x] **R-QG-1** — Deterministic groundedness gate: every `Finding` must cite ≥1 `evidence_ref`; vacuously passes when investigation was skipped/failed or produced no findings; gate failure forces `needs_approval=True` (soft-fail → human review) rather than hard-terminating (covered by `domain/quality/groundedness.py` + `assess_quality` LangGraph node + 9 unit tests in `tests/unit/domain/quality/test_groundedness.py`, F8.1–F8.3)
+- [x] **R-CO-1** — Audit trail writes for every SRE investigation state transition: `record_transition()` in `application/audit/__init__.py` appends `audit_log` rows with `actor="pipeline"`, `resource_type="investigation"`, `prev_hash=None` (foundations; chaining deferred); called from `investigate_alert` (received→completed) and `resume_investigation` (awaiting_approval→approved/rejected); soft-fails so pipeline continues on DB errors (F8.4)
 - [x] Tier 2 component evaluations: per-agent quality scoring with golden datasets
 - [x] Every prompt template carries a `prompt_version` (git SHA + filename) and a `prompt_sha256` hash, recorded on each `AgentCallRecord` and `AuditLogRecord`
 - [ ] Skill files are content-hashed and the active hash is recorded alongside the prompt hash
@@ -202,7 +204,7 @@ Acceptance criteria:
 - [x] `extends:` shared-preamble composition with cycle detection (max chain depth 5); `content_sha` computed over flattened result so a parent body change cascades to child SHAs (covered by `domain/runbooks/loader.py::resolve_extends`)
 - [x] Weekly fingerprint-clustering flywheel: clusters `runbook_match` no-match rows over last 7 days by `sha256(sorted_alert_labels || category)[:16]`; opens draft auto-PR for clusters with ≥ 3 occurrences via templated skeleton at `domain/runbooks/templates/autogen_runbook.j2` (covered by `scripts/runbook_gap_flywheel.py` + migration 018)
 - [x] Confluence read-only render: PR-bot publishes runbooks to Confluence on every merge to main; idempotent via `sentinel_sha` page property; edits in Confluence are discarded on next publish (covered by `vendors/confluence/client.py` + `scripts/runbook_confluence_publish.py`)
-- [ ] **R-AG-4** — 30-run determinism CI continues to pass on runs that traverse Stage 2 (LLM I/O captured in F4 replay bundle)
+- [x] **R-AG-4** — 30-run determinism CI continues to pass on runs that traverse Stage 2 (LLM I/O captured in F4 replay bundle) — `tests/integration/test_replay_determinism.py` rewritten for LangGraph API; 30-run sweep + SHA stability test included in `just test-integration` (F8.6)
 - [ ] **R-OB-2** — Mandatory span attributes (`runbook_id`, `runbook_content_sha`, `match_method`) emitted on `MatchRunbook` span
 - [x] **R-TL-3** *(F7 contract update)* — Runbook grants (`RunbookGrant`) enforced at the `RunbookScopedToolset` wrapper boundary, not at function entry; three rejection types (`ToolNotInRunbookError`, `TenantScopeViolationError`, `ToolBudgetExceededError`) each write an `audit_log` row (covered by `domain/tools/grants.py` + `plugins/toolsets/_runbook_scope.py` + `tests/unit/domain/tools/test_grants.py` + `tests/integration/test_tenant_isolation.py`)
 
