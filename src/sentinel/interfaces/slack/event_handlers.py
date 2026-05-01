@@ -285,14 +285,6 @@ async def _run_sre(
         )
         blocks = _investigation_blocks(reply, alert.title)
 
-    blocks = slack_blocks.investigation_summary_blocks(
-        alert_id=reply.alert_id,
-        alert_title=alert.title,
-        root_cause=reply.root_cause,
-        remediation=reply.remediation,
-        confidence_label=reply.confidence.label.value if reply.confidence else None,
-        findings_summary=reply.findings_summary or "",
-    )
     await status.replace_with_result(
         text=f"Investigation complete: {alert.title}",
         blocks=blocks,
