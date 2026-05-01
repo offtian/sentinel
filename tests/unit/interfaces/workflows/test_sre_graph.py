@@ -127,6 +127,7 @@ class TestBuildSreInvestigationGraph:
             "match_runbook",
             "investigate",
             "analyse_root_cause",
+            "assess_quality",
             "determine_confidence",
             "wait_for_human",
             "publish_findings",
@@ -148,7 +149,8 @@ class TestBuildSreInvestigationGraph:
         assert "match_runbook" in adjacency.get("classify_alert", set())
         assert "investigate" in adjacency.get("match_runbook", set())
         assert "analyse_root_cause" in adjacency.get("investigate", set())
-        assert "determine_confidence" in adjacency.get("analyse_root_cause", set())
+        assert "assess_quality" in adjacency.get("analyse_root_cause", set())
+        assert "determine_confidence" in adjacency.get("assess_quality", set())
         # And the publish_findings node terminates at END
         assert "__end__" in adjacency.get("publish_findings", set())
 
