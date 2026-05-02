@@ -49,6 +49,7 @@ import fastapi
 import pytest
 import structlog
 from fastapi.testclient import TestClient
+from langgraph.checkpoint.memory import MemorySaver
 from logfire._internal.config import GLOBAL_CONFIG as _LOGFIRE_GLOBAL_CONFIG
 from opentelemetry import trace as otel_trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -59,13 +60,14 @@ from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.interfaces.api import middleware as middleware_mod
 from sentinel.interfaces.api.routers.sre import router as sre_router_mod
 from sentinel.interfaces.api.routers.support import router as support_router_mod
-from sentinel.interfaces.graphs import investigation, support_review
+from sentinel.interfaces.graphs import support_review
 from sentinel.interfaces.graphs.agents import (
     alert_classifier,
     response_drafter,
     root_cause_analyser,
     ticket_reviewer,
 )
+from sentinel.interfaces.workflows import sre_investigation as sre_mod
 from sentinel.interfaces.workflows import support_review as workflows_support_review
 from tests.functional.conftest import (
     EmptyDocumentSearcher,
@@ -298,18 +300,27 @@ def patched_sre_router(monkeypatch, captured_run):
             }
         )
 
+        config_stub.runbooks = None
+        config_stub.db_session_factory = None
+        config_stub.k8s_adapter = None
+        config_stub.require_approval_below_confidence = 0.7
+        config_stub.post_to_slack = False
+        config_stub.investigator_toolsets = ()
+        config_stub.analyser_toolsets = ()
+
         # Open a recording span around the pipeline run so the
-        # ``instrumented_node_run`` calls land on a recording span that
-        # the in-memory exporter can capture. In production, the
-        # FastAPI/PydanticAI instrumentation creates spans for every
-        # request and node; this test stub plays that role.
+        # ``with_envelope``-wrapped LangGraph nodes land on a recording span
+        # that the in-memory exporter can capture.
         tracer = otel_trace.get_tracer("sentinel.test.integration")
-        with tracer.start_as_current_span("sre.pipeline"):
-            captured_run["sre_reply"] = await investigation.investigate_alert(
+        graph = sre_mod.build_sre_investigation_graph(checkpointer=MemorySaver())
+        with (
+            tracer.start_as_current_span("sre.pipeline"),
+            mock.patch.object(sre_mod, "get_config", return_value=config_stub),
+        ):
+            captured_run["sre_reply"] = await sre_mod.investigate_alert(
                 alert=alert,
                 envelope=envelope,
-                agent_for=config_stub.agent_for,
-                post_to_slack=False,
+                graph=graph,
             )
 
         return fastapi.responses.JSONResponse(
@@ -603,12 +614,21 @@ class TestEnvelopeStructlogContextBinding:
                     "root_cause_analyser": _make_fake_agent(_fake_root_cause_run),
                 }
             )
-            captured_run["sre_reply"] = await investigation.investigate_alert(
-                alert=alert,
-                envelope=elevated,
-                agent_for=config_stub.agent_for,
-                post_to_slack=False,
-            )
+            config_stub.runbooks = None
+            config_stub.db_session_factory = None
+            config_stub.k8s_adapter = None
+            config_stub.require_approval_below_confidence = 0.7
+            config_stub.post_to_slack = False
+            config_stub.investigator_toolsets = ()
+            config_stub.analyser_toolsets = ()
+
+            graph = sre_mod.build_sre_investigation_graph(checkpointer=MemorySaver())
+            with mock.patch.object(sre_mod, "get_config", return_value=config_stub):
+                captured_run["sre_reply"] = await sre_mod.investigate_alert(
+                    alert=alert,
+                    envelope=elevated,
+                    graph=graph,
+                )
             return fastapi.responses.JSONResponse(
                 status_code=202,
                 content={
