@@ -115,7 +115,7 @@ just test
 just lint
 
 # Auto-format
-just lint-fix
+just fmt
 
 # Database migrations
 just run-db-migrations

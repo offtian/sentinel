@@ -123,6 +123,7 @@ def _build_fake_config(*, require_approval_below_confidence: float = 0.7) -> moc
     cfg.require_approval_below_confidence = require_approval_below_confidence
     cfg.post_to_slack = False
     cfg.runbooks = None
+    cfg.db_session_factory = None
     cfg.k8s_adapter = None
     cfg.pagerduty_client = None
     cfg.investigator_toolsets = ()

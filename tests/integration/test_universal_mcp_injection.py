@@ -13,9 +13,18 @@ from __future__ import annotations
 from unittest import mock
 
 from pydantic_ai.mcp import MCPServerSSE
+from pydantic_ai.toolsets import WrapperToolset
 
 from sentinel import settings as settings_mod
 from sentinel.plugins.common import config as plugins_config_mod
+
+
+def _unwrap_mcp_url(toolset: object) -> str | None:
+    """Return the URL of an MCPServerSSE, unwrapping any WrapperToolset layers."""
+    inner = toolset
+    while isinstance(inner, WrapperToolset):
+        inner = inner.wrapped
+    return str(inner.url) if isinstance(inner, MCPServerSSE) else None
 
 
 def _make_settings(**overrides: object) -> mock.MagicMock:
@@ -53,12 +62,12 @@ class TestK8sNoDoubleMountRegression:
 
         # Then the shared MCP server (datadog) appears exactly once
         assert adapter is not None
-        sse_urls = [t.url for t in adapter._mcp_toolsets if isinstance(t, MCPServerSSE)]
-        datadog_urls = [u for u in sse_urls if "9090" in str(u)]
+        sse_urls = [url for t in adapter._mcp_toolsets if (url := _unwrap_mcp_url(t)) is not None]
+        datadog_urls = [u for u in sse_urls if "9090" in u]
         assert len(datadog_urls) == 1
 
         # And the K8s-specific MCP server is also present
-        k8s_urls = [u for u in sse_urls if "9091" in str(u)]
+        k8s_urls = [u for u in sse_urls if "9091" in u]
         assert len(k8s_urls) == 1
 
         # And total count is 2 (one shared + one K8s-specific)

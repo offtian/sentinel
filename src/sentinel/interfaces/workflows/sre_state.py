@@ -41,6 +41,7 @@ from sentinel.domain.alerts import entities as alert_entities
 from sentinel.domain.approval import entities as approval_entities
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.investigations import entities as investigation_entities
+from sentinel.domain.quality import groundedness as groundedness_mod
 from sentinel.domain.runbooks import models as runbook_models
 
 
@@ -100,6 +101,7 @@ class InvestigationState(TypedDict, total=False):
     # → determine_confidence so the evidence floor and confidence scoring have
     # access to tool call counts and raw LLM confidence across checkpoints.
     _investigation_context: dict[str, Any]
+    quality_verdict: groundedness_mod.GroundednessVerdict | None
     confidence: confidence_entities.ConfidenceScore | None
     needs_approval: bool
     approval_decision: approval_entities.ApprovalDecision | None

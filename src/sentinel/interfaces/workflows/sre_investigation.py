@@ -52,12 +52,14 @@ from langgraph import types as lg_types
 from langgraph.graph import state as lg_state
 
 from sentinel import config as config_mod
+from sentinel.application import audit as audit_mod
 from sentinel.data.primitives import envelope as envelope_module
 from sentinel.domain.alerts import entities as alert_entities
 from sentinel.domain.approval import entities as approval_entities
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.investigations import adapters as investigation_adapters
 from sentinel.domain.investigations import entities as investigation_entities
+from sentinel.domain.quality import groundedness as groundedness_mod
 from sentinel.domain.runbooks import alert_view as runbook_alert_view
 from sentinel.domain.runbooks import matcher as runbook_matcher_mod
 from sentinel.domain.runbooks import models as runbook_models
@@ -602,6 +604,7 @@ async def analyse_root_cause(
             source=source,
             summary=evidence,
             relevance=analysis.confidence,
+            evidence_refs=(source,),
         )
         for source, evidence in zip(investigation_sources, analysis.evidence, strict=False)
     ]
@@ -626,6 +629,48 @@ async def analyse_root_cause(
             "raw_confidence": analysis.confidence,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# T20b — assess_quality (F8 groundedness gate)
+# ---------------------------------------------------------------------------
+
+
+async def assess_quality(state: sre_state_mod.InvestigationState) -> dict[str, Any]:
+    """
+    Run the F8 deterministic groundedness gate and write a quality verdict.
+
+    Reads ``state["investigation"].findings`` and the investigation status
+    stashed in ``state["_investigation_context"]["status"]``; delegates to
+    :func:`groundedness_mod.assess_groundedness` which returns a frozen
+    :class:`GroundednessVerdict`.
+
+    Soft-fail: this node never short-circuits the workflow. When the verdict
+    fails, ``determine_confidence`` will force ``needs_approval=True`` so the
+    ungrounded result is routed to a human reviewer rather than hard-killed.
+    """
+    alert = state["alert"]
+    investigation = state.get("investigation")
+    inv_ctx: dict[str, Any] = state.get("_investigation_context", {})
+    investigation_status: str = inv_ctx.get("status", "skipped")
+
+    findings = tuple(investigation.findings) if investigation else ()
+    verdict = groundedness_mod.assess_groundedness(
+        findings=findings,
+        investigation_status=investigation_status,
+    )
+
+    logs.log_event(
+        "quality_assessed",
+        params={
+            "alert_id": alert.id,
+            "groundedness_pass": verdict.passed,
+            "missing_finding_count": len(verdict.missing_evidence_finding_indices),
+            "reason": verdict.reason,
+        },
+    )
+
+    return {"quality_verdict": verdict}
 
 
 # ---------------------------------------------------------------------------
@@ -697,6 +742,20 @@ async def determine_confidence(
 
     threshold = config.require_approval_below_confidence
     needs_approval = requires_approval or (confidence.total < threshold)
+
+    # F8: if the groundedness gate failed, force human review regardless of
+    # confidence score — ungrounded findings must not be auto-published.
+    quality_verdict = state.get("quality_verdict")
+    if quality_verdict is not None and not quality_verdict.passed:
+        needs_approval = True
+        logs.log_event(
+            "groundedness_check_failed",
+            params={
+                "alert_id": alert.id,
+                "reason": quality_verdict.reason,
+                "missing_finding_count": len(quality_verdict.missing_evidence_finding_indices),
+            },
+        )
 
     logs.log_event(
         "investigation_confidence_determined",
@@ -951,6 +1010,7 @@ def build_sre_investigation_graph(
     builder.add_node(
         "analyse_root_cause", cast("Any", envelope_mod.with_envelope(analyse_root_cause))
     )
+    builder.add_node("assess_quality", cast("Any", envelope_mod.with_envelope(assess_quality)))
     builder.add_node(
         "determine_confidence", cast("Any", envelope_mod.with_envelope(determine_confidence))
     )
@@ -961,7 +1021,8 @@ def build_sre_investigation_graph(
     builder.add_edge("classify_alert", "match_runbook")
     builder.add_edge("match_runbook", "investigate")
     builder.add_edge("investigate", "analyse_root_cause")
-    builder.add_edge("analyse_root_cause", "determine_confidence")
+    builder.add_edge("analyse_root_cause", "assess_quality")
+    builder.add_edge("assess_quality", "determine_confidence")
 
     # ``path_map`` enumerates both possible targets so the static graph
     # view (used by visualisation tooling and shape-check tests) records
@@ -1098,7 +1159,23 @@ async def investigate_alert(
         _seed_state(alert=alert, envelope=envelope),
         config=_thread_config(envelope.request_id),
     )
-    return _outcome_from_state(state, envelope.request_id)
+    outcome = _outcome_from_state(state, envelope.request_id)
+
+    # R-CO-1: record the terminal state transition in the audit log.
+    config = get_config()
+    db_session_factory = getattr(config, "db_session_factory", None)
+    if db_session_factory is not None:
+        async with db_session_factory() as session:
+            await audit_mod.record_transition(
+                request_id=envelope.request_id,
+                from_state="received",
+                to_state="completed" if outcome.findings_published else "awaiting_approval",
+                reason="investigation pipeline finished",
+                db_session=session,
+            )
+            await session.commit()
+
+    return outcome
 
 
 # ---------------------------------------------------------------------------
@@ -1134,7 +1211,24 @@ async def resume_investigation(
         lg_types.Command(resume=resume_payload),
         config=_thread_config(request_id),
     )
-    return _outcome_from_state(state, request_id)
+    outcome = _outcome_from_state(state, request_id)
+
+    # R-CO-1: record the approval decision in the audit log.
+    config = get_config()
+    db_session_factory = getattr(config, "db_session_factory", None)
+    if db_session_factory is not None:
+        decision_label = decision.value
+        async with db_session_factory() as session:
+            await audit_mod.record_transition(
+                request_id=request_id,
+                from_state="awaiting_approval",
+                to_state=f"approval_{decision_label}",
+                reason=reason or f"approval decision: {decision_label}",
+                db_session=session,
+            )
+            await session.commit()
+
+    return outcome
 
 
 # ---------------------------------------------------------------------------

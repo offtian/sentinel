@@ -31,13 +31,15 @@
 | [sentinel-foundations-f4-otel-langfuse-replay](sentinel-foundations-f4-otel-langfuse-replay.md) | F4 Phase A — OTel → Langfuse triple: 9 mandatory span attrs, MandatoryAttributesValidator, Langfuse OTLP exporter, local v3 docker-compose | PR #28 |
 | [sentinel-foundations-f4-replay-bundle](sentinel-foundations-f4-replay-bundle.md) | F4 Phase B — RFC §3.8 ReplayBundle (tool + LLM I/O capture), replay CLI on the new shape, 30-run determinism CI, architecture docs | PR #29 |
 | [langgraph-sre-migration](langgraph-sre-migration.md) | SRE pipeline → LangGraph: typed observability layer, interrupt-based approval gate, flag-gated cutover, Phase 7 cleanup | PR #35 |
+| [slack-vendor-cleanup](slack-vendor-cleanup.md) | Restructure `vendors/slack.py` into typed package: consolidate Block Kit, typed event parsers, `AsyncSlackClient` wrapper, structured logging | PR #34 |
 
 ### In Progress
 
 | Plan | Goal | Progress | Notes |
 |------|------|----------|-------|
 | [grafana-metrics](grafana-metrics.md) | OTel metrics instrumentation for Grafana dashboards | 2/5 | Prometheus reader + basic metrics wired |
-| [sentinel-hedgefund-foundations](sentinel-hedgefund-foundations.md) | Evolve current codebase into RFC-001 v0.4 foundations (config, identity, OTel→Langfuse→replay, LiteLLM proxy, runbooks, capability tokens, groundedness) | 7/9 phases | F1 + F2 + F3 + F4 + F5 + F7 complete; F6 in progress |
+| [sentinel-hedgefund-foundations](sentinel-hedgefund-foundations.md) | Evolve current codebase into RFC-001 v0.4 foundations (config, identity, OTel→Langfuse→replay, LiteLLM proxy, runbooks, capability tokens, groundedness) | 9/9 phases complete | F1–F8 complete; F6 implementation complete |
+| [sentinel-foundations-f8-quality-gate](sentinel-foundations-f8-quality-gate.md) | F8 deterministic groundedness gate + AssessQuality LangGraph node + replay determinism CI fix | 8/8 steps | Complete — R-QG-1 + R-AG-4 + R-CO-1 met |
 | [sentinel-foundations-f7-capability-tokens](sentinel-foundations-f7-capability-tokens.md) | F7 runbook grants enforced at toolset-wrapper boundary; cross-tenant + non-listed-tool rejection with audit_log row | complete | Branch `feat/sentinel-foundations-f7-capability-tokens`; R-TL-3 ticked |
 | [sentinel-foundations-f5-litellm-proxy](sentinel-foundations-f5-litellm-proxy.md) | F5 LiteLLM proxy migration + ADR 0007 orchestration framework decision | complete | PR #30 merged |
 | [sentinel-foundations-f6-runbook-catalog](sentinel-foundations-f6-runbook-catalog.md) | F6 runbook catalog + three-stage matcher (deterministic tag + small-LLM disambiguator on ties / zero-match + opt-in pgvector RAG fallback) + `extends:` composition + lifecycle/drift/flywheel + Confluence read-only render | ~85% (47+ / 68 items) | Branch `feat/sentinel-foundations-f6-runbook-catalog`; F6.A–F6.E + F6.G + F6.J–F6.N (most) + F6.K complete; F6.F (pipeline node), F6.J.6 (RAG tests), F6.L.4–L.6 (drift Slack/Justfile/tests), F6.M.6 (flywheel tests), F6.N.4 (Confluence ops doc), F6.H (docs), F6.I (ship) in flight |
@@ -51,4 +53,3 @@
 | [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, SRE approval persistence (token usage + LLM cost delivered in PR #18) | 4, 6 |
 | [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | 4, 7 |
 | [llm-settings-to-config](llm-settings-to-config.md) | Move LLM model config into CommonConfiguration | Internal |
-| [slack-vendor-cleanup](slack-vendor-cleanup.md) | Restructure `vendors/slack.py` into typed package: consolidate Block Kit, add typed event parsers, `AsyncSlackClient` wrapper, structured logging | Internal |

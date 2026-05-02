@@ -14,8 +14,8 @@ def format_code(ctx: invoke.Context) -> None:
     ctx.run("uv run ruff check --fix src/ tests/")
 
 
-@invoke.task(name="lint-fix")
-def lint_fix(ctx: invoke.Context) -> None:
+@invoke.task(name="fmt")
+def fmt(ctx: invoke.Context) -> None:
     """
     Run all static analysis tools and fix what can be fixed.
     """

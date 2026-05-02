@@ -3,15 +3,23 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sentinel.vendors import slack
+from sentinel.vendors.slack import _client as slack_client_mod
+
+
+def _make_configured_client() -> MagicMock:
+    mock_client = MagicMock(spec=slack_client_mod.AsyncSlackClient)
+    mock_client.is_configured = True
+    mock_client.post_message = AsyncMock(return_value="1234567890.123456")
+    return mock_client
 
 
 class TestPostInvestigationSummary:
     async def test_skips_when_no_channel_configured(self):
-        # Given no Slack channel or token configured
+        # Given no Slack channel configured (settings is a singleton, not callable,
+        # so attributes must be set directly on the mock, not on .return_value)
         # When posting an investigation summary
         with patch("sentinel.vendors.slack.settings") as mock_gs:
-            mock_gs.return_value.sre_slack_channel = ""
-            mock_gs.return_value.slack_bot_token = ""
+            mock_gs.sre_slack_channel = ""
             with patch("sentinel.vendors.slack.logs") as mock_logs:
                 await slack.post_investigation_summary(
                     alert_id="P123",
@@ -28,19 +36,17 @@ class TestPostInvestigationSummary:
         assert call_args[0][0] == "slack_post_skipped"
 
     async def test_posts_to_slack_when_configured(self):
-        # Given a configured Slack channel and token with a mocked client
-        mock_slack_client = MagicMock()
-        mock_slack_client.chat_postMessage = AsyncMock(return_value={"ok": True})
+        # Given a configured Slack channel and a mocked client singleton
+        mock_client = _make_configured_client()
 
         with (
-            patch.object(slack, "_client", None),
+            patch.object(slack_client_mod, "_singleton", mock_client),
             patch("sentinel.vendors.slack.settings") as mock_gs,
             patch("sentinel.vendors.slack.logs"),
-            patch("sentinel.vendors.slack.AsyncWebClient", return_value=mock_slack_client),
         ):
-            mock_gs.return_value.sre_slack_channel = "#sre-alerts"
-            mock_gs.return_value.slack_bot_token = "xoxb-token"  # noqa: S105
+            mock_gs.sre_slack_channel = "#sre-alerts"
 
+            # When posting an investigation summary
             await slack.post_investigation_summary(
                 alert_id="P123",
                 alert_title="High CPU usage",
@@ -50,27 +56,24 @@ class TestPostInvestigationSummary:
                 findings_summary="Error rate spiked 5x at 14:32 UTC",
             )
 
-        # Then the Slack API is called once
-        mock_slack_client.chat_postMessage.assert_called_once()
-        call_kwargs = mock_slack_client.chat_postMessage.call_args.kwargs
+        # Then the Slack client is called once with the correct channel and text
+        mock_client.post_message.assert_called_once()
+        call_kwargs = mock_client.post_message.call_args.kwargs
         assert call_kwargs["channel"] == "#sre-alerts"
         assert "High CPU usage" in call_kwargs["text"]
 
     async def test_uses_explicit_channel_override(self):
-        # Given an explicit channel override parameter
-        # When posting an investigation summary
-        mock_slack_client = MagicMock()
-        mock_slack_client.chat_postMessage = AsyncMock(return_value={"ok": True})
+        # Given an explicit channel override parameter and a configured client
+        mock_client = _make_configured_client()
 
         with (
-            patch.object(slack, "_client", None),
+            patch.object(slack_client_mod, "_singleton", mock_client),
             patch("sentinel.vendors.slack.settings") as mock_gs,
             patch("sentinel.vendors.slack.logs"),
-            patch("sentinel.vendors.slack.AsyncWebClient", return_value=mock_slack_client),
         ):
-            mock_gs.return_value.sre_slack_channel = "#default-channel"
-            mock_gs.return_value.slack_bot_token = "xoxb-token"  # noqa: S105
+            mock_gs.sre_slack_channel = "#default-channel"
 
+            # When posting with a channel override
             await slack.post_investigation_summary(
                 channel="#override-channel",
                 alert_id="P123",
@@ -82,25 +85,25 @@ class TestPostInvestigationSummary:
             )
 
         # Then the override channel is used
-        call_kwargs = mock_slack_client.chat_postMessage.call_args.kwargs
+        call_kwargs = mock_client.post_message.call_args.kwargs
         assert call_kwargs["channel"] == "#override-channel"
 
     async def test_silently_handles_slack_exception(self):
-        # Given a Slack client that raises during the API call
-        # When posting a summary
-        mock_slack_client = MagicMock()
-        mock_slack_client.chat_postMessage = AsyncMock(side_effect=Exception("Slack API down"))
+        # Given a Slack client that raises a SlackClientError during post
+        mock_client = _make_configured_client()
+        mock_client.post_message = AsyncMock(
+            side_effect=slack_client_mod.SlackClientError("Slack API down")
+        )
 
         with (
-            patch.object(slack, "_client", None),
+            patch.object(slack_client_mod, "_singleton", mock_client),
             patch("sentinel.vendors.slack.settings") as mock_gs,
             patch("sentinel.vendors.slack.logs") as mock_logs,
-            patch("sentinel.vendors.slack.AsyncWebClient", return_value=mock_slack_client),
         ):
-            mock_gs.return_value.sre_slack_channel = "#sre-alerts"
-            mock_gs.return_value.slack_bot_token = "xoxb-token"  # noqa: S105
+            mock_gs.sre_slack_channel = "#sre-alerts"
 
-            # Then no exception is raised (errors are swallowed with log)
+            # When posting a summary
+            # Then no exception is raised (errors are logged and swallowed)
             await slack.post_investigation_summary(
                 alert_id="P123",
                 alert_title="Test",
@@ -115,11 +118,10 @@ class TestPostInvestigationSummary:
 
 class TestPostSupportSuggestion:
     async def test_skips_when_no_token_configured(self):
-        # Given no Slack token configured
+        # Given no support Slack channel configured
         # When posting a support suggestion
         with patch("sentinel.vendors.slack.settings") as mock_gs:
-            mock_gs.return_value.support_slack_channel = "#support"
-            mock_gs.return_value.slack_bot_token = ""
+            mock_gs.support_slack_channel = ""
             with patch("sentinel.vendors.slack.logs") as mock_logs:
                 await slack.post_support_suggestion(
                     ticket_key="SUPPORT-42",
@@ -133,19 +135,17 @@ class TestPostSupportSuggestion:
         mock_logs.log_event.assert_called_once()
 
     async def test_posts_to_slack_when_configured(self):
-        # Given a configured support Slack channel with a mocked client
-        mock_slack_client = MagicMock()
-        mock_slack_client.chat_postMessage = AsyncMock(return_value={"ok": True})
+        # Given a configured support Slack channel and a mocked client singleton
+        mock_client = _make_configured_client()
 
         with (
-            patch.object(slack, "_client", None),
+            patch.object(slack_client_mod, "_singleton", mock_client),
             patch("sentinel.vendors.slack.settings") as mock_gs,
             patch("sentinel.vendors.slack.logs"),
-            patch("sentinel.vendors.slack.AsyncWebClient", return_value=mock_slack_client),
         ):
-            mock_gs.return_value.support_slack_channel = "#support"
-            mock_gs.return_value.slack_bot_token = "xoxb-token"  # noqa: S105
+            mock_gs.support_slack_channel = "#support"
 
+            # When posting a support suggestion
             await slack.post_support_suggestion(
                 ticket_key="SUPPORT-42",
                 ticket_summary="Cannot log in",
@@ -154,9 +154,9 @@ class TestPostSupportSuggestion:
                 category="account",
             )
 
-        # Then the Slack API is called
-        mock_slack_client.chat_postMessage.assert_called_once()
-        call_kwargs = mock_slack_client.chat_postMessage.call_args.kwargs
+        # Then the Slack client is called with the correct channel and ticket key
+        mock_client.post_message.assert_called_once()
+        call_kwargs = mock_client.post_message.call_args.kwargs
         assert call_kwargs["channel"] == "#support"
         assert "SUPPORT-42" in call_kwargs["text"]
 
@@ -165,7 +165,7 @@ class TestBuildInvestigationBlocks:
     def test_includes_all_fields(self):
         # Given full investigation data
         # When building blocks
-        blocks = slack._build_investigation_blocks(
+        blocks = slack.investigation_summary_blocks(
             alert_id="P123",
             alert_title="High CPU",
             root_cause="OOM killer triggered",
@@ -185,7 +185,7 @@ class TestBuildInvestigationBlocks:
     def test_high_confidence_uses_green_circle(self):
         # Given a High confidence label
         # When building blocks
-        blocks = slack._build_investigation_blocks(
+        blocks = slack.investigation_summary_blocks(
             alert_id="X",
             alert_title="Test",
             root_cause=None,
@@ -200,7 +200,7 @@ class TestBuildInvestigationBlocks:
     def test_low_confidence_uses_red_circle(self):
         # Given an unknown confidence label
         # When building blocks
-        blocks = slack._build_investigation_blocks(
+        blocks = slack.investigation_summary_blocks(
             alert_id="X",
             alert_title="Test",
             root_cause=None,
@@ -215,7 +215,7 @@ class TestBuildInvestigationBlocks:
     def test_no_remediation_block_when_none(self):
         # Given no remediation
         # When building blocks
-        blocks = slack._build_investigation_blocks(
+        blocks = slack.investigation_summary_blocks(
             alert_id="X",
             alert_title="Test",
             root_cause="Some root cause",

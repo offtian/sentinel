@@ -14,6 +14,10 @@ class Finding(BaseModel):
     summary: str
     raw_data: str | None = None
     relevance: float = 0.0
+    # Identifiers of sources / tool calls that back this finding (RFC §5.4).
+    # Populated from investigation_sources in analyse_root_cause; empty for
+    # findings created before F8 or in synthetic/test contexts.
+    evidence_refs: tuple[str, ...] = Field(default_factory=tuple)
 
 
 class InvestigationStatus(enum.Enum):

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import os
 from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
+from opentelemetry.exporter.prometheus import PrometheusMetricReader
+from opentelemetry.sdk.metrics import MeterProvider
 
 from sentinel.interfaces.api import app as api_app
 from sentinel.utils import metrics
@@ -15,6 +18,10 @@ def _mock_db_lifespan():
     # checkpointer/graph builders so these tests can run without a real
     # Postgres instance -- the /metrics endpoint has no DB or workflow
     # dependency.
+    #
+    # sentinel.bootstrap_otel._initialised is set to True so init_otel()
+    # returns immediately without touching global OTel state. Each test that
+    # needs metrics sets them up directly via metrics.init_meters().
     saver_close = mock.AsyncMock()
     with (
         mock.patch("sentinel.interfaces.api.app.async_db.connect_db"),
@@ -30,10 +37,12 @@ def _mock_db_lifespan():
             "sentinel.interfaces.api.app.workflows_support_review.build_support_review_graph"
         ),
         mock.patch(
+            "sentinel.interfaces.api.app.workflows_sre_investigation.build_sre_investigation_graph"
+        ),
+        mock.patch("sentinel.bootstrap_otel._initialised", new=True),
+        mock.patch(
             "sentinel.interfaces.api.app.settings",
-            return_value=mock.Mock(
-                database_url="fake", otel_metrics_enabled=True, otel_service_name="sentinel-test"
-            ),
+            mock.Mock(database_url=""),
         ),
     ):
         yield
@@ -52,15 +61,31 @@ class TestMetricsEndpoint:
             assert "text/plain" in content_type
 
     def test_exposes_custom_sentinel_metric_names(self):
-        # Given the FastAPI app with metrics initialised
-        with TestClient(api_app.app) as client:
-            # When fetching /metrics after recording an investigation
-            metrics.record_investigation_completed(
-                confidence_label="high",
-                approval_required=False,
-                outcome="completed",
-            )
-            response = client.get("/metrics")
+        # Given OTel meters initialised directly against a fresh Prometheus reader
+        # (bypasses the global OTel MeterProvider so re-initialisation across
+        # tests doesn't silently no-op due to the singleton guard)
+        #
+        # OTEL_SDK_DISABLED is forced off because litellm (imported transitively
+        # by sentinel.bootstrap) sets it to "true" at import time, which causes
+        # MeterProvider to return NoOpMeter from get_meter() making all counters
+        # no-ops. We need a real SDK meter for this test to function.
+        with mock.patch.dict(os.environ, {"OTEL_SDK_DISABLED": ""}):
+            reader = PrometheusMetricReader()
+            provider = MeterProvider(metric_readers=[reader])
+            meter = provider.get_meter("sentinel")
+        metrics.init_meters(meter=meter)
+        try:
+            with TestClient(api_app.app) as client:
+                # When fetching /metrics after recording an investigation
+                metrics.record_investigation_completed(
+                    confidence_label="high",
+                    approval_required=False,
+                    outcome="completed",
+                )
+                response = client.get("/metrics")
 
-            # Then the custom metric appears in the body
-            assert "sentinel_investigations_total" in response.text
+                # Then the custom metric appears in the body
+                assert "sentinel_investigations_total" in response.text
+        finally:
+            metrics.reset_meters()
+            provider.shutdown()

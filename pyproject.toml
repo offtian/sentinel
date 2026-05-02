@@ -358,7 +358,7 @@ markers = [
 
 env = [
     "PYTHONBREAKPOINT=ipdb.set_trace",
-    "DATABASE_URL=postgresql+asyncpg://postgres@localhost/sentinel-test",
+    "D:DATABASE_URL=postgresql+asyncpg://postgres@localhost/sentinel-test",
     "OLLAMA_BASE_URL=http://localhost:11434",
     "INTENT_ROUTER_LLM=openai/gpt-test",
     "ALERT_CLASSIFIER_LLM=openai/gpt-test",
