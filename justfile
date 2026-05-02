@@ -141,6 +141,10 @@ docker-prune:
 docker-compose-up:
     docker compose up -d
 
+# Start Docker Compose stack with Grafana/Tempo/Loki profile
+docker-compose-up-grafana:
+    docker compose -f docker-compose.yml -f docker-compose.grafana.yml --profile grafana up -d
+
 # Kubernetes (local — Docker Desktop)
 # ------------------------------------
 
