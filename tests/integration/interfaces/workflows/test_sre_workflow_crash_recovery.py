@@ -118,6 +118,7 @@ def _build_fake_config() -> mock.MagicMock:
     cfg.require_approval_below_confidence = 0.7
     cfg.post_to_slack = False
     cfg.runbooks = None
+    cfg.db_session_factory = None
     cfg.k8s_adapter = None
     cfg.pagerduty_client = None
     cfg.investigator_toolsets = ()

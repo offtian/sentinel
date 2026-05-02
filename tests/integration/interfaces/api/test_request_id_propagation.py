@@ -50,6 +50,7 @@ import pytest
 import structlog
 from fastapi.testclient import TestClient
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from logfire._internal.config import GLOBAL_CONFIG as _LOGFIRE_GLOBAL_CONFIG
 from opentelemetry import trace as otel_trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -77,6 +78,8 @@ from tests.functional.conftest import (
     _make_fake_agent,
 )
 
+
+_SERDE = JsonPlusSerializer(pickle_fallback=True)
 
 # ---------------------------------------------------------------------------
 # Fixtures: contextvar isolation and span exporter
@@ -312,7 +315,7 @@ def patched_sre_router(monkeypatch, captured_run):
         # ``with_envelope``-wrapped LangGraph nodes land on a recording span
         # that the in-memory exporter can capture.
         tracer = otel_trace.get_tracer("sentinel.test.integration")
-        graph = sre_mod.build_sre_investigation_graph(checkpointer=MemorySaver())
+        graph = sre_mod.build_sre_investigation_graph(checkpointer=MemorySaver(serde=_SERDE))
         with (
             tracer.start_as_current_span("sre.pipeline"),
             mock.patch.object(sre_mod, "get_config", return_value=config_stub),
@@ -622,7 +625,7 @@ class TestEnvelopeStructlogContextBinding:
             config_stub.investigator_toolsets = ()
             config_stub.analyser_toolsets = ()
 
-            graph = sre_mod.build_sre_investigation_graph(checkpointer=MemorySaver())
+            graph = sre_mod.build_sre_investigation_graph(checkpointer=MemorySaver(serde=_SERDE))
             with mock.patch.object(sre_mod, "get_config", return_value=config_stub):
                 captured_run["sre_reply"] = await sre_mod.investigate_alert(
                     alert=alert,

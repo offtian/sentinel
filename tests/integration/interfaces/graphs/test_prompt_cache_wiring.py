@@ -11,17 +11,22 @@ from typing import Any
 from unittest import mock
 
 import pytest
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
-from sentinel.interfaces.graphs import investigation, support_review
+from sentinel.interfaces.graphs import support_review
 from sentinel.interfaces.graphs.agents import (
     alert_classifier,
     response_drafter,
     root_cause_analyser,
     ticket_reviewer,
 )
+from sentinel.interfaces.workflows import sre_investigation as sre_mod
 from tests import factories
 from tests.functional import conftest as functional_fixtures
 
+
+_SERDE = JsonPlusSerializer(pickle_fallback=True)
 
 _ANTHROPIC_MODEL = "anthropic:claude-sonnet-4-6"
 _OPENAI_MODEL = "openai:gpt-4.1-mini"
@@ -34,6 +39,9 @@ class _FakeAgentResult[T]:
 
     def all_messages(self) -> list[object]:
         return []
+
+    def usage(self) -> Any:
+        return mock.Mock(input_tokens=0, output_tokens=0)
 
 
 def _make_spy_agent(
@@ -150,13 +158,31 @@ class TestSRECacheWiring:
             "alert_classifier": classifier_agent,
             "root_cause_analyser": analyser_agent,
         }
+
+        def _agent_for(name: str) -> Any:
+            if name in agents:
+                return agents[name]
+            raise KeyError(name)
+
+        config_stub = mock.MagicMock()
+        config_stub.agent_for = _agent_for
+        config_stub.runbooks = None
+        config_stub.db_session_factory = None
+        config_stub.k8s_adapter = None
+        config_stub.pagerduty_client = None
+        config_stub.require_approval_below_confidence = 0.7
+        config_stub.post_to_slack = False
+        config_stub.investigator_toolsets = ()
+        config_stub.analyser_toolsets = ()
+
         # When running the full SRE investigation pipeline
-        await investigation.investigate_alert(
-            alert=factories.make_alert(),
-            envelope=factories.make_envelope(),
-            agent_for=lambda name: agents.get(name, mock.MagicMock()),
-            post_to_slack=False,
-        )
+        graph = sre_mod.build_sre_investigation_graph(checkpointer=MemorySaver(serde=_SERDE))
+        with mock.patch.object(sre_mod, "get_config", return_value=config_stub):
+            await sre_mod.investigate_alert(
+                alert=factories.make_alert(),
+                envelope=factories.make_envelope(),
+                graph=graph,
+            )
 
         # Then the classifier received the expected cache settings
         assert len(classifier_calls) == 1

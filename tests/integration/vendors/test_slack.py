@@ -7,11 +7,11 @@ from sentinel.vendors import slack
 
 class TestPostInvestigationSummary:
     async def test_skips_when_no_channel_configured(self):
-        # Given no Slack channel or token configured
+        # Given no Slack channel configured (settings is a singleton, not callable,
+        # so attributes must be set directly on the mock, not on .return_value)
         # When posting an investigation summary
         with patch("sentinel.vendors.slack.settings") as mock_gs:
-            mock_gs.return_value.sre_slack_channel = ""
-            mock_gs.return_value.slack_bot_token = ""
+            mock_gs.sre_slack_channel = ""
             with patch("sentinel.vendors.slack.logs") as mock_logs:
                 await slack.post_investigation_summary(
                     alert_id="P123",
@@ -115,11 +115,10 @@ class TestPostInvestigationSummary:
 
 class TestPostSupportSuggestion:
     async def test_skips_when_no_token_configured(self):
-        # Given no Slack token configured
+        # Given no Slack channel configured
         # When posting a support suggestion
         with patch("sentinel.vendors.slack.settings") as mock_gs:
-            mock_gs.return_value.support_slack_channel = "#support"
-            mock_gs.return_value.slack_bot_token = ""
+            mock_gs.support_slack_channel = ""
             with patch("sentinel.vendors.slack.logs") as mock_logs:
                 await slack.post_support_suggestion(
                     ticket_key="SUPPORT-42",

@@ -38,6 +38,7 @@ from unittest import mock
 
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from pydantic_ai.models import test as pydantic_ai_test_model
 
 from sentinel.domain.alerts import entities as alert_entities
@@ -52,6 +53,7 @@ from tests import factories
 
 
 _REPLAY_RUNS = 30
+_SERDE = JsonPlusSerializer(pickle_fallback=True)
 
 
 def _build_crashloop_alert() -> alert_entities.Alert:
@@ -179,7 +181,7 @@ async def _run_pipeline(
         cfg.investigator_toolsets = (recorded_toolset,)
         cfg.analyser_toolsets = (recorded_toolset,)
 
-    graph = sre_mod.build_sre_investigation_graph(checkpointer=MemorySaver())
+    graph = sre_mod.build_sre_investigation_graph(checkpointer=MemorySaver(serde=_SERDE))
     envelope = factories.make_envelope()
 
     with mock.patch.object(sre_mod, "get_config", return_value=cfg):
