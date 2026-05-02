@@ -31,6 +31,7 @@
 | [sentinel-foundations-f4-otel-langfuse-replay](sentinel-foundations-f4-otel-langfuse-replay.md) | F4 Phase A — OTel → Langfuse triple: 9 mandatory span attrs, MandatoryAttributesValidator, Langfuse OTLP exporter, local v3 docker-compose | PR #28 |
 | [sentinel-foundations-f4-replay-bundle](sentinel-foundations-f4-replay-bundle.md) | F4 Phase B — RFC §3.8 ReplayBundle (tool + LLM I/O capture), replay CLI on the new shape, 30-run determinism CI, architecture docs | PR #29 |
 | [langgraph-sre-migration](langgraph-sre-migration.md) | SRE pipeline → LangGraph: typed observability layer, interrupt-based approval gate, flag-gated cutover, Phase 7 cleanup | PR #35 |
+| [slack-vendor-cleanup](slack-vendor-cleanup.md) | Restructure `vendors/slack.py` into typed package: consolidate Block Kit, typed event parsers, `AsyncSlackClient` wrapper, structured logging | PR #34 |
 
 ### In Progress
 
@@ -52,4 +53,3 @@
 | [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, SRE approval persistence (token usage + LLM cost delivered in PR #18) | 4, 6 |
 | [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | 4, 7 |
 | [llm-settings-to-config](llm-settings-to-config.md) | Move LLM model config into CommonConfiguration | Internal |
-| [slack-vendor-cleanup](slack-vendor-cleanup.md) | Restructure `vendors/slack.py` into typed package: consolidate Block Kit, add typed event parsers, `AsyncSlackClient` wrapper, structured logging | Internal |
