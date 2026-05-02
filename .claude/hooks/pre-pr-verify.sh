@@ -23,7 +23,7 @@ fi
 cd "$CLAUDE_PROJECT_DIR"
 
 just clean
-just lint-fix
+just fmt
 
 if ! just lint; then
   cat <<'EOF'

@@ -135,7 +135,7 @@ uv run pytest tests/unit/domain/alerts/test_entities.py::TestAlert::test_create_
 just lint
 
 # Auto-fix formatting
-just lint-fix
+just fmt
 ```
 
 ## K8s Investigation Agent

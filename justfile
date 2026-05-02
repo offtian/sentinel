@@ -75,7 +75,7 @@ lint:
     uv run lint-imports
 
 # Auto-fix lint issues and format
-lint-fix:
+fmt:
     uv run ruff check --fix src/ tests/
     uv run ruff format src/ tests/
 

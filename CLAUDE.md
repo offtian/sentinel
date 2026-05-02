@@ -11,7 +11,7 @@ just test             # Run unit tests
 just test-integration # Run integration tests (requires DB)
 just test-evals       # Run functional/E2E tests
 just lint             # Ruff + MyPy + import-linter
-just lint-fix         # Auto-format with Ruff
+just fmt         # Auto-format with Ruff
 ```
 
 ```bash
