@@ -85,10 +85,14 @@ services:
       SRE_SLACK_CHANNEL: ${SRE_SLACK_CHANNEL:-}
       SUPPORT_SLACK_CHANNEL: ${SUPPORT_SLACK_CHANNEL:-}
       OTEL_TRACES_ENABLED: "true"
-      # Empty when grafana profile isn't running (Tempo isn't up). Logfire
-      # falls back to console export and Langfuse export still flows over
-      # its own dedicated exporter, so traces still reach Langfuse.
-      OTEL_TRACES_ENDPOINT: ${OTEL_TRACES_ENDPOINT:-}
+      # Hardcoded empty in the base file. The host's OTEL_TRACES_ENDPOINT
+      # usually points at `localhost:4318`, which from inside the container
+      # resolves to the container itself, not the host's Tempo — that
+      # produces noisy 404s on every flush. The docker-compose.grafana.yml
+      # overlay sets this to http://tempo:4318/v1/traces when the grafana
+      # profile is up. Langfuse export uses its own dedicated path
+      # (LANGFUSE_HOST below) and is unaffected.
+      OTEL_TRACES_ENDPOINT: ""
       # Langfuse — in-network address (host port 3001 only works from the host)
       LANGFUSE_HOST: http://langfuse-web:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-localdev}
@@ -130,10 +134,14 @@ services:
       SRE_SLACK_CHANNEL: ${SRE_SLACK_CHANNEL:-}
       SUPPORT_SLACK_CHANNEL: ${SUPPORT_SLACK_CHANNEL:-}
       OTEL_TRACES_ENABLED: "true"
-      # Empty when grafana profile isn't running (Tempo isn't up). Logfire
-      # falls back to console export and Langfuse export still flows over
-      # its own dedicated exporter, so traces still reach Langfuse.
-      OTEL_TRACES_ENDPOINT: ${OTEL_TRACES_ENDPOINT:-}
+      # Hardcoded empty in the base file. The host's OTEL_TRACES_ENDPOINT
+      # usually points at `localhost:4318`, which from inside the container
+      # resolves to the container itself, not the host's Tempo — that
+      # produces noisy 404s on every flush. The docker-compose.grafana.yml
+      # overlay sets this to http://tempo:4318/v1/traces when the grafana
+      # profile is up. Langfuse export uses its own dedicated path
+      # (LANGFUSE_HOST below) and is unaffected.
+      OTEL_TRACES_ENDPOINT: ""
       LANGFUSE_HOST: http://langfuse-web:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-localdev}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-localdev}
@@ -160,10 +168,14 @@ services:
       GRAFANA_LOKI_DATASOURCE_UID: loki
       GRAFANA_TEMPO_DATASOURCE_UID: tempo
       OTEL_TRACES_ENABLED: "true"
-      # Empty when grafana profile isn't running (Tempo isn't up). Logfire
-      # falls back to console export and Langfuse export still flows over
-      # its own dedicated exporter, so traces still reach Langfuse.
-      OTEL_TRACES_ENDPOINT: ${OTEL_TRACES_ENDPOINT:-}
+      # Hardcoded empty in the base file. The host's OTEL_TRACES_ENDPOINT
+      # usually points at `localhost:4318`, which from inside the container
+      # resolves to the container itself, not the host's Tempo — that
+      # produces noisy 404s on every flush. The docker-compose.grafana.yml
+      # overlay sets this to http://tempo:4318/v1/traces when the grafana
+      # profile is up. Langfuse export uses its own dedicated path
+      # (LANGFUSE_HOST below) and is unaffected.
+      OTEL_TRACES_ENDPOINT: ""
       # Langfuse — in-network address (host port 3001 only works from the host)
       LANGFUSE_HOST: http://langfuse-web:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-localdev}

@@ -107,16 +107,28 @@ def init_traces() -> None:
     """
     global _traces_initialised  # noqa: PLW0603
     try:
-        if not settings.otel_traces_enabled or not settings.otel_traces_endpoint:
+        if not settings.otel_traces_enabled:
             logs.log_event("otel.traces.disabled")
+            return
+        if not settings.otel_traces_endpoint and not settings.langfuse_host:
+            logs.log_event("otel.traces.no_backend")
             return
         if _traces_initialised:
             return
 
         import logfire
 
-        # Traces-specific to keep the metrics SDK from inheriting this endpoint.
-        os.environ.setdefault("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", settings.otel_traces_endpoint)
+        if settings.otel_traces_endpoint:
+            # Traces-specific to keep the metrics SDK from inheriting this endpoint.
+            os.environ.setdefault(
+                "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", settings.otel_traces_endpoint
+            )
+        else:
+            # No Tempo endpoint configured — disable the OTel SDK default OTLP
+            # exporter so it doesn't connect to localhost:4318 and emit noisy
+            # 404s. The Langfuse exporter (added below) hits its own path
+            # directly and is unaffected.
+            os.environ.setdefault("OTEL_TRACES_EXPORTER", "none")
 
         logfire.configure(
             send_to_logfire=False,
