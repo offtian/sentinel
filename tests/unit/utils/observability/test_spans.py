@@ -278,39 +278,3 @@ class TestToolSpanAttributes:
 
         # Then runbook_grant_id is absent
         assert "runbook_grant_id" not in result
-
-
-class TestUsageAttributes:
-    def test_to_otel_dict_contains_token_and_cost_keys(self) -> None:
-        # Given a UsageAttributes with token counts and cost
-        attrs = obs_spans.UsageAttributes(
-            gen_ai_usage_input_tokens=100,
-            gen_ai_usage_output_tokens=50,
-            gen_ai_usage_total_tokens=150,
-            sentinel_cost_usd=0.003,
-        )
-
-        # When converting to OTel dict
-        result = attrs.to_otel_dict()
-
-        # Then all gen_ai.usage.* and sentinel.cost_usd keys are present
-        assert result[semconv.GEN_AI_USAGE_INPUT_TOKENS] == 100
-        assert result[semconv.GEN_AI_USAGE_OUTPUT_TOKENS] == 50
-        assert result[semconv.GEN_AI_USAGE_TOTAL_TOKENS] == 150
-        assert result["sentinel.cost_usd"] == pytest.approx(0.003)
-
-    def test_to_otel_dict_keys_use_dot_notation(self) -> None:
-        # Given a UsageAttributes
-        attrs = obs_spans.UsageAttributes(
-            gen_ai_usage_input_tokens=10,
-            gen_ai_usage_output_tokens=5,
-            gen_ai_usage_total_tokens=15,
-            sentinel_cost_usd=0.0,
-        )
-
-        # When converting to OTel dict
-        result = attrs.to_otel_dict()
-
-        # Then keys use OTel dot-notation (not Python underscore form)
-        assert "gen_ai_usage_input_tokens" not in result
-        assert "gen_ai.usage.input_tokens" in result

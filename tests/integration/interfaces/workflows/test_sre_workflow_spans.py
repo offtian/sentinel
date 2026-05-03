@@ -27,8 +27,6 @@ the shape of the dict passed to ``span.set_attributes(...)``.
 
 from __future__ import annotations
 
-import pytest
-
 from sentinel.utils.observability import spans as spans_mod
 
 
@@ -193,57 +191,6 @@ class TestAgentSpanAttributesContract:
         # Then team_profile is present
         assert "team_profile" in otel_dict
         assert otel_dict["team_profile"] == "sre"
-
-
-class TestUsageAttributesContract:
-    """Verify ``UsageAttributes.to_otel_dict()`` produces the token/cost keys."""
-
-    def test_token_and_cost_keys_all_present(self) -> None:
-        """
-        All four usage keys are present: input, output, total tokens and cost_usd.
-        """
-        # Given a UsageAttributes with known token counts
-        attrs = spans_mod.UsageAttributes(
-            gen_ai_usage_input_tokens=150,
-            gen_ai_usage_output_tokens=50,
-            gen_ai_usage_total_tokens=200,
-            sentinel_cost_usd=0.0025,
-        )
-
-        # When to_otel_dict is called
-        otel_dict = attrs.to_otel_dict()
-
-        # Then all four mandatory usage keys are present
-        assert "gen_ai.usage.input_tokens" in otel_dict
-        assert otel_dict["gen_ai.usage.input_tokens"] == 150
-        assert "gen_ai.usage.output_tokens" in otel_dict
-        assert otel_dict["gen_ai.usage.output_tokens"] == 50
-        assert "gen_ai.usage.total_tokens" in otel_dict
-        assert otel_dict["gen_ai.usage.total_tokens"] == 200
-        assert "sentinel.cost_usd" in otel_dict
-        assert otel_dict["sentinel.cost_usd"] == pytest.approx(0.0025)
-
-    def test_zero_token_usage_is_valid(self) -> None:
-        """
-        A zero-token usage instance (as emitted by test doubles) is valid and
-        produces zero values in the dict.
-        """
-        # Given a zero-token usage (typical in tests)
-        attrs = spans_mod.UsageAttributes(
-            gen_ai_usage_input_tokens=0,
-            gen_ai_usage_output_tokens=0,
-            gen_ai_usage_total_tokens=0,
-            sentinel_cost_usd=0.0,
-        )
-
-        # When to_otel_dict is called
-        otel_dict = attrs.to_otel_dict()
-
-        # Then the dict contains all four keys with zero values
-        assert otel_dict["gen_ai.usage.input_tokens"] == 0
-        assert otel_dict["gen_ai.usage.output_tokens"] == 0
-        assert otel_dict["gen_ai.usage.total_tokens"] == 0
-        assert otel_dict["sentinel.cost_usd"] == 0.0
 
 
 class TestToolSpanAttributesContract:

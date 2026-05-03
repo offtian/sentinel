@@ -15,7 +15,8 @@ Differences from the legacy harness (intentional):
   from the singleton.
 - ``status_update_client``, ``persist_fn`` and ``trace_collector`` are
   dropped from the in-graph plumbing; LangGraph's runtime instrumentation
-  and the entrypoint layer (T15+) own those concerns.
+  and the public entrypoints (``review_ticket`` / ``resume_review``) own
+  those concerns.
 - ``classify_ticket`` and ``draft_response`` re-raise agent failures so
   LangGraph captures the failed step in its checkpoint -- the legacy
   pattern of degrading to ``End(reply)`` conflated pipeline failure with
@@ -105,7 +106,10 @@ def _doc_source_from_reference(
 
 
 # ---------------------------------------------------------------------------
-# T8 -- classify_ticket
+# Pipeline node 1 -- classify_ticket
+# Reads the inbound support ticket and infers category / urgency / sentiment
+# so downstream nodes know which documentation to search and how to frame
+# the draft response.
 # ---------------------------------------------------------------------------
 
 
@@ -145,9 +149,6 @@ async def classify_ticket(state: support_state_mod.SupportReviewState) -> dict[s
         )
         raise
 
-    agent_utils.stamp_usage_attributes(
-        result.usage(), model_name=agent_utils.get_model_name(reviewer_agent)
-    )
     classification: ticket_reviewer.TicketClassification = result.output
     logs.log_event(
         "ticket_classified",
@@ -161,7 +162,10 @@ async def classify_ticket(state: support_state_mod.SupportReviewState) -> dict[s
 
 
 # ---------------------------------------------------------------------------
-# T9 -- search_documentation
+# Pipeline node 2 -- search_documentation
+# Queries every configured docs source (Notion, Confluence, S3, ...) in
+# parallel for relevant articles. Soft-degrades on per-source failure: a
+# broken Confluence search logs and returns nothing while Notion still runs.
 # ---------------------------------------------------------------------------
 
 
@@ -262,7 +266,9 @@ async def _run_ticket_search(
 
 
 # ---------------------------------------------------------------------------
-# T10 -- draft_response
+# Pipeline node 3 -- draft_response
+# Composes the customer-facing reply from the ticket plus the docs hits.
+# Cites the underlying source links so the reviewer can verify each claim.
 # ---------------------------------------------------------------------------
 
 
@@ -309,9 +315,6 @@ async def draft_response(state: support_state_mod.SupportReviewState) -> dict[st
         )
         raise
 
-    agent_utils.stamp_usage_attributes(
-        result.usage(), model_name=agent_utils.get_model_name(drafter_agent)
-    )
     drafted: response_drafter.DraftedResponse = result.output
     suggestion = support_entities.ResponseSuggestion(
         ticket_id=ticket.id,
@@ -333,7 +336,9 @@ async def draft_response(state: support_state_mod.SupportReviewState) -> dict[st
 
 
 # ---------------------------------------------------------------------------
-# T11 -- determine_confidence
+# Pipeline node 4 -- determine_confidence
+# Computes a composite confidence score over the draft and decides whether a
+# human reviewer must approve it before the response is sent.
 # ---------------------------------------------------------------------------
 
 
@@ -384,7 +389,10 @@ async def determine_confidence(
 
 
 # ---------------------------------------------------------------------------
-# T12 -- wait_for_human
+# Pipeline node 5 -- wait_for_human
+# Approval gate. interrupt() pauses the run; the worker survives a restart
+# while paused. The approval API resumes the graph with a Command(resume=...)
+# payload that this node maps onto an ApprovalDecision enum.
 # ---------------------------------------------------------------------------
 
 
@@ -433,7 +441,10 @@ def _approval_decision_from_resume(resume_payload: Any) -> approval_entities.App
 
 
 # ---------------------------------------------------------------------------
-# T13 -- routing
+# Conditional-edge routing helper
+# Pure function that LangGraph's add_conditional_edges() calls to decide
+# whether the graph proceeds to wait_for_human or terminates after the
+# determine_confidence node.
 # ---------------------------------------------------------------------------
 
 
@@ -452,7 +463,10 @@ def _route_after_confidence(state: support_state_mod.SupportReviewState) -> str:
 
 
 # ---------------------------------------------------------------------------
-# T14 -- graph builder
+# Graph builder
+# Composes the five pipeline nodes plus the conditional approval edge into
+# a compiled StateGraph. The FastAPI lifespan calls this once at startup
+# and stores the result on app.state.support_review_graph.
 # ---------------------------------------------------------------------------
 
 
@@ -519,7 +533,10 @@ def build_support_review_graph(
 
 
 # ---------------------------------------------------------------------------
-# T16 -- review_ticket / resume_review entrypoints
+# Public entrypoints — review_ticket / resume_review
+# review_ticket starts a fresh review run; resume_review continues a paused
+# run after a human approval/rejection. Both are keyed by request_id so
+# resume can look up the same LangGraph thread the original run wrote.
 # ---------------------------------------------------------------------------
 
 
