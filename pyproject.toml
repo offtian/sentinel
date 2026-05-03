@@ -375,6 +375,13 @@ env = [
     "SLACK_BOT_TOKEN=xoxb-test",
     "SRE_SLACK_CHANNEL=C12345678",
     "SUPPORT_SLACK_CHANNEL=C87654321",
+    # Block test runs from polluting the dev Langfuse project. Tests assert
+    # span shape via in-process recorded_spans fixtures, not by reading
+    # Langfuse — disabling external export removes the noise without losing
+    # any assertion coverage.
+    "LANGFUSE_HOST=",
+    "OTEL_TRACES_ENDPOINT=",
+    "OTEL_TRACES_ENABLED=false",
 ]
 
 python_files = "test_*.py"
