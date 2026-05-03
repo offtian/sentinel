@@ -1,6 +1,6 @@
 # Plan: Sentinel Foundations F6 — Runbook Catalog + Tag-Based Matcher
 
-**Status:** in-progress (~98% — only F6.I push + PR ceremony outstanding)
+**Status:** complete (PR #31 merged; live-DB integration tests deferred to follow-on plan per F6.I.3)
 **Created:** 2026-04-26
 **Last updated:** 2026-04-27
 **Parent plan:** [`sentinel-hedgefund-foundations.md`](sentinel-hedgefund-foundations.md) Phase F6

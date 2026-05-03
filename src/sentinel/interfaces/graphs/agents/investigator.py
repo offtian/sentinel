@@ -52,13 +52,13 @@ class Dependencies:
     service: str = ""
     cluster_name: str = ""
     namespace: str = ""
-    # F6.F.2: optional runbook matched by the MatchRunbook pipeline node.
-    # When present, the body is injected at run-time via
+    # Optional runbook matched by the match_runbook pipeline node. When
+    # present, the body is injected at run-time via
     # _inject_runbook_body_quarantined inside a ``<runbook>`` quarantine
     # frame. None on no-match — the investigator is told to fall back to
     # the generic-exploration template.
     runbook: runbook_models.Runbook | None = None
-    # F7: identity envelope threaded through so RunbookScopedToolset can
+    # Identity envelope threaded through so RunbookScopedToolset can
     # enforce tenant-scoped tool calls at the wrapper boundary.
     envelope: envelope_mod.Envelope | None = None
     _tool_call_counters: dict[str, int] = dataclasses.field(default_factory=dict)
