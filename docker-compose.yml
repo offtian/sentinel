@@ -97,6 +97,8 @@ services:
       LANGFUSE_HOST: http://langfuse-web:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-localdev}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-localdev}
+      LANGGRAPH_SRE_ENABLED: ${LANGGRAPH_SRE_ENABLED:-true}
+      OBSERVABILITY_BACKEND: ${OBSERVABILITY_BACKEND:-}
     depends_on:
       db:
         condition: service_healthy
@@ -145,6 +147,8 @@ services:
       LANGFUSE_HOST: http://langfuse-web:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-localdev}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-localdev}
+      LANGGRAPH_SRE_ENABLED: ${LANGGRAPH_SRE_ENABLED:-true}
+      OBSERVABILITY_BACKEND: ${OBSERVABILITY_BACKEND:-}
     depends_on:
       db:
         condition: service_healthy
