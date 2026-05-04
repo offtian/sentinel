@@ -1,9 +1,9 @@
 # Plan: Sentinel Hedge Fund — Foundations (RFC-001 v0.4)
 
-**Status:** in-progress
+**Status:** complete
 **Created:** 2026-04-25
-**Last updated:** 2026-04-26
-**Progress:** F0 deferred · F1 complete (PR #22) · F2 complete · F3 complete · F4 Phase A complete (runtime smoke deferred)
+**Last updated:** 2026-05-03
+**Progress:** F0 deferred · F1 (PR #22) · F2 (PR #23) · F3 · F4 Phase A (PR #28) + Phase B (PR #29) · F5 (PR #30) · F6 (PR #31) · F7 (PR #33) · F8 (PR #37) all merged. F4.4 runtime Langfuse smoke validated 2026-05-02; F8.9 `/update-docs` outstanding.
 
 ## Goal
 

@@ -22,7 +22,9 @@
 | [database-traceability-refactor](database-traceability-refactor.md) | DB migration and traceability refactoring | PR #2 |
 | [holmesgpt](holmesgpt.md) | Formalize DirectToolsetAdapter, add K8s queries, HolmesGPT SDK integration | PR #TBD |
 | [skills-runtime](skills-runtime.md) | On-disk Skills catalogue + runtime loader + config-driven agent wiring | PR #TBD |
-| [graph-consumption-refactor](graph-consumption-refactor.md) | Agents read from `config.agent_for()` instead of module singletons | PR #TBD |
+| [logfire-traces](logfire-traces.md) | Logfire LLM traces to Tempo (predates current Langfuse setup) | PR #TBD |
+| [token-usage-cost-estimation](token-usage-cost-estimation.md) | Token usage + LLM cost estimation in agent_calls rows | PR #18 |
+| [comprehensive-eval-framework](comprehensive-eval-framework.md) | Agent evaluation framework | PR #TBD |
 | [anthropic-prompt-caching](anthropic-prompt-caching.md) | Vendor-agnostic prompt caching on all agent system prompts | PR #14 |
 | [prompt-versioning-and-replay](prompt-versioning-and-replay.md) | Prompt version/hash + pipeline run replay + re-execution | PR #15 |
 | [k8s-agent-and-mcp-integration](k8s-agent-and-mcp-integration.md) | Dual K8s backends (native + kagent) with MCP server/client | PR #TBD |
@@ -32,24 +34,24 @@
 | [sentinel-foundations-f4-replay-bundle](sentinel-foundations-f4-replay-bundle.md) | F4 Phase B — RFC §3.8 ReplayBundle (tool + LLM I/O capture), replay CLI on the new shape, 30-run determinism CI, architecture docs | PR #29 |
 | [langgraph-sre-migration](langgraph-sre-migration.md) | SRE pipeline → LangGraph: typed observability layer, interrupt-based approval gate, flag-gated cutover, Phase 7 cleanup | PR #35 |
 | [slack-vendor-cleanup](slack-vendor-cleanup.md) | Restructure `vendors/slack.py` into typed package: consolidate Block Kit, typed event parsers, `AsyncSlackClient` wrapper, structured logging | PR #34 |
+| [sentinel-foundations-f5-litellm-proxy](sentinel-foundations-f5-litellm-proxy.md) | F5 LiteLLM proxy migration + ADR 0007 orchestration framework decision | PR #30 |
+| [sentinel-foundations-f6-runbook-catalog](sentinel-foundations-f6-runbook-catalog.md) | F6 runbook catalog + three-stage matcher (deterministic tag + small-LLM disambiguator on ties / zero-match + opt-in pgvector RAG fallback) + `extends:` composition + lifecycle/drift/flywheel + Confluence read-only render | PR #31 |
+| [sentinel-foundations-f7-capability-tokens](sentinel-foundations-f7-capability-tokens.md) | F7 runbook grants enforced at toolset-wrapper boundary; cross-tenant + non-listed-tool rejection with audit_log row | PR #33 |
+| [sentinel-foundations-f8-quality-gate](sentinel-foundations-f8-quality-gate.md) | F8 deterministic groundedness gate + AssessQuality LangGraph node + replay determinism CI fix | PR #37 |
+| [sentinel-data-and-domain-restructure](sentinel-data-and-domain-restructure.md) | Split `data/` into `sql/` + `primitives/`; split `domain/sre/` into `domain/alerts/` + `domain/investigations/`; rename pipeline labels | shipped via 2418e8a + 6c41605 (checkboxes never back-ticked) |
+| [sentinel-hedgefund-foundations](sentinel-hedgefund-foundations.md) | Evolve current codebase into RFC-001 v0.4 foundations (config, identity, OTel→Langfuse→replay, LiteLLM proxy, runbooks, capability tokens, groundedness) | F1–F8 all merged via PRs #22, #23, #28, #29, #30, #31, #33, #37 |
 
 ### In Progress
 
 | Plan | Goal | Progress | Notes |
 |------|------|----------|-------|
 | [grafana-metrics](grafana-metrics.md) | OTel metrics instrumentation for Grafana dashboards | 2/5 | Prometheus reader + basic metrics wired |
-| [sentinel-hedgefund-foundations](sentinel-hedgefund-foundations.md) | Evolve current codebase into RFC-001 v0.4 foundations (config, identity, OTel→Langfuse→replay, LiteLLM proxy, runbooks, capability tokens, groundedness) | 9/9 phases complete | F1–F8 complete; F6 implementation complete |
-| [sentinel-foundations-f8-quality-gate](sentinel-foundations-f8-quality-gate.md) | F8 deterministic groundedness gate + AssessQuality LangGraph node + replay determinism CI fix | 8/8 steps | Complete — R-QG-1 + R-AG-4 + R-CO-1 met |
-| [sentinel-foundations-f7-capability-tokens](sentinel-foundations-f7-capability-tokens.md) | F7 runbook grants enforced at toolset-wrapper boundary; cross-tenant + non-listed-tool rejection with audit_log row | complete | Branch `feat/sentinel-foundations-f7-capability-tokens`; R-TL-3 ticked |
-| [sentinel-foundations-f5-litellm-proxy](sentinel-foundations-f5-litellm-proxy.md) | F5 LiteLLM proxy migration + ADR 0007 orchestration framework decision | complete | PR #30 merged |
-| [sentinel-foundations-f6-runbook-catalog](sentinel-foundations-f6-runbook-catalog.md) | F6 runbook catalog + three-stage matcher (deterministic tag + small-LLM disambiguator on ties / zero-match + opt-in pgvector RAG fallback) + `extends:` composition + lifecycle/drift/flywheel + Confluence read-only render | ~85% (47+ / 68 items) | Branch `feat/sentinel-foundations-f6-runbook-catalog`; F6.A–F6.E + F6.G + F6.J–F6.N (most) + F6.K complete; F6.F (pipeline node), F6.J.6 (RAG tests), F6.L.4–L.6 (drift Slack/Justfile/tests), F6.M.6 (flywheel tests), F6.N.4 (Confluence ops doc), F6.H (docs), F6.I (ship) in flight |
-| [pydanticai-langgraph-adoption](pydanticai-langgraph-adoption.md) | Migrate orchestration harness to LangGraph; support pipeline first, SRE/chart follow with own plans | 0/3 phases | Support migration in flight; ADR 0007 authored in PR #30 |
+| [pydanticai-langgraph-adoption](pydanticai-langgraph-adoption.md) | Migrate orchestration harness to LangGraph; support pipeline first, SRE/chart follow with own plans | ~67% (20/30 sub-steps) | T1-T20 done; T21-T30 cleanup outstanding (move legacy support_review.py → `_archive/`, import-linter contract, point `replay.py` at the new entrypoint, ADR 0006 closure, docs sweep) |
+| [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, SRE approval persistence | ~5/15 | Steps 1+2+4+6+7 shipped via PR #18 + F3.5; remaining: Steps 8-11 (approval-DB ops + replace `_pending_approvals` dict), Steps 12-15 (`GET /api/sre/stats` + `quality_verdict_json` persistence) |
 
 ### Draft (Not Started)
 
 | Plan | Goal | PRD Section |
 |------|------|-------------|
-| [sentinel-data-and-domain-restructure](sentinel-data-and-domain-restructure.md) | Split `data/` into `sql/` + `primitives/`; split `domain/sre/` into `domain/alerts/` + `domain/investigations/`; rename pipeline labels | RFC §15.1 |
-| [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, SRE approval persistence (token usage + LLM cost delivered in PR #18) | 4, 6 |
 | [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | 4, 7 |
 | [llm-settings-to-config](llm-settings-to-config.md) | Move LLM model config into CommonConfiguration | Internal |

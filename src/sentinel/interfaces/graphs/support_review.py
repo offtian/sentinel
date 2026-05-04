@@ -400,7 +400,7 @@ async def review_ticket(
         nodes=(ClassifyTicket, SearchDocumentation, DraftResponse, DetermineConfidence),
     )
 
-    # F4.7: when the tracer hasn't yet been started by the outer caller
+    # When the tracer hasn't yet been started by the outer caller
     # (worker/replay/chat), open the replay-capture window here so the
     # bundle's envelope + ticket payload are attached. Support has no
     # runbook concept, so both runbook fields are None at completion.

@@ -36,12 +36,12 @@ class Dependencies:
     # Classifier-produced category, used for the optional second-layer
     # dynamic runbook skill injection (see inject_runbook_skills below).
     category: str = ""
-    # F6.F.2: optional runbook matched by the MatchRunbook pipeline node.
-    # When present, the body is injected at run-time via
+    # Optional runbook matched by the match_runbook pipeline node. When
+    # present, the body is injected at run-time via
     # _inject_runbook_body_quarantined (separate layer from skills). None
     # on no-match — the agent is told to flag confidence LOW.
     runbook: runbook_models.Runbook | None = None
-    # F7: outcome of the upstream Investigate node — one of "ran"
+    # Outcome of the upstream investigate node — one of "ran"
     # (data produced), "skipped" (investigator agent not registered),
     # "failed" (investigator raised), "empty" (every tool returned the
     # documented empty-result pattern). Surfaced into the user prompt so

@@ -287,6 +287,8 @@ async def _run_sre_investigation(payload: dict[str, object]) -> str:
                 alert=alert,
                 envelope=envelope,
                 graph=_sre_investigation_graph,
+                investigator_toolsets=tuple(investigator_toolsets),
+                analyser_toolsets=tuple(analyser_toolsets),
             )
             # Convert InvestigationOutcome to a serializable form for the result store.
             result_data = {

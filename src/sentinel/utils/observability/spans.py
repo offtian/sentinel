@@ -129,29 +129,3 @@ class ToolSpanAttributes(BaseModel):
         if self.runbook_grant_id is not None:
             attrs["runbook_grant_id"] = self.runbook_grant_id
         return attrs
-
-
-class UsageAttributes(BaseModel):
-    """
-    Token-count and cost attributes from a PydanticAI agent run.
-
-    Emits OTel GenAI usage semconv keys that Langfuse uses to populate
-    Generation cost dashboards, plus a Sentinel-owned ``sentinel.cost_usd``
-    derived from LiteLLM's pricing table.
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    gen_ai_usage_input_tokens: int
-    gen_ai_usage_output_tokens: int
-    gen_ai_usage_total_tokens: int
-    sentinel_cost_usd: float
-
-    def to_otel_dict(self) -> dict[str, otel_types.AttributeValue]:
-        """Return a flat dict of OTel attribute key→value pairs."""
-        return {
-            semconv.GEN_AI_USAGE_INPUT_TOKENS: self.gen_ai_usage_input_tokens,
-            semconv.GEN_AI_USAGE_OUTPUT_TOKENS: self.gen_ai_usage_output_tokens,
-            semconv.GEN_AI_USAGE_TOTAL_TOKENS: self.gen_ai_usage_total_tokens,
-            "sentinel.cost_usd": self.sentinel_cost_usd,
-        }

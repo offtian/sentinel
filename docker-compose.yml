@@ -85,14 +85,20 @@ services:
       SRE_SLACK_CHANNEL: ${SRE_SLACK_CHANNEL:-}
       SUPPORT_SLACK_CHANNEL: ${SUPPORT_SLACK_CHANNEL:-}
       OTEL_TRACES_ENABLED: "true"
-      # Empty when grafana profile isn't running (Tempo isn't up). Logfire
-      # falls back to console export and Langfuse export still flows over
-      # its own dedicated exporter, so traces still reach Langfuse.
-      OTEL_TRACES_ENDPOINT: ${OTEL_TRACES_ENDPOINT:-}
+      # Hardcoded empty in the base file. The host's OTEL_TRACES_ENDPOINT
+      # usually points at `localhost:4318`, which from inside the container
+      # resolves to the container itself, not the host's Tempo — that
+      # produces noisy 404s on every flush. The docker-compose.grafana.yml
+      # overlay sets this to http://tempo:4318/v1/traces when the grafana
+      # profile is up. Langfuse export uses its own dedicated path
+      # (LANGFUSE_HOST below) and is unaffected.
+      OTEL_TRACES_ENDPOINT: ""
       # Langfuse — in-network address (host port 3001 only works from the host)
       LANGFUSE_HOST: http://langfuse-web:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-localdev}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-localdev}
+      LANGGRAPH_SRE_ENABLED: ${LANGGRAPH_SRE_ENABLED:-true}
+      OBSERVABILITY_BACKEND: ${OBSERVABILITY_BACKEND:-}
     depends_on:
       db:
         condition: service_healthy
@@ -100,6 +106,8 @@ services:
   worker:
     build: .
     command: ["/app/.venv/bin/python", "-m", "sentinel.worker"]
+    ports:
+      - "8001:8001"   # Prometheus metrics (WORKER_METRICS_PORT)
     environment:
       DATABASE_URL: postgresql+asyncpg://db:5432/sentinel
       PGUSER: postgres
@@ -128,13 +136,19 @@ services:
       SRE_SLACK_CHANNEL: ${SRE_SLACK_CHANNEL:-}
       SUPPORT_SLACK_CHANNEL: ${SUPPORT_SLACK_CHANNEL:-}
       OTEL_TRACES_ENABLED: "true"
-      # Empty when grafana profile isn't running (Tempo isn't up). Logfire
-      # falls back to console export and Langfuse export still flows over
-      # its own dedicated exporter, so traces still reach Langfuse.
-      OTEL_TRACES_ENDPOINT: ${OTEL_TRACES_ENDPOINT:-}
+      # Hardcoded empty in the base file. The host's OTEL_TRACES_ENDPOINT
+      # usually points at `localhost:4318`, which from inside the container
+      # resolves to the container itself, not the host's Tempo — that
+      # produces noisy 404s on every flush. The docker-compose.grafana.yml
+      # overlay sets this to http://tempo:4318/v1/traces when the grafana
+      # profile is up. Langfuse export uses its own dedicated path
+      # (LANGFUSE_HOST below) and is unaffected.
+      OTEL_TRACES_ENDPOINT: ""
       LANGFUSE_HOST: http://langfuse-web:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-localdev}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-localdev}
+      LANGGRAPH_SRE_ENABLED: ${LANGGRAPH_SRE_ENABLED:-true}
+      OBSERVABILITY_BACKEND: ${OBSERVABILITY_BACKEND:-}
     depends_on:
       db:
         condition: service_healthy
@@ -158,10 +172,14 @@ services:
       GRAFANA_LOKI_DATASOURCE_UID: loki
       GRAFANA_TEMPO_DATASOURCE_UID: tempo
       OTEL_TRACES_ENABLED: "true"
-      # Empty when grafana profile isn't running (Tempo isn't up). Logfire
-      # falls back to console export and Langfuse export still flows over
-      # its own dedicated exporter, so traces still reach Langfuse.
-      OTEL_TRACES_ENDPOINT: ${OTEL_TRACES_ENDPOINT:-}
+      # Hardcoded empty in the base file. The host's OTEL_TRACES_ENDPOINT
+      # usually points at `localhost:4318`, which from inside the container
+      # resolves to the container itself, not the host's Tempo — that
+      # produces noisy 404s on every flush. The docker-compose.grafana.yml
+      # overlay sets this to http://tempo:4318/v1/traces when the grafana
+      # profile is up. Langfuse export uses its own dedicated path
+      # (LANGFUSE_HOST below) and is unaffected.
+      OTEL_TRACES_ENDPOINT: ""
       # Langfuse — in-network address (host port 3001 only works from the host)
       LANGFUSE_HOST: http://langfuse-web:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-localdev}
@@ -257,6 +275,8 @@ services:
       CLICKHOUSE_USER: clickhouse
       CLICKHOUSE_PASSWORD: clickhouse
       CLICKHOUSE_DB: default
+    ports:
+      - "8123:8123"   # HTTP query interface (TCP 9000 omitted — collides with MinIO)
     volumes:
       - clickhouse-data:/var/lib/clickhouse
     healthcheck:
@@ -272,6 +292,8 @@ services:
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--requirepass", "devredis"]
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a devredis ping | grep -q PONG"]
       interval: 5s

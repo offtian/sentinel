@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -50,6 +51,7 @@ import attrs
 from langgraph import graph as lg_graph
 from langgraph import types as lg_types
 from langgraph.graph import state as lg_state
+from pydantic_ai.toolsets import AbstractToolset
 
 from sentinel import config as config_mod
 from sentinel.application import audit as audit_mod
@@ -64,6 +66,7 @@ from sentinel.domain.runbooks import alert_view as runbook_alert_view
 from sentinel.domain.runbooks import matcher as runbook_matcher_mod
 from sentinel.domain.runbooks import models as runbook_models
 from sentinel.domain.runbooks import persistence as runbook_persistence
+from sentinel.interfaces.graphs import _node_helpers as node_helpers_mod
 from sentinel.interfaces.graphs.agents import (
     alert_classifier,
     investigator,
@@ -93,8 +96,40 @@ interrupt = lg_types.interrupt
 _EVIDENCE_FLOOR_RELEVANCE_CAP = 0.3
 
 
+# Per-job toolsets and adapters cannot live on the long-lived
+# ``CommonConfiguration`` singleton because they carry envelope-scoped
+# capability tokens (F7) and per-job MCP connections. Worker / chat /
+# Slack callers stash them in these ContextVars before invoking
+# ``investigate_alert``; nodes read them with a config-attribute
+# fallback for tests that pre-load fixtures onto config.
+_investigator_toolsets_cv: ContextVar[tuple[AbstractToolset[Any], ...] | None] = ContextVar(
+    "sentinel.sre_investigation.investigator_toolsets", default=None
+)
+_analyser_toolsets_cv: ContextVar[tuple[AbstractToolset[Any], ...] | None] = ContextVar(
+    "sentinel.sre_investigation.analyser_toolsets", default=None
+)
+
+
+def _resolve_investigator_toolsets(config: Any) -> tuple[AbstractToolset[Any], ...]:
+    """Return per-job investigator toolsets from CV, falling back to config."""
+    cv_value = _investigator_toolsets_cv.get()
+    if cv_value is not None:
+        return cv_value
+    return tuple(getattr(config, "investigator_toolsets", ()))
+
+
+def _resolve_analyser_toolsets(config: Any) -> tuple[AbstractToolset[Any], ...]:
+    """Return per-job analyser toolsets from CV, falling back to config."""
+    cv_value = _analyser_toolsets_cv.get()
+    if cv_value is not None:
+        return cv_value
+    return tuple(getattr(config, "analyser_toolsets", ()))
+
+
 # ---------------------------------------------------------------------------
-# T17 — classify_alert
+# Pipeline node 1 — classify_alert
+# Reads the raw alert, infers severity / service / category, and seeds the
+# investigation entity for the rest of the pipeline.
 # ---------------------------------------------------------------------------
 
 
@@ -138,9 +173,6 @@ async def classify_alert(state: sre_state_mod.InvestigationState) -> dict[str, A
         )
         raise
 
-    agent_utils.stamp_usage_attributes(
-        result.usage(), model_name=agent_utils.get_model_name(classifier_agent)
-    )
     classification: alert_classifier.AlertClassification = result.output
 
     logs.log_event(
@@ -172,7 +204,11 @@ async def classify_alert(state: sre_state_mod.InvestigationState) -> dict[str, A
 
 
 # ---------------------------------------------------------------------------
-# T18 — match_runbook
+# Pipeline node 2 — match_runbook
+# Picks a runbook from the catalog (tag-based matcher with LLM disambiguator
+# fallback) so downstream nodes have prescribed checks and a body to render
+# into agent prompts. Always writes a runbook_match audit row, including
+# no-match outcomes.
 # ---------------------------------------------------------------------------
 
 
@@ -350,7 +386,11 @@ async def _merge_k8s_results(
 
 
 # ---------------------------------------------------------------------------
-# T19 — investigate
+# Pipeline node 3 — investigate
+# Runs the investigator agent (with observability + MCP toolsets) to gather
+# evidence: logs, metrics, traces, and optionally K8s state. Produces an
+# investigation context (summary + sources + tool-call records) that the
+# next two nodes consume.
 # ---------------------------------------------------------------------------
 
 
@@ -412,14 +452,11 @@ async def investigate(state: sre_state_mod.InvestigationState) -> dict[str, Any]
                 runbook=runbook,
                 envelope=envelope,
             ),
-            toolsets=list(getattr(config, "investigator_toolsets", ())) or None,
+            toolsets=list(_resolve_investigator_toolsets(config)) or None,
             model_settings=agent_utils.build_cache_settings(
                 model_name=agent_utils.get_model_name(investigator_agent),
                 prompt_sha256=investigator.PROMPT_SHA256,
             ),
-        )
-        agent_utils.stamp_usage_attributes(
-            result.usage(), model_name=agent_utils.get_model_name(investigator_agent)
         )
         findings_output: investigator.InvestigationFindings = result.output
         investigation_analysis = findings_output.summary
@@ -503,7 +540,10 @@ async def investigate(state: sre_state_mod.InvestigationState) -> dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
-# T20 — analyse_root_cause
+# Pipeline node 4 — analyse_root_cause
+# Synthesises the investigator's evidence into a root cause + remediation
+# steps + ranked findings. Each finding carries an evidence_ref the
+# groundedness gate will check next.
 # ---------------------------------------------------------------------------
 
 
@@ -556,7 +596,7 @@ async def analyse_root_cause(
                 investigation_status=investigation_status,
                 envelope=envelope,
             ),
-            toolsets=list(getattr(config, "analyser_toolsets", ())) or None,
+            toolsets=list(_resolve_analyser_toolsets(config)) or None,
             model_settings=agent_utils.build_cache_settings(
                 model_name=agent_utils.get_model_name(analyser_agent),
                 prompt_sha256=root_cause_analyser.PROMPT_SHA256,
@@ -585,9 +625,6 @@ async def analyse_root_cause(
             },
         }
 
-    agent_utils.stamp_usage_attributes(
-        result.usage(), model_name=agent_utils.get_model_name(analyser_agent)
-    )
     analysis: root_cause_analyser.RootCauseAnalysis = result.output
 
     logs.log_event(
@@ -632,7 +669,10 @@ async def analyse_root_cause(
 
 
 # ---------------------------------------------------------------------------
-# T20b — assess_quality (F8 groundedness gate)
+# Pipeline node 5 — assess_quality
+# Deterministic groundedness gate: every Finding must point at a recorded
+# tool_call. Soft-fails — when the gate fails, the next node forces
+# human approval rather than killing the run.
 # ---------------------------------------------------------------------------
 
 
@@ -674,7 +714,10 @@ async def assess_quality(state: sre_state_mod.InvestigationState) -> dict[str, A
 
 
 # ---------------------------------------------------------------------------
-# T21 — determine_confidence
+# Pipeline node 6 — determine_confidence
+# Computes the composite confidence score, applies the no-evidence
+# relevance cap, and decides whether the result needs human approval. A
+# failed groundedness verdict from the previous node forces approval.
 # ---------------------------------------------------------------------------
 
 
@@ -773,7 +816,11 @@ async def determine_confidence(
 
 
 # ---------------------------------------------------------------------------
-# T22 — wait_for_human
+# Pipeline node 7 — wait_for_human
+# Approval gate. Calls LangGraph's interrupt() to pause the run; the worker
+# survives a restart while paused. The approval API resumes the graph with
+# a Command(resume=...) payload that this node maps onto an
+# ApprovalDecision enum.
 # ---------------------------------------------------------------------------
 
 
@@ -832,7 +879,10 @@ def _approval_decision_from_resume(resume_payload: Any) -> approval_entities.App
 
 
 # ---------------------------------------------------------------------------
-# T23 — publish_findings
+# Pipeline node 8 — publish_findings
+# Posts the finished investigation to Slack and PagerDuty. Skipped when the
+# approval gate rejected the result. Marks the investigation entity
+# COMPLETED.
 # ---------------------------------------------------------------------------
 
 
@@ -944,7 +994,9 @@ async def publish_findings(state: sre_state_mod.InvestigationState) -> dict[str,
 
 
 # ---------------------------------------------------------------------------
-# T24 — routing helpers
+# Conditional-edge routing helpers
+# Pure functions that LangGraph's add_conditional_edges() calls to pick the
+# next node based on state set by determine_confidence and wait_for_human.
 # ---------------------------------------------------------------------------
 
 
@@ -973,7 +1025,10 @@ def _route_after_approval(state: sre_state_mod.InvestigationState) -> str:
 
 
 # ---------------------------------------------------------------------------
-# T26 — graph builder
+# Graph builder
+# Composes the eight pipeline nodes plus the two conditional edges into a
+# compiled StateGraph. The FastAPI lifespan calls this once at startup and
+# stores the result on app.state.sre_investigation_graph.
 # ---------------------------------------------------------------------------
 
 
@@ -1049,7 +1104,10 @@ def build_sre_investigation_graph(
 
 
 # ---------------------------------------------------------------------------
-# T27 — InvestigationOutcome
+# Public return shape — InvestigationOutcome
+# Frozen attrs class returned by the entrypoints below. Mirrors the parts of
+# LangGraph state callers actually need (root cause, confidence, approval
+# status) without exposing the TypedDict shape itself.
 # ---------------------------------------------------------------------------
 
 
@@ -1132,7 +1190,11 @@ def _thread_config(request_id: uuid.UUID) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# T28 — investigate_alert
+# Public entrypoint — investigate_alert
+# Starts a fresh investigation run. Wraps graph.ainvoke in a parent OTel
+# pipeline span so the trace shows a single sre.investigation_pipeline root
+# instead of one trace per node. Stashes per-job toolsets in ContextVars
+# the investigate / analyse_root_cause nodes resolve at run time.
 # ---------------------------------------------------------------------------
 
 
@@ -1141,6 +1203,8 @@ async def investigate_alert(
     alert: alert_entities.Alert,
     envelope: envelope_module.Envelope,
     graph: lg_state.CompiledStateGraph[Any, Any, Any, Any],
+    investigator_toolsets: tuple[AbstractToolset[Any], ...] = (),
+    analyser_toolsets: tuple[AbstractToolset[Any], ...] = (),
 ) -> InvestigationOutcome:
     """
     Run the SRE investigation workflow for a single alert.
@@ -1150,16 +1214,41 @@ async def investigate_alert(
     can be resumed later via :func:`resume_investigation` against the
     same request_id.
 
+    Per-job toolsets carry envelope-scoped capability tokens (F7) and
+    cannot live on the long-lived config singleton, so callers pass
+    them here and the entrypoint stashes them in ContextVars that
+    ``investigate`` and ``analyse_root_cause`` resolve at run time.
+
     :param alert: The inbound alert to investigate.
     :param envelope: Identity envelope minted at FastAPI ingress.
     :param graph: The compiled SRE investigation graph (typically read off
         ``app.state.sre_investigation_graph`` by the webhook handler).
+    :param investigator_toolsets: Per-job toolsets for the investigator
+        agent (observability + shared MCP, runbook-scoped). Empty tuple
+        falls back to ``config.investigator_toolsets`` for tests.
+    :param analyser_toolsets: Per-job toolsets for the root-cause analyser.
     """
-    state = await cast("Any", graph).ainvoke(
-        _seed_state(alert=alert, envelope=envelope),
-        config=_thread_config(envelope.request_id),
-    )
-    outcome = _outcome_from_state(state, envelope.request_id)
+    inv_token = _investigator_toolsets_cv.set(investigator_toolsets)
+    ana_token = _analyser_toolsets_cv.set(analyser_toolsets)
+
+    async def _ainvoke() -> InvestigationOutcome:
+        state = await cast("Any", graph).ainvoke(
+            _seed_state(alert=alert, envelope=envelope),
+            config=_thread_config(envelope.request_id),
+        )
+        return _outcome_from_state(state, envelope.request_id)
+
+    try:
+        outcome = await node_helpers_mod.run_pipeline_with_envelope(
+            pipeline="sre",
+            envelope=envelope,
+            input_payload=alert.model_dump_json(),
+            fn=_ainvoke,
+            serialize_output=lambda o: attrs.asdict(o, recurse=True).__repr__(),
+        )
+    finally:
+        _investigator_toolsets_cv.reset(inv_token)
+        _analyser_toolsets_cv.reset(ana_token)
 
     # R-CO-1: record the terminal state transition in the audit log.
     config = get_config()
@@ -1179,7 +1268,11 @@ async def investigate_alert(
 
 
 # ---------------------------------------------------------------------------
-# T29 — resume_investigation
+# Public entrypoint — resume_investigation
+# Continues a paused run after a human approval/rejection. The original
+# envelope lives in the LangGraph checkpoint, so we synthesise a minimal
+# resume_envelope just for the resumed run's pipeline span — the request_id
+# ties this resume back to the original Langfuse session.
 # ---------------------------------------------------------------------------
 
 
@@ -1207,11 +1300,34 @@ async def resume_investigation(
     if reason is not None:
         resume_payload["reason"] = reason
 
-    state = await cast("Any", graph).ainvoke(
-        lg_types.Command(resume=resume_payload),
-        config=_thread_config(request_id),
+    # Reconstruct an envelope shell for span attributes — the original
+    # ingress envelope lives in the LangGraph checkpoint state, not in
+    # the resume payload, so we synthesise the minimum needed for the
+    # pipeline span. ``request_id`` ties this run back to the same
+    # Langfuse session as the original investigate_alert call.
+    resume_envelope = envelope_module.Envelope(
+        request_id=request_id,
+        tenant_id="resume",
+        cluster_id="unknown",
+        region="unknown",
+        pii_class="internal",
+        received_at=datetime.now(UTC),
     )
-    outcome = _outcome_from_state(state, request_id)
+
+    async def _ainvoke() -> InvestigationOutcome:
+        state = await cast("Any", graph).ainvoke(
+            lg_types.Command(resume=resume_payload),
+            config=_thread_config(request_id),
+        )
+        return _outcome_from_state(state, request_id)
+
+    outcome = await node_helpers_mod.run_pipeline_with_envelope(
+        pipeline="sre",
+        envelope=resume_envelope,
+        input_payload=str(resume_payload),
+        fn=_ainvoke,
+        serialize_output=lambda o: attrs.asdict(o, recurse=True).__repr__(),
+    )
 
     # R-CO-1: record the approval decision in the audit log.
     config = get_config()
@@ -1232,7 +1348,10 @@ async def resume_investigation(
 
 
 # ---------------------------------------------------------------------------
-# T30 — get_investigation_status
+# Public read API — get_investigation_status
+# Reads the LangGraph checkpoint for a request_id and reports whether the
+# run is pending approval, approved, rejected, or completed. Returns None
+# for unknown request_ids so the API can surface a clean 404.
 # ---------------------------------------------------------------------------
 
 

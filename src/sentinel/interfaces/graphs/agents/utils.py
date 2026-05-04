@@ -7,7 +7,6 @@ from opentelemetry import trace as otel_trace
 from sentinel.domain import skills as skills_mod
 from sentinel.interfaces.graphs.agents import _cache_settings
 from sentinel.utils.observability import spans as obs_spans
-from sentinel.utils.observability import usage as obs_usage
 
 
 def set_agent_span_attributes(
@@ -41,25 +40,6 @@ def set_agent_span_attributes(
         agent_name=agent_name,
     )
     otel_trace.get_current_span().set_attributes(attrs.to_otel_dict())
-
-
-def stamp_usage_attributes(usage: Any, *, model_name: str) -> None:
-    """
-    Stamp token/cost UsageAttributes on the current OTel span.
-
-    Called immediately after ``agent.run(...)`` returns at every PydanticAI
-    invocation site so Langfuse Generation views receive token counts and
-    ``sentinel.cost_usd``. The ``usage`` argument accepts any object with
-    ``input_tokens`` and ``output_tokens`` attributes (duck-typed for
-    ``pydantic_ai.usage.RunUsage``).
-
-    :param usage: A ``pydantic_ai.usage.RunUsage`` returned by
-        ``result.usage()``.
-    :param model_name: LiteLLM model string used for cost lookup.
-    """
-    otel_trace.get_current_span().set_attributes(
-        obs_usage.extract_usage(usage, model_name=model_name).to_otel_dict()
-    )
 
 
 def get_model_name(agent: Any) -> str:

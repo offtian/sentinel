@@ -50,11 +50,13 @@ TeamId = Literal["sre", "devops", "ace"]
 
 SKILLS_BY_AGENT: dict[str, tuple[str, ...]] = {
     "alert_classifier": (),
-    "root_cause_analyser": (
-        "k8s-crashloop-runbook",
-        "database-connection-runbook",
-        "latency-spike-runbook",
-    ),
+    # Analyser starts with no static skills: relevant runbooks attach via
+    # the dynamic ``_inject_runbook_skills`` hook (category-matched) and
+    # the matched-runbook body comes in via
+    # ``_inject_runbook_body_quarantined``. Bundling every runbook into
+    # every analyser run wastes ~3.5k input tokens and dilutes the prompt
+    # with advice unrelated to the alert.
+    "root_cause_analyser": (),
     "ticket_reviewer": (),
     "response_drafter": (
         "auth-error-response",
