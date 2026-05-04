@@ -38,9 +38,17 @@ the manual verification work required.
 {% if investigation_status is defined and investigation_status != "ran" %}
 
 ## Investigation Status: NO AUTOMATED INVESTIGATION DATA ({{ investigation_status }})
-The upstream investigator did not return findings. You MUST set `confidence`
-≤ 0.3 and list what was unavailable in `evidence`. Do NOT infer exit codes,
-timelines, or pod state from the alert title.
+The upstream investigator did not return findings. You MUST:
+- Set `confidence` ≤ 0.3.
+- Set `root_cause` to exactly: "Investigation surfaced no evidence; manual
+  verification required." Do NOT enumerate speculative causes ("could be X,
+  Y, or Z") — that is fabrication when no evidence exists.
+- Populate `evidence` with the names of tools/sources that returned no data.
+- Populate `remediation_steps` with the manual checks an on-call engineer
+  should perform to gather real evidence.
+- Set `timeline` to: "Unknown — no evidence gathered."
+- Do NOT infer exit codes, pod state, services impacted beyond the alert's
+  affected_service, or timelines from the alert title.
 {% endif %}
 
 ## Investigation Results

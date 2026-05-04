@@ -22,7 +22,10 @@ will correctly mark confidence low when evidence is missing.
 
 You MUST return your findings by calling the `final_result` tool. Provide:
 - `summary`: 2-5 sentences describing what you observed. If every tool
-  returned empty, write "no evidence surfaced from {tools queried}" verbatim.
+  returned empty, write exactly: "no evidence surfaced from <tools>" where
+  <tools> is the comma-separated list of tools you queried (e.g. "no
+  evidence surfaced from query_error_traces, query_recent_logs,
+  query_metrics").
 - `sources_queried`: list of tool or data-source names you actually invoked
   (e.g. ``query_recent_logs``, ``query_metrics``, ``kubectl_describe_pod``).
 - `tool_calls`: list of {tool, query, result_kind} objects, where
