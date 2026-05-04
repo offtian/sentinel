@@ -61,11 +61,16 @@ from sentinel.domain.approval import entities as approval_entities
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.investigations import adapters as investigation_adapters
 from sentinel.domain.investigations import entities as investigation_entities
+from sentinel.domain.memory import embeddings as memory_embeddings
+from sentinel.domain.memory import entities as memory_entities
+from sentinel.domain.memory import operations as memory_operations
+from sentinel.domain.memory import queries as memory_queries
 from sentinel.domain.quality import groundedness as groundedness_mod
 from sentinel.domain.runbooks import alert_view as runbook_alert_view
 from sentinel.domain.runbooks import matcher as runbook_matcher_mod
 from sentinel.domain.runbooks import models as runbook_models
 from sentinel.domain.runbooks import persistence as runbook_persistence
+from sentinel.domain.runbooks import rag as runbook_rag
 from sentinel.interfaces.graphs import _node_helpers as node_helpers_mod
 from sentinel.interfaces.graphs.agents import (
     alert_classifier,
@@ -124,6 +129,158 @@ def _resolve_analyser_toolsets(config: Any) -> tuple[AbstractToolset[Any], ...]:
     if cv_value is not None:
         return cv_value
     return tuple(getattr(config, "analyser_toolsets", ()))
+
+
+# Long-term memory recall is best-effort: any failure (no DB session
+# factory wired, no embedder configured, embedder transport down,
+# query failure) logs and degrades to "no priors" — the analyser still
+# runs, the prompt just lacks the "Prior Incidents" section.
+async def _recall_similar_incidents(
+    *,
+    config: Any,
+    envelope: envelope_module.Envelope | None,
+    alert: alert_entities.Alert,
+) -> tuple[Any, ...]:
+    """
+    Return up to ``k`` prior incidents on the same tenant + cluster, or ``()``.
+
+    Reads from ``incident_memory_embeddings`` via cosine similarity (F6.J
+    pattern). Falls back to a recency query when the embedder is
+    unavailable so a transient embedder outage doesn't hide the recall
+    section entirely.
+    """
+    if envelope is None:
+        return ()
+    db_session_factory = getattr(config, "db_session_factory", None)
+    if db_session_factory is None:
+        return ()
+    embedder_model = getattr(config, "embedder_model", None)
+    query_text = f"{alert.title}\n{alert.description}".strip()
+    now = datetime.now(tz=UTC)
+    try:
+        async with db_session_factory() as session:
+            if embedder_model:
+                embedder = runbook_rag.LiteLLMEmbedder(model_id=embedder_model)
+                try:
+                    return await memory_embeddings.retrieve_similar_incidents(
+                        session=session,
+                        tenant_id=envelope.tenant_id,
+                        cluster_id=envelope.cluster_id,
+                        query_text=query_text,
+                        embedder=embedder,
+                        now=now,
+                    )
+                except memory_embeddings.EmbedderUnavailableError:
+                    pass
+            recent = await memory_queries.fetch_recent_for_cluster(
+                session=session,
+                tenant_id=envelope.tenant_id,
+                cluster_id=envelope.cluster_id,
+                now=now,
+                limit=3,
+            )
+            return tuple(
+                memory_entities.SimilarIncident(
+                    memory=memory,
+                    similarity=0.0,
+                    matched_section="recent",
+                )
+                for memory in recent
+            )
+    except Exception as exc:
+        logs.log_exception(
+            exc,
+            params={
+                "alert_id": alert.id,
+                "node": "analyse_root_cause",
+                "step": "recall_similar_incidents",
+            },
+        )
+        return ()
+
+
+# Confidence labels worth remembering. LOW-confidence investigations are
+# skipped because the analyser would just learn from noise on recall.
+_MEMORY_PERSIST_CONFIDENCE_LABELS: frozenset[str] = frozenset({"high", "medium"})
+
+
+async def _persist_incident_memory(
+    *,
+    config: Any,
+    envelope: envelope_module.Envelope | None,
+    alert: alert_entities.Alert,
+    investigation: investigation_entities.Investigation | None,
+    confidence: confidence_entities.ConfidenceScore | None,
+    classification_category: str,
+) -> None:
+    """
+    Best-effort write of one ``incident_memory`` row + section embeddings.
+
+    Skips silently when (a) no envelope, (b) no DB session factory, (c)
+    investigation is missing root_cause / remediation, or (d) confidence
+    label isn't HIGH / MEDIUM. Any DB or embedder failure logs and
+    returns — memory is best-effort and never blocks the publish path.
+    """
+    if envelope is None or investigation is None or confidence is None:
+        return
+    if confidence.label.value.lower() not in _MEMORY_PERSIST_CONFIDENCE_LABELS:
+        return
+    if not investigation.root_cause or not investigation.remediation:
+        return
+    db_session_factory = getattr(config, "db_session_factory", None)
+    if db_session_factory is None:
+        return
+
+    occurred_at = investigation.completed_at or datetime.now(tz=UTC)
+    alert_signature = memory_operations.compute_alert_signature(
+        labels=(alert.severity.value, alert.source, alert.service),
+        classification_category=classification_category,
+    )
+
+    try:
+        async with db_session_factory() as session:
+            memory = await memory_operations.persist_incident_memory(
+                session=session,
+                tenant_id=envelope.tenant_id,
+                cluster_id=envelope.cluster_id,
+                service=alert.service,
+                alert_signature=alert_signature,
+                alert_title=alert.title,
+                alert_description=alert.description,
+                root_cause=investigation.root_cause,
+                remediation=investigation.remediation,
+                confidence_score=confidence.total,
+                source_investigation_id=investigation.id,
+                occurred_at=occurred_at,
+            )
+            embedder_model = getattr(config, "embedder_model", None)
+            if embedder_model:
+                embedder = runbook_rag.LiteLLMEmbedder(model_id=embedder_model)
+                try:
+                    await memory_embeddings.index_incident_memory(
+                        session=session,
+                        memory=memory,
+                        embedder=embedder,
+                    )
+                except memory_embeddings.EmbedderUnavailableError as exc:
+                    logs.log_exception(
+                        exc,
+                        params={
+                            "alert_id": alert.id,
+                            "node": "publish_findings",
+                            "step": "index_incident_memory",
+                        },
+                    )
+            await session.commit()
+    except Exception as exc:
+        logs.log_exception(
+            exc,
+            params={
+                "alert_id": alert.id,
+                "node": "publish_findings",
+                "step": "persist_incident_memory",
+            },
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -581,6 +738,11 @@ async def analyse_root_cause(
     )
 
     envelope = state.get("envelope")
+    similar_incidents = await _recall_similar_incidents(
+        config=config,
+        envelope=envelope,
+        alert=alert,
+    )
     try:
         result = await analyser_agent.run(
             user_prompt=f"Analyse this alert: {alert.title}",
@@ -595,6 +757,7 @@ async def analyse_root_cause(
                 runbook=runbook,
                 investigation_status=investigation_status,
                 envelope=envelope,
+                similar_incidents=similar_incidents,
             ),
             toolsets=list(_resolve_analyser_toolsets(config)) or None,
             model_settings=agent_utils.build_cache_settings(
@@ -988,6 +1151,18 @@ async def publish_findings(state: sre_state_mod.InvestigationState) -> dict[str,
         confidence_label=confidence_label if confidence_label is not None else "unknown",
         approval_required=needs_approval,
         outcome="completed",
+    )
+
+    # Long-term memory: persist this investigation for future recall iff
+    # confident enough to be useful (HIGH or MEDIUM). LOW-confidence rows
+    # would just train the analyser on noise, so we skip them.
+    await _persist_incident_memory(
+        config=config,
+        envelope=state.get("envelope"),
+        alert=alert,
+        investigation=investigation,
+        confidence=confidence,
+        classification_category=state.get("classification_category", ""),
     )
 
     return {"findings_published": True}

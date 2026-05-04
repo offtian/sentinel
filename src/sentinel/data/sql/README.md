@@ -18,6 +18,8 @@ business logic lives here, only the schema and constraints.
 | `tickets.py` | `ticket_review_records` | Support-pipeline ticket reviews (separate domain) | — |
 | `jobs.py` | `job_request_records`, `job_result_records` | Async job queue rows | — |
 | `evaluation.py` | `comparison_runs`, `eval_runs` | Evaluation framework rows | — |
+| `incident_memory.py` | `incident_memory` | Per-tenant/cluster long-term incident recall row | — |
+| `incident_memory_embeddings.py` | `incident_memory_embeddings` | Vector index over `alert` / `root_cause` / `remediation` sections of each memory | — |
 
 The first six rows are the **F3 RFC-canonical chain** (foundations slice). The
 RFC §12.3.5 dedicated `finding` table is intentionally absent in foundations —

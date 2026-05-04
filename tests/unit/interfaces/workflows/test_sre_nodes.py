@@ -89,6 +89,11 @@ def _build_fake_config(
     cfg.classifier_toolsets = classifier_toolsets or []
     cfg.investigator_toolsets = investigator_toolsets or []
     cfg.analyser_toolsets = analyser_toolsets or []
+    # Disable DB-backed paths (long-term memory persist + recall) by default
+    # so unit tests that don't exercise the DB don't accidentally engage the
+    # persistence path through a MagicMock-shaped session factory.
+    cfg.db_session_factory = None
+    cfg.embedder_model = ""
     return cfg
 
 

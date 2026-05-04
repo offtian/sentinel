@@ -61,4 +61,18 @@ The upstream investigator did not return findings. You MUST:
 {% for call in tool_calls %}
 - {{ call.tool | default("unknown") }} ({{ call.result_kind | default("unknown") }}): {{ call.query | default("") }}
 {% endfor %}
+{% if similar_incidents %}
+
+## Prior Incidents on This Cluster
+The following resolved incidents on this fund + cluster look similar to
+the current alert. Treat these as priors — useful signal, but verify
+against current evidence; do not copy a prior root cause if the current
+investigation contradicts it.
+{% for inc in similar_incidents %}
+- [{{ inc.memory.occurred_at }} | similarity={{ "%.2f"|format(inc.similarity) }} | matched_on={{ inc.matched_section }}]
+  Alert: {{ inc.memory.alert_title }}
+  Root cause: {{ inc.memory.root_cause }}
+  Remediation: {{ inc.memory.remediation }}
+{% endfor %}
+{% endif %}
 {% endblock %}

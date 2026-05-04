@@ -12,6 +12,7 @@ from sentinel.domain.charts import entities as chart_entities
 from sentinel.domain.confidence import entities as confidence_entities
 from sentinel.domain.investigations import adapters, holmes_adapter
 from sentinel.domain.investigations import entities as investigation_entities
+from sentinel.domain.memory import entities as memory_entities
 from sentinel.domain.runbooks import models as runbook_models
 from sentinel.domain.support import entities as support_entities
 
@@ -189,6 +190,50 @@ class MockHolmesAdapter(holmes_adapter.BaseHolmesAdapter):
         context: holmes_adapter.adapters.InvestigationContext | None = None,
     ) -> holmes_adapter.HolmesInvestigationResult:
         return self._result
+
+
+def make_incident_memory(
+    *,
+    memory_id: uuid.UUID | None = None,
+    tenant_id: str = "pm-default",
+    cluster_id: str = "dev-eu-west-1",
+    service: str = "api-service",
+    alert_signature: str = "abc123def456",
+    alert_title: str = "PodCrashLoop on api-service",
+    alert_description: str = "Pod restarting every 30s",
+    root_cause: str = "OOMKilled — memory limit too low",
+    remediation: str = "Raise memory limit from 256Mi to 512Mi",
+    confidence_score: float = 0.85,
+    source_investigation_id: uuid.UUID | None = None,
+    occurred_at: datetime | None = None,
+) -> memory_entities.IncidentMemory:
+    return memory_entities.IncidentMemory(
+        memory_id=memory_id or uuid.uuid4(),
+        tenant_id=tenant_id,
+        cluster_id=cluster_id,
+        service=service,
+        alert_signature=alert_signature,
+        alert_title=alert_title,
+        alert_description=alert_description,
+        root_cause=root_cause,
+        remediation=remediation,
+        confidence_score=confidence_score,
+        source_investigation_id=source_investigation_id or uuid.uuid4(),
+        occurred_at=occurred_at or datetime(2026, 4, 1, 12, 0, tzinfo=UTC),
+    )
+
+
+def make_similar_incident(
+    *,
+    memory: memory_entities.IncidentMemory | None = None,
+    similarity: float = 0.91,
+    matched_section: str = "alert",
+) -> memory_entities.SimilarIncident:
+    return memory_entities.SimilarIncident(
+        memory=memory or make_incident_memory(),
+        similarity=similarity,
+        matched_section=matched_section,
+    )
 
 
 def make_chart_request(

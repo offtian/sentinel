@@ -280,6 +280,18 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "Memory domain stays pure"
+type = "forbidden"
+source_modules = ["sentinel.domain.memory"]
+forbidden_modules = [
+    "sentinel.interfaces",
+    "sentinel.application",
+    "sentinel.plugins",
+    "sentinel.vendors",
+    "sentinel.config",
+]
+
+[[tool.importlinter.contracts]]
 # Phase 7 / T48: The archived legacy SRE pipeline is reference-only.
 # Only the explicit legacy flag-branches (worker, replay, chat/app) may import
 # from _archive during the staging soak window (T49/T50 cleanup pending).

@@ -21,6 +21,8 @@ from sentinel.data.sql import (  # noqa: F401
     alert_requests,
     audit,
     evaluation,
+    incident_memory,
+    incident_memory_embeddings,
     investigations,
     jobs,
     quality,

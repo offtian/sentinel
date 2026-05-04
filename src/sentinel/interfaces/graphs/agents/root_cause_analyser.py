@@ -8,6 +8,7 @@ from pydantic_ai import Agent, RunContext
 
 from sentinel.data.primitives import envelope as envelope_mod
 from sentinel.domain import prompts
+from sentinel.domain.memory import entities as memory_entities
 from sentinel.domain.runbooks import models as runbook_models
 from sentinel.interfaces.graphs.agents import utils
 
@@ -53,6 +54,12 @@ class Dependencies:
     # F7: identity envelope threaded through so RunbookScopedToolset can
     # enforce tenant-scoped tool calls at the wrapper boundary.
     envelope: envelope_mod.Envelope | None = None
+    # Long-term memory recall: prior incidents on the same tenant + cluster
+    # that look similar to the current alert. Rendered into the user prompt
+    # under "Prior Incidents on This Cluster". Empty tuple by default so
+    # callers that don't wire memory (unit tests, soft-degrade paths) keep
+    # the same prompt shape as before this field existed.
+    similar_incidents: tuple[memory_entities.SimilarIncident, ...] = ()
     _tool_call_counters: dict[str, int] = dataclasses.field(default_factory=dict)
 
 
@@ -71,6 +78,7 @@ def _build_investigation_context(ctx: RunContext[Dependencies]) -> str:
         ),
         tool_calls=ctx.deps.investigation_tool_calls,
         investigation_status=ctx.deps.investigation_status,
+        similar_incidents=ctx.deps.similar_incidents,
     )
 
 
