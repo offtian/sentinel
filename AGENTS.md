@@ -46,8 +46,10 @@ reply = await support_review.review_ticket(ticket=ticket, envelope=envelope, ...
 All LangGraph graph nodes must be wrapped with `with_envelope` from
 `interfaces/workflows/_envelope.py` for RFC §3.1 identity propagation.
 
-Do NOT import from `interfaces/graphs/_archive/` — that package is reference-only and
-import-linter contracts forbid new dependencies on it.
+Do NOT import from `interfaces/graphs/_archive/` in new code — import-linter contracts forbid
+new dependencies on it. (Note: the archived SRE pipeline is still the default execution path —
+the legacy flag-off branches in `worker.py`, `replay.py`, chat, and the Slack handlers import it
+deliberately and are exempt from the contract.)
 
 ### Git
 See global rules in `~/.claude/rules/git-workflow.md` for commit message format and PR workflow.

@@ -69,7 +69,7 @@ Quality improvement relies on three feedback loops:
 
 ```
 interfaces/    → FastAPI routers, webhook handlers, MCP server, pipeline orchestration
-  workflows/   → LangGraph pipelines (SRE investigation ✓; support + chart to follow)
+  workflows/   → LangGraph pipelines (SRE investigation, flag-gated off by default; support + chart never migrated)
                    sre_investigation.py  — nodes, graph builder, entrypoints
                    sre_state.py          — InvestigationState TypedDict
                    _checkpointer.py      — AsyncPostgresSaver factory
@@ -77,7 +77,7 @@ interfaces/    → FastAPI routers, webhook handlers, MCP server, pipeline orche
   graphs/      → Pydantic Graph pipelines (active: support, chart; archived: SRE)
                    support_review.py     — active support pipeline (Pydantic Graph)
                    chart_generation.py   — active chart-coding pipeline (Pydantic Graph)
-                   _archive/             — archived Pydantic Graph pipelines (reference-only)
+                   _archive/             — archived Pydantic Graph SRE pipeline (still the default execution path — see below)
                    agents/               — PydanticAI agent factories (shared by both frameworks)
                    _node_helpers.py      — instrumented_node_run, typed span-attr emission
   mcp/         → FastMCP server exposing Sentinel tools to external agents
@@ -111,16 +111,17 @@ utils/
 config         → Centralised configuration (environs + Configuration class)
 ```
 
-**Rule**: Lower layers cannot import from higher layers. Enforced via `import-linter` contracts in `pyproject.toml`. `interfaces/graphs/_archive/` is additionally forbidden from being imported by any module (enforced by a dedicated contract).
+**Rule**: Lower layers cannot import from higher layers. Enforced via `import-linter` contracts in `pyproject.toml`. A dedicated contract forbids **new** dependencies on `interfaces/graphs/_archive/` from the enumerated layers — but the legacy flag-off branches (`worker.py`, `replay.py`, `interfaces/chat/app.py`, and the Slack event handlers) deliberately sit outside that contract and still import it, because the archived pipeline is the default execution path (see §AI SRE Pipeline).
 
 ### Orchestration frameworks
 
-Two pipeline frameworks coexist during the LangGraph migration (see ADR 0007):
+Two pipeline frameworks coexist; the LangGraph migration (see ADR 0007) stopped mid-cutover when the
+repo was retired, so the LangGraph SRE path is **off by default**:
 
 | Framework | Location | Pipelines | State persistence |
 |-----------|----------|-----------|-------------------|
-| **LangGraph** | `interfaces/workflows/` | SRE investigation | `AsyncPostgresSaver` (Postgres checkpoints) — supports `interrupt()` / resume |
-| **Pydantic Graph** | `interfaces/graphs/` | Support review, Chart generation | In-memory (`GraphRunContext`); no mid-run persistence |
+| **LangGraph** | `interfaces/workflows/` | SRE investigation (only when `LANGGRAPH_SRE_ENABLED=true`; default `false`) | `AsyncPostgresSaver` (Postgres checkpoints) — supports `interrupt()` / resume |
+| **Pydantic Graph** | `interfaces/graphs/` | SRE investigation (`_archive/`, the flag-off default), Support review, Chart generation | In-memory (`GraphRunContext`); no mid-run persistence |
 
 **PydanticAI agents** (`interfaces/graphs/agents/`) are framework-agnostic — the same agent factories (`build_agent(*, model, skills)`) are called by both LangGraph nodes and Pydantic Graph nodes. The LangGraph nodes call `.run(model=...)` directly; Pydantic Graph nodes use `instrumented_node_run()`.
 
@@ -130,9 +131,13 @@ Two pipeline frameworks coexist during the LangGraph migration (see ADR 0007):
 
 ## AI SRE Pipeline
 
-The SRE investigation pipeline runs on **LangGraph** (`interfaces/workflows/sre_investigation.py`),
-flag-controlled via `LANGGRAPH_SRE_ENABLED`. The legacy Pydantic Graph implementation is
-archived at `interfaces/graphs/_archive/investigation.py` (reference-only; see ADR 0007).
+The SRE investigation pipeline has two implementations. The **default execution path**
+(`LANGGRAPH_SRE_ENABLED=false`, the shipped default) is the legacy **Pydantic Graph** pipeline,
+archived at `interfaces/graphs/_archive/investigation.py` but still imported and dispatched by
+`worker.py`. The **LangGraph** reimplementation (`interfaces/workflows/sre_investigation.py`,
+described below) runs only when the flag is on; the planned cutover (staging soak → flag flip →
+T49/T50 cleanup) never completed before retirement (see ADR 0007). Note the two paths are not
+behaviourally identical — the legacy pipeline has no `assess_quality` groundedness gate.
 
 ```
 START
