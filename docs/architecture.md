@@ -757,7 +757,8 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 
 | Pattern | Source File |
 |---------|-----------|
-| Pydantic Graph pipeline | `src/sentinel/interfaces/graphs/investigation.py` |
+| Pydantic Graph SRE pipeline (archived; flag-off default path) | `src/sentinel/interfaces/graphs/_archive/investigation.py` |
+| LangGraph SRE pipeline (flag-gated) | `src/sentinel/interfaces/workflows/sre_investigation.py` |
 | Search abstraction | `src/sentinel/domain/search/searcher.py` |
 | PydanticAI agents | `src/sentinel/interfaces/graphs/agents/alert_classifier.py` |
 | Model routing helper | `src/sentinel/interfaces/graphs/agents/utils.py` |
@@ -781,5 +782,6 @@ Deployed to Kubernetes via ArgoCD through `ktl-services-deployment` repository:
 | Prompt templates | `src/sentinel/domain/prompts/` |
 | Prompt cache settings | `src/sentinel/interfaces/graphs/agents/_cache_settings.py` |
 | Replay CLI | `src/sentinel/replay.py` |
-| ReplayBundle type | `src/sentinel/domain/pipeline/types.py` |
+| ReplayBundle type (RFC §3.8, live) | `src/sentinel/utils/replay_bundle.py` |
+| ReplayBundle type (legacy run-metadata) | `src/sentinel/domain/pipeline/types.py` |
 | OTel bootstrap | `src/sentinel/bootstrap_otel.py` |
