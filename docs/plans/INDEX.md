@@ -47,7 +47,12 @@
 
 ### In Progress
 
-_None — repository retired 2026-07-06. Previously-in-progress plans moved to **Abandoned** below._
+_Feature work is retired (see banner). The only active plan is repository close-out — meta-work to
+publish this repo as a portfolio artifact, not a resumption of any retired feature plan._
+
+| Plan | Goal | Started |
+|------|------|---------|
+| [portfolio-closeout](portfolio-closeout.md) | Polish → publish → archive: green `main`, fix doc-vs-code drift, case study + MIT license, secrets scrub, make public, archive read-only | 2026-07-06 |
 
 ### Draft (Not Started)
 
