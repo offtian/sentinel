@@ -13,10 +13,11 @@
 
 **Method.** Read PRD, architecture doc, plan index. Fanned out three read-only sweeps
 (security/trust-boundary, reliability/operational, doc-vs-code drift). Every load-bearing
-claim was independently verified against source before inclusion. The reliability sweep went
-unresponsive (its territory was verified first-hand); the security and drift sweeps reported and
-every concrete code claim from them was re-verified against source before inclusion. Claims that
-could **not** be confirmed are explicitly marked UNCONFIRMED.
+claim was independently verified against source before inclusion. All three sweeps ultimately reported
+(the reliability sweep late, after its findings channel was fixed and after it provisioned a working
+toolchain that produced the definitive QA-gate result in §2.3); every concrete code claim from all three
+was re-verified against source before inclusion, and the reliability sweep's early-silence gap was also
+covered first-hand. Claims that could **not** be confirmed are explicitly marked UNCONFIRMED.
 
 ---
 
@@ -199,6 +200,13 @@ sound — `SELECT … FOR UPDATE SKIP LOCKED`, verified — so this is a scaling
 bug.) Compounded by §1.1: unauthenticated + un-rate-limited manual triggers make cost-amplification/DoS
 trivial.
 
+**Worse: the Support pipeline isn't queued at all.** The Jira webhook runs the full LLM review
+*synchronously inline in the API request* — `await workflows_support_review.review_ticket(...)`
+(`support/router.py:165`, whose docstring says "inline (rather than enqueuing a job)"). So a ticket burst
+runs unbounded concurrent LLM pipelines **in the API event loop**, starving `/health` and the SRE webhook
+receivers that share the process. The PRD's "PostgreSQL-backed job queue … for safe multi-replica
+processing" is true for SRE but bypassed for Support ingress (verified).
+
 ### 2.2 Deduplication is "crash on duplicate," not graceful skip
 
 *Survives reframe: YES (webhook ingress persists).*
@@ -211,6 +219,11 @@ skipped — the opposite of graceful dedup, and webhook senders retry on 5xx. Wo
 PagerDuty `incident.triggered` and `incident.escalated` collide on the same `source_id` (which would
 silently drop escalations). Note: `CLAUDE.md`/README describe `_handle_webhook()` as the dedup point,
 but that function does no dedup — the idempotency key is the only mechanism, and it fails ungracefully.
+
+Two more edges (verified): the dedup is **permanent, not windowed** — `source_id` is the PagerDuty
+incident id (`webhooks/pagerduty.py:42,62`), so a re-fired or flapping incident can *never* be investigated
+again, ever. And the **Support webhook bypasses dedup entirely** (it runs inline, never enqueues), so Jira's
+own delivery retries spawn concurrent duplicate reviews.
 
 ### 2.3 The QA gate mislabels failures, and `main` may be red on its own gates
 
@@ -287,6 +300,47 @@ orchestration frameworks, a feature flag, and an archived third copy is a lot of
 in sync, and the flag means two code paths must both be tested. If §0's decision retires the repo, don't
 finish the migration — stop investing.
 
+Sharper split-brain edge (verified): the Support ingress paths run **different engines**. The Jira webhook
+runs the **LangGraph** support graph inline (`support/router.py:21,165`), while the manual `/support/review`
+endpoint enqueues to the worker, which runs the **Pydantic Graph** support pipeline (`worker.py:45,408`).
+Two engines behind one product surface, chosen by entry point — a latent correctness/behaviour-drift trap
+(e.g. an approval-gated review behaves differently, or can't be resumed, depending on how it was triggered).
+
+### 2.7 Reliability defects in the queue/approval machinery (verified late in review)
+
+*Survives reframe: PARTIAL — the queue dies with the repo, but every one of these is a lesson for the successor.*
+
+These were confirmed first-hand after a teammate provisioned a working toolchain; they are the most severe
+operational gaps found, and several directly undercut PRD claims:
+
+- **The human-approval gate notifies nobody (critical).** `wait_for_human` only calls LangGraph `interrupt()`
+  (`sre_investigation.py:862`). The Slack Approve/Reject sender `post_approval_request` exists
+  (`vendors/slack/__init__.py`) but has **zero call sites** (verified). So a low-confidence investigation
+  pauses silently and waits indefinitely with **no human aware**. The compliance centrepiece — human sign-off
+  before publishing — is invisible in practice. (Compounds §1.1/§1.2.)
+- **`APPROVAL_TIMEOUT_SECONDS` is dead.** Default 0, and **no code reads it** (verified) — no sweeper, no
+  auto-approve. Pending approvals accumulate forever, and the `AsyncPostgresSaver` checkpoints have no TTL or
+  cleanup, so the checkpoint table grows unbounded.
+- **Stale-job recovery is broken for the exact case it names.** `recover_stale_jobs` re-queues
+  `WHERE status='running' AND locked_by=worker_id` (`domain/jobs/operations.py:363-367`), called on startup
+  with `worker_id = HOSTNAME`. In a K8s Deployment a crashed pod is replaced with a **new** hostname, so its
+  in-flight `running` jobs are never reclaimed (claim reads only `pending`); `locked_at` is written but no
+  time-based reaper reads it. The PRD's "stale job recovery for workers that crash mid-investigation"
+  (`prd.md:112`) does not hold across pod replacement.
+- **Outbound side effects are not idempotent.** Slack/PagerDuty posts carry no idempotency key. A timeout or
+  crash *after* `publish_findings` posts but *before* the job is marked complete causes a retry to re-run the
+  whole graph → **duplicate Slack messages and PagerDuty notes**. Publish uses `gather(return_exceptions=True)`
+  and only logs failures.
+- **The worker never initialises metrics.** `worker._main` calls `bootstrap.initialise()` (traces only) and
+  never `init_meters` / starts a metrics server (`worker.py:543`; no metrics port bound). So *every*
+  `metrics.record_*` no-ops in the process that runs **all** investigations — queue depth, job counts, and
+  approval decisions are never measured. (Deepens §3.1.)
+- **Inconsistent failure handling.** `classify_alert` re-raises (job fails → retried), but `investigate` and
+  `analyse_root_cause` swallow exceptions and emit a low-confidence fallback (`sre_investigation.py:477-485,
+  605-626`), so the job "completes" with a bogus result instead of failing. Retries re-run the entire pipeline
+  from scratch (fresh LLM calls, up to 3×) — cost amplification concentrated on the alerts that are already
+  misbehaving.
+
 ---
 
 ## §3 — DEFERRABLE blind spots
@@ -328,9 +382,11 @@ finish the migration — stop investing.
 4. **"Runbook scoping contains the agent's tools."** It fails open and skips MCP tools. (§1.3)
 5. **"Webhook dedup protects us from duplicates."** It raises on duplicates instead. (§2.2)
 6. **"`tenant_id` is a security boundary."** It's attacker-assertable from an unauthenticated payload. (§2.4)
-7. **"Vendor no-op-when-unconfigured is safe."** In a partial deploy, `publish_findings` can silently
-   succeed with findings going nowhere — no signal that output was dropped. (Design pattern in
-   `.claude/rules/sentinel.md`; worth an explicit "dropped output" event.) *UNCONFIRMED end-to-end.*
+7. **"Vendor no-op-when-unconfigured is safe."** CONFIRMED false-comfort: with Slack unconfigured
+   `post_investigation_summary` logs `slack_post_skipped` and returns; if PagerDuty is also unconfigured,
+   `publish_findings` still logs `investigation_completed` and returns `findings_published=True`
+   (`sre_investigation.py:978-993`) — findings go nowhere while the system reports success. Worth an explicit
+   "dropped output" signal.
 8. **"<2 min MTTI is achievable."** Not under storm with serial workers. (§2.1)
 9. **"The docs describe what runs."** The default SRE pipeline is the *archived* one; the docs describe
    the flag-off-by-default LangGraph path. (§1.5)
@@ -376,9 +432,10 @@ These are the decisions that change project direction (question 4). Resolve top-
 
 ## §7 — Credit where due (so this review is honest about strengths)
 
-- The **job-queue execution layer is genuinely solid**: Postgres `FOR UPDATE SKIP LOCKED`, real
-  `asyncio` job timeouts, retry-with-max-attempts, and stale-job recovery on worker restart
-  (`worker.py:470-497`). This is better than the naive `BackgroundTasks` approach many projects ship.
+- The **SRE job-queue core is genuinely solid**: Postgres `FOR UPDATE SKIP LOCKED`, real `asyncio` job
+  timeouts, and retry-with-max-attempts (`worker.py:470-497`) — better than the naive `BackgroundTasks`
+  approach many projects ship. (Caveat: stale-job *recovery* is real but worker-id-scoped, so it misses
+  crashed-and-replaced pods — §2.7; and this praise is SRE-only, since Support bypasses the queue — §2.1.)
 - **LangGraph `interrupt()` + `AsyncPostgresSaver`** genuinely lets an approval survive a worker restart —
   the archived Pydantic Graph path could not. If the repo lives, this is the right primitive.
 - The **support feedback API** is a real quality signal (unlike the confidence/eval loops).
@@ -426,6 +483,18 @@ These are the transferable lessons; port the *principle*, not the code:
   tokens.
 - **Prompt-injection hygiene (§1.3)** — untrusted alert/ticket/log/doc content still flows into prompts in
   the new build; keep the quarantine-frame instinct and extend it to all untrusted content, not just runbooks.
+- **Reliability lessons from §2.7 (the queue dies, the mistakes shouldn't repeat):**
+  - **Actually notify the approver.** The human gate is worthless if nothing pings a human — wire the
+    Slack/whatever notification into the pause path from day one (the bug here was a `wait_for_human` that
+    interrupted but never sent).
+  - **Reap stale work by time, not by worker identity** — key recovery on `locked_at` age so a
+    crashed-and-replaced pod's in-flight work is reclaimed.
+  - **Never run the agent loop inline in the request handler** — always hand off to a worker/queue so an
+    ingress burst can't starve health checks and other webhooks (the Support-inline mistake, §2.1).
+  - **Make outbound posts idempotent** — dedup Slack/PagerDuty/Jira sends by a stable key so a retry or
+    restart near the publish boundary can't double-notify on-call (§2.7).
+  - **Initialise metrics in every process that does work**, not just the API — and emit queue depth
+    (§2.7/§3.1).
 
 ### 8.3 The one branch that still needs your call
 
