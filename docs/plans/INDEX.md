@@ -1,5 +1,9 @@
 # Implementation Plans
 
+> ⚠️ **Repository retired 2026-07-06** — superseded by the Claude Agent SDK production build. No plan below
+> will be resumed here. In-progress and draft plans have been moved to **Abandoned**. See
+> [`../reviews/2026-07-06-blind-spot-review.md`](../reviews/2026-07-06-blind-spot-review.md) §8 for the disposition.
+
 > **Token-saving rule:** Read this index first. Only open individual plan files when actively working on that feature.
 
 ## Status Key
@@ -43,15 +47,27 @@
 
 ### In Progress
 
-| Plan | Goal | Progress | Notes |
-|------|------|----------|-------|
-| [grafana-metrics](grafana-metrics.md) | OTel metrics instrumentation for Grafana dashboards | 2/5 | Prometheus reader + basic metrics wired |
-| [pydanticai-langgraph-adoption](pydanticai-langgraph-adoption.md) | Migrate orchestration harness to LangGraph; support pipeline first, SRE/chart follow with own plans | ~67% (20/30 sub-steps) | T1-T20 done; T21-T30 cleanup outstanding (move legacy support_review.py → `_archive/`, import-linter contract, point `replay.py` at the new entrypoint, ADR 0006 closure, docs sweep) |
-| [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, SRE approval persistence | ~5/15 | Steps 1+2+4+6+7 shipped via PR #18 + F3.5; remaining: Steps 8-11 (approval-DB ops + replace `_pending_approvals` dict), Steps 12-15 (`GET /api/sre/stats` + `quality_verdict_json` persistence) |
+_Feature work is retired (see banner). The only active plan is repository close-out — meta-work to
+publish this repo as a portfolio artifact, not a resumption of any retired feature plan._
+
+| Plan | Goal | Started |
+|------|------|---------|
+| [portfolio-closeout](portfolio-closeout.md) | Polish → publish → archive: green `main`, fix doc-vs-code drift, case study + MIT license, secrets scrub, make public, archive read-only | 2026-07-06 |
 
 ### Draft (Not Started)
 
-| Plan | Goal | PRD Section |
-|------|------|-------------|
-| [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | 4, 7 |
-| [llm-settings-to-config](llm-settings-to-config.md) | Move LLM model config into CommonConfiguration | Internal |
+_None — see **Abandoned** below._
+
+### Abandoned (repository retired 2026-07-06)
+
+Superseded by the Claude Agent SDK production build; the deterministic-graph orchestration bet these plans
+served was retired. Preserved for history — not to be resumed here. Context:
+[`../reviews/2026-07-06-blind-spot-review.md`](../reviews/2026-07-06-blind-spot-review.md) §8.
+
+| Plan | Goal | State at retirement |
+|------|------|---------------------|
+| [pydanticai-langgraph-adoption](pydanticai-langgraph-adoption.md) | Migrate orchestration harness to LangGraph | ~67% — T1-T20 done; T21-T30 cleanup never landed |
+| [metrics-and-observability-wiring](metrics-and-observability-wiring.md) | Wire unwired OTel metrics, SRE approval persistence | ~5/15 — Steps 8-15 outstanding |
+| [grafana-metrics](grafana-metrics.md) | OTel metrics instrumentation for Grafana dashboards | 2/5 |
+| [otel-telemetry-exporter](otel-telemetry-exporter.md) | OTLP exporter for PydanticAI spans (Logfire/Datadog) | not started |
+| [llm-settings-to-config](llm-settings-to-config.md) | Move LLM model config into CommonConfiguration | not started |
