@@ -4,8 +4,8 @@
 > maintained**. The production system was rebuilt on the **Claude Agent SDK** with a minimal,
 > read-only-guardrailed tool loop (bash + PromQL + Loki), which delivered materially better tool use than
 > the deterministic-graph orchestration here. This repository is preserved as a **reference / portfolio
-> artifact**. Expect `main` to be red (one stale test since 2026-05-02) and several documented features to
-> be dead or flag-gated off — see [`docs/reviews/2026-07-06-blind-spot-review.md`](docs/reviews/2026-07-06-blind-spot-review.md)
+> artifact**. `main` was re-greened during close-out (a stale test had kept it red since 2026-05-02), but
+> several documented features are dead or flag-gated off — see [`docs/reviews/2026-07-06-blind-spot-review.md`](docs/reviews/2026-07-06-blind-spot-review.md)
 > for the full disposition and the lessons carried into the successor build. Do not start new work here.
 
 AI-powered automation platform for production operations and customer support.
