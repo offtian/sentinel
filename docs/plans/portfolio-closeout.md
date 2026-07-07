@@ -1,8 +1,8 @@
 # Plan: Portfolio Close-Out — Polish, Publish, Archive
 
-**Status:** draft
+**Status:** in-progress
 **Created:** 2026-07-06
-**Last updated:** 2026-07-06
+**Last updated:** 2026-07-07
 
 ## Goal
 
@@ -73,15 +73,17 @@ meta-work**, not a resumption of any retired feature plan.
 
 ### Stage 1 — Truth pass (code + docs agree, `main` green)
 
-- [ ] Fix stale assertion in `tests/unit/test_bootstrap_otel.py:109` (`otel.traces.disabled` → `otel.traces.no_backend`); run `just test` to confirm fully green
-- [ ] Fix §1.5 in README / CLAUDE.md / `docs/architecture.md`: state that the default execution
+- [x] Fix stale assertion in `tests/unit/test_bootstrap_otel.py:109` (`otel.traces.disabled` → `otel.traces.no_backend`); run `just test` to confirm fully green
+      — also required pinning `langfuse_host=None` on the settings stub (truthy MagicMock attr skipped the branch)
+- [x] Fix §1.5 in README / CLAUDE.md / `docs/architecture.md`: state that the default execution
       path is the archived Pydantic Graph pipeline and the LangGraph path is flag-gated
       (`LANGGRAPH_SRE_ENABLED=false` default); remove/soften "reference-only, forbidden" claims
-      that contradict `worker.py`
-- [ ] Fix §3.6 pointers: delete CLAUDE.md graphify section; correct `architecture.md` key-reference
+      that contradict `worker.py` — AGENTS.md and `docs/prd.md` line 82 carried the same claim and were fixed too
+- [x] Fix §3.6 pointers: delete CLAUDE.md graphify section; correct `architecture.md` key-reference
       paths (`interfaces/graphs/investigation.py` → `_archive/`, ReplayBundle → `utils/replay_bundle.py`);
       note `assess_quality` in the README pipeline diagram text
-- [ ] Gate: `just lint` + `just test` green; grep docs for remaining contradicted claims
+- [x] Gate: `just lint` + `just test` green (1430 passed / 41 skipped; 5 import contracts kept); grep
+      found no remaining contradicted claims; README banner's "expect `main` to be red" updated to match
 
 ### Stage 2 — Narrative
 
@@ -121,7 +123,7 @@ eval on real incident fixtures. No deterministic replay, no capability tokens, n
 
 | Date | What changed | Why |
 |------|-------------|-----|
-| | | |
+| 2026-07-07 | Stage 1 complete on `chore/closeout-stage1-truth-pass`. Test fix needed one extra line (stub `langfuse_host=None`); §1.5 fixes extended to AGENTS.md + prd.md which repeated the claim; README banner updated since `main` will be green post-merge. Local-only note: `lint-imports` was failing because macOS `UF_HIDDEN` flags on `.venv` `.pth` files make Python 3.13's `site` skip them — cleared with `chflags nohidden`, no repo change. | Truth pass per plan |
 
 ## Outcome
 

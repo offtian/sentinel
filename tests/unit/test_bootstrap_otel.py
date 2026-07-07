@@ -92,11 +92,12 @@ class TestInitTraces:
             # Then it logs disabled and does not configure logfire
             mock_logs.log_event.assert_called_once_with("otel.traces.disabled")
 
-    def test_no_op_when_no_endpoint(self):
-        # Given traces enabled but no endpoint configured
+    def test_no_op_when_no_backend(self):
+        # Given traces enabled but neither an OTLP endpoint nor a Langfuse host configured
         settings_stub = _make_settings_stub(
             otel_traces_enabled=True,
             otel_traces_endpoint="",
+            langfuse_host=None,
         )
         with (
             mock.patch.object(bootstrap_otel, "settings", settings_stub),
@@ -105,8 +106,8 @@ class TestInitTraces:
             # When init_traces is called
             bootstrap_otel.init_traces()
 
-            # Then it logs disabled
-            mock_logs.log_event.assert_called_once_with("otel.traces.disabled")
+            # Then it logs that no backend is configured
+            mock_logs.log_event.assert_called_once_with("otel.traces.no_backend")
 
     def test_configures_logfire_when_enabled(self):
         # Given traces enabled with a valid endpoint

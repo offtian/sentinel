@@ -4,8 +4,8 @@
 > maintained**. The production system was rebuilt on the **Claude Agent SDK** with a minimal,
 > read-only-guardrailed tool loop (bash + PromQL + Loki), which delivered materially better tool use than
 > the deterministic-graph orchestration here. This repository is preserved as a **reference / portfolio
-> artifact**. Expect `main` to be red (one stale test since 2026-05-02) and several documented features to
-> be dead or flag-gated off — see [`docs/reviews/2026-07-06-blind-spot-review.md`](docs/reviews/2026-07-06-blind-spot-review.md)
+> artifact**. `main` was re-greened during close-out (a stale test had kept it red since 2026-05-02), but
+> several documented features are dead or flag-gated off — see [`docs/reviews/2026-07-06-blind-spot-review.md`](docs/reviews/2026-07-06-blind-spot-review.md)
 > for the full disposition and the lessons carried into the successor build. Do not start new work here.
 
 AI-powered automation platform for production operations and customer support.
@@ -34,22 +34,27 @@ data/          Database models and migrations (PostgreSQL + SQLModel)
 vendors/       External SDK wrappers (Slack, PagerDuty, Jira)
 ```
 
-The support pipeline is built as a [Pydantic Graph](https://ai.pydantic.dev/pydantic-graph/) DAG. The SRE pipeline runs on [LangGraph](https://github.com/langchain-ai/langgraph) (flag-gated via `LANGGRAPH_SRE_ENABLED`). All LLM calls route through [LiteLLM](https://github.com/BerriAI/litellm) SDK (in-process) via PydanticAI's `litellm:` model prefix — no external proxy.
+The support pipeline is built as a [Pydantic Graph](https://ai.pydantic.dev/pydantic-graph/) DAG. The SRE pipeline has two implementations: the **default execution path** is the legacy Pydantic Graph pipeline (archived at `interfaces/graphs/_archive/investigation.py`, still imported by `worker.py`); a [LangGraph](https://github.com/langchain-ai/langgraph) reimplementation at `interfaces/workflows/sre_investigation.py` is flag-gated via `LANGGRAPH_SRE_ENABLED` (**default `false`**) — the planned cutover stopped mid-soak when the repo was retired. All LLM calls route through [LiteLLM](https://github.com/BerriAI/litellm) SDK (in-process) via PydanticAI's `litellm:` model prefix — no external proxy.
 
-### Alert Investigation Pipeline (LangGraph)
+### Alert Investigation Pipeline (LangGraph, flag-gated — not the default path)
 
 ```
-classify_alert → match_runbook → investigate → analyse_root_cause → determine_confidence
+classify_alert → match_runbook → investigate → analyse_root_cause → assess_quality
+  → determine_confidence
   → [needs_approval?] wait_for_human → [APPROVED?] publish_findings → END
                                       → [REJECTED] → END
   → publish_findings → END
 ```
 
-The SRE pipeline is implemented in `interfaces/workflows/sre_investigation.py`. Approval state
+The LangGraph pipeline is implemented in `interfaces/workflows/sre_investigation.py` and runs
+only when `LANGGRAPH_SRE_ENABLED=true`. The `assess_quality` node is the groundedness gate (F8):
+findings must cite evidence or the run is forced to human approval. Approval state
 is persisted via `AsyncPostgresSaver`; the `wait_for_human` node uses LangGraph `interrupt()`
-so investigations survive worker restarts. Enable via `LANGGRAPH_SRE_ENABLED=true`; the
-legacy Pydantic Graph pipeline remains available at `interfaces/graphs/_archive/investigation.py`
-for rollback until the staging soak window closes.
+so investigations survive worker restarts. With the flag off (the default), `worker.py`
+dispatches to the archived Pydantic Graph pipeline at `interfaces/graphs/_archive/investigation.py`
+(shape: `ClassifyAlert → MatchRunbook → Investigate → AnalyseRootCause → DetermineConfidence
+→ [ApprovalGate] → PublishFindings`, no groundedness gate) — the flag flip and cleanup never
+happened before retirement.
 
 ### Support Review Pipeline
 
