@@ -1,12 +1,18 @@
 # Sentinel
 
-> ⚠️ **LEGACY / ARCHIVED (2026-07-06).** This PydanticAI + LangGraph implementation is **no longer
-> maintained**. The production system was rebuilt on the **Claude Agent SDK** with a minimal,
-> read-only-guardrailed tool loop (bash + PromQL + Loki), which delivered materially better tool use than
-> the deterministic-graph orchestration here. This repository is preserved as a **reference / portfolio
-> artifact**. `main` was re-greened during close-out (a stale test had kept it red since 2026-05-02), but
-> several documented features are dead or flag-gated off — see [`docs/reviews/2026-07-06-blind-spot-review.md`](docs/reviews/2026-07-06-blind-spot-review.md)
-> for the full disposition and the lessons carried into the successor build. Do not start new work here.
+**An AI SRE platform built on the bet that agents need deterministic orchestration — preserved as
+the honest record of why production replaced it with a three-tool agent loop.**
+
+> 📖 **Start here: [the case study](docs/case-study.md).** The bet (graph + runbook contracts +
+> replay determinism), what got built (F1–F8, ~1,600 tests), the adversarial
+> [blind-spot review](docs/reviews/2026-07-06-blind-spot-review.md) that audited it, and the
+> principles carried into the successor build — a minimal Claude Agent SDK loop behind an
+> always-on read-only guardrail. *Successor repo: link forthcoming.*
+
+> ⚠️ **LEGACY / ARCHIVED (2026-07-06).** This PydanticAI + LangGraph implementation is no longer
+> maintained and receives no new work. `main` was re-greened during close-out (a stale test had
+> kept it red since 2026-05-02), but several documented features are dead or flag-gated off — the
+> blind-spot review holds the full disposition.
 
 AI-powered automation platform for production operations and customer support.
 
@@ -203,12 +209,14 @@ Documents are organised by audience and purpose. Review in this order for onboar
 
 | Priority | Document | Audience | Purpose |
 |----------|----------|----------|---------|
-| 1 | **This README** | Everyone | Project overview, quick start, API surface |
-| 2 | [Architecture](docs/architecture.md) | Engineers | Layer diagram, pipeline flows, vendor adapters, decisions, capability plane |
-| 3 | [PRD](docs/prd.md) | Product + Engineering | Requirements, acceptance criteria checkboxes (canonical status tracker) |
-| 4 | [Plan Index](docs/plans/INDEX.md) | Engineering | Status of all implementation plans at a glance |
-| 5 | [AGENTS.md](AGENTS.md) | AI agents | Coding conventions, testing rules, naming patterns |
-| 6 | [CLAUDE.md](CLAUDE.md) | AI agents | Essential commands, gotchas, documentation workflow |
+| 1 | [Case study](docs/case-study.md) | Everyone | The arc: the bet, the reality check, the principles carried forward |
+| 2 | **This README** | Everyone | Project overview, quick start, API surface |
+| 3 | [Blind-spot review](docs/reviews/2026-07-06-blind-spot-review.md) | Engineers | Adversarial audit with file-and-line evidence (frozen snapshot) |
+| 4 | [Architecture](docs/architecture.md) | Engineers | Layer diagram, pipeline flows, vendor adapters, decisions, capability plane |
+| 5 | [PRD](docs/prd.md) | Product + Engineering | Requirements, acceptance criteria checkboxes (canonical status tracker) |
+| 6 | [Plan Index](docs/plans/INDEX.md) | Engineering | Status of all implementation plans at a glance |
+| 7 | [AGENTS.md](AGENTS.md) | AI agents | Coding conventions, testing rules, naming patterns |
+| 8 | [CLAUDE.md](CLAUDE.md) | AI agents | Essential commands, gotchas, documentation workflow |
 
 **Ownership rules:**
 - **Status tracking** lives only in `docs/prd.md` (acceptance criteria) and `docs/plans/INDEX.md` (plan progress)
@@ -217,4 +225,4 @@ Documents are organised by audience and purpose. Review in this order for onboar
 
 ## License
 
-Private project. All rights reserved.
+[MIT](LICENSE)

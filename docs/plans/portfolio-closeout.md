@@ -30,8 +30,8 @@ meta-work**, not a resumption of any retired feature plan.
 
 - [ ] `just lint` and `just test` fully green on `main`
 - [ ] No top-level doc makes a claim the code contradicts (review §1.5, §3.6 items fixed)
-- [ ] Case study exists and is linked from the top of the README
-- [ ] MIT LICENSE in place; "Private project" wording gone
+- [x] Case study exists and is linked from the top of the README
+- [x] MIT LICENSE in place; "Private project" wording gone
 - [ ] Full git history passes a secrets scan; no unintended personal/internal references
 - [ ] Repo public, cross-linked with the successor, then archived read-only on GitHub
 
@@ -87,12 +87,13 @@ meta-work**, not a resumption of any retired feature plan.
 
 ### Stage 2 — Narrative
 
-- [ ] Write `docs/case-study.md`: the bet (deterministic graph + runbook contracts) → what was
+- [x] Write `docs/case-study.md`: the bet (deterministic graph + runbook contracts) → what was
       built (F1–F8) → the blind-spot review → the production learning (minimal Claude Agent SDK
       loop, read-only guardrails, better tool use) → principles carried forward (review §8.2)
-- [ ] Rework README top: portfolio framing, arc headline, links to case study + blind-spot review,
-      placeholder link to successor repo
-- [ ] Add MIT `LICENSE` file; replace README "Private project. All rights reserved." section
+- [x] Rework README top: portfolio framing, arc headline, links to case study + blind-spot review,
+      placeholder link to successor repo; case study + review added to the Documentation table
+- [x] Add MIT `LICENSE` file; replace README "Private project. All rights reserved." section
+      (grep confirms the wording is gone repo-wide)
 
 ### Stage 3 — Pre-publish gate
 
@@ -123,6 +124,7 @@ eval on real incident fixtures. No deterministic replay, no capability tokens, n
 
 | Date | What changed | Why |
 |------|-------------|-----|
+| 2026-07-07 | Stage 2 complete on `docs/closeout-stage2-narrative` (stacked on stage 1). Case study kept lean per design decision; README doc table reordered to lead with narrative. Noted for Stage 3: git history contains a `kraken.tech` work email among author identities — triage at the scrub gate. | Narrative per plan |
 | 2026-07-07 | Stage 1 complete on `chore/closeout-stage1-truth-pass`. Test fix needed one extra line (stub `langfuse_host=None`); §1.5 fixes extended to AGENTS.md + prd.md which repeated the claim; README banner updated since `main` will be green post-merge. Local-only note: `lint-imports` was failing because macOS `UF_HIDDEN` flags on `.venv` `.pth` files make Python 3.13's `site` skip them — cleared with `chflags nohidden`, no repo change. | Truth pass per plan |
 
 ## Outcome
