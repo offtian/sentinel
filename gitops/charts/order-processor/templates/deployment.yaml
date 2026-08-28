@@ -5,7 +5,10 @@ metadata:
   labels:
     app.kubernetes.io/name: order-processor
     app.kubernetes.io/instance: order-processor
-    team: backend
+    app.kubernetes.io/version: 1.0.0
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: order-processor
+    app.kubernetes.io/managed-by: helm
 spec:
   replicas: 3
   selector:
@@ -17,31 +20,38 @@ spec:
       labels:
         app.kubernetes.io/name: order-processor
         app.kubernetes.io/instance: order-processor
-        team: backend
+        app.kubernetes.io/version: 1.0.0
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: order-processor
+        app.kubernetes.io/managed-by: helm
     spec:
       securityContext:
         runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 2000
       containers:
-      - name: order-processor
-        image: order-processor:latest
-        ports:
-        - containerPort: 8080
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 15
-          periodSeconds: 20
+        - name: order-processor
+          image: order-processor:1.0.0
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20

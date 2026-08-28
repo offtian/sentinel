@@ -2,12 +2,21 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: order-processor
+  labels:
+    app.kubernetes.io/name: order-processor
+    app.kubernetes.io/instance: order-processor
 spec:
   project: default
   source:
-    repoURL: https://github.com/mycompany/myrepo
-    targetRevision: HEAD
-    path: charts/order-processor
+    repoURL: https://github.com/example/order-processor.git
+    targetRevision: main
+    path: .
   destination:
     server: https://kubernetes.default.svc
     namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
